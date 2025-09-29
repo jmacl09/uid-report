@@ -1,0 +1,14 @@
+[
+  {
+    "ADevice": "owr01.gvx01",
+    "APort": "HundredGigE0/8/0/0/0",
+    "ZDevice": "ibr01.sto31",
+    "ZPort": "HundredGigE0/1/0/31"
+  },
+  {
+    "ADevice": "owr01.gvx01",
+    "APort": "HundredGigE0/8/0/0/1",
+    "ZDevice": "ibr01.sto31",
+    "ZPort": "HundredGigE0/1/0/30"
+  }
+]

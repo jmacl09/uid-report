@@ -1,17 +1,13 @@
 {
   "routes": [
     {
+      "route": "/",
+      "redirect": "/.auth/login/aad",
+      "statusCode": 302
+    },
+    {
       "route": "/*",
       "allowedRoles": ["authenticated"]
     }
-  ],
-  "auth": {
-    "identityProviders": {
-      "azureActiveDirectory": {
-        "registration": {
-          "openIdIssuer": "https://login.microsoftonline.com/common"
-        }
-      }
-    }
-  }
+  ]
 }

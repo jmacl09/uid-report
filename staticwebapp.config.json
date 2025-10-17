@@ -1,22 +1,16 @@
 {
+  "navigationFallback": { "rewrite": "/index.html", "exclude": ["/.auth/*"] },
   "routes": [
     {
       "route": "/api/uid",
       "allowedRoles": ["anonymous"],
       "rewrite": "https://prod-00.switzerlandnorth.logic.azure.com/workflows/d5b98b42daf54df98e3ebc2660bfba7d/triggers/When_an_HTTP_request_is_received/paths/invoke?api-version=2016-10-01&sp=/triggers/When_an_HTTP_request_is_received/run&sv=1.0&sig=XSz9SLlq57fljIRCBVWrTSd6BkddzZc1xco0jdbepNo"
     },
-    {
-      "route": "/*",
-      "allowedRoles": ["authenticated"]
-    }
+    { "route": "/login",  "rewrite": "/.auth/login/aad" },
+    { "route": "/logout", "redirect": "/.auth/logout" },
+    { "route": "/*",      "allowedRoles": ["authenticated"] }
   ],
-  "auth": {
-    "identityProviders": {
-      "azureActiveDirectory": {
-        "registration": {
-          "openIdIssuer": "https://login.microsoftonline.com/72f988bf-86f1-41af-91ab-2d7cd011db47"
-        }
-      }
-    }
+  "responseOverrides": {
+    "401": { "statusCode": 302, "redirect": "/login" }
   }
 }

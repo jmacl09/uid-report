@@ -6,7 +6,7 @@ import {
   TextField,
   PrimaryButton,
   Nav,
-  Separator
+  Separator,
 } from "@fluentui/react";
 
 initializeIcons();
@@ -49,11 +49,41 @@ const navLinks = [
 ];
 
 export default function App() {
-  const [uid, setUid] = useState("");
+  const [uid, setUid] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
 
-  const handleSearch = () => {
-    alert(`Searching UID: ${uid}`);
-    // later: integrate your Logic App or API here
+  const handleSearch = async () => {
+    if (!uid.trim()) {
+      alert("Please enter a UID before searching.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(
+        "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net:443/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ UID: uid }),
+        }
+      );
+
+      if (response.ok) {
+        alert(`✅ Flow triggered successfully for UID: ${uid}`);
+      } else {
+        const errorText = await response.text();
+        alert(`❌ Failed to trigger flow (${response.status}): ${errorText}`);
+      }
+    } catch (error) {
+      console.error(error);
+      alert("⚠️ Network error while triggering the flow.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -69,7 +99,10 @@ export default function App() {
           flexDirection: "column",
         }}
       >
-        <Text variant="xLarge" styles={{ root: { color: "#fff", marginBottom: 20 } }}>
+        <Text
+          variant="xLarge"
+          styles={{ root: { color: "#fff", marginBottom: 20, fontWeight: 600 } }}
+        >
           🔍 FiberTools
         </Text>
         <Nav
@@ -135,7 +168,8 @@ export default function App() {
             }}
           />
           <PrimaryButton
-            text="Search"
+            text={loading ? "Triggering..." : "Search"}
+            disabled={loading}
             onClick={handleSearch}
             styles={{
               root: {

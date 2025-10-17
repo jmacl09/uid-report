@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   initializeIcons,
   Stack,
@@ -14,36 +14,11 @@ initializeIcons();
 const navLinks = [
   {
     links: [
-      {
-        name: "UID Search",
-        key: "uidSearch",
-        icon: "Search",
-        url: "#",
-      },
-      {
-        name: "Fiber Spans",
-        key: "fiberSpans",
-        icon: "NetworkTower",
-        url: "#",
-      },
-      {
-        name: "Device Lookup",
-        key: "deviceLookup",
-        icon: "DeviceBug",
-        url: "#",
-      },
-      {
-        name: "Reports",
-        key: "reports",
-        icon: "BarChartVertical",
-        url: "#",
-      },
-      {
-        name: "Settings",
-        key: "settings",
-        icon: "Settings",
-        url: "#",
-      },
+      { name: "UID Search", key: "uidSearch", icon: "Search", url: "#" },
+      { name: "Fiber Spans", key: "fiberSpans", icon: "NetworkTower", url: "#" },
+      { name: "Device Lookup", key: "deviceLookup", icon: "DeviceBug", url: "#" },
+      { name: "Reports", key: "reports", icon: "BarChartVertical", url: "#" },
+      { name: "Settings", key: "settings", icon: "Settings", url: "#" },
     ],
   },
 ];
@@ -51,7 +26,26 @@ const navLinks = [
 export default function App() {
   const [uid, setUid] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
+  const [user, setUser] = useState<any>(null);
 
+  // 🔹 Fetch logged-in user info from Azure Static Web Apps
+  useEffect(() => {
+    const fetchUser = async () => {
+      try {
+        const res = await fetch("/.auth/me");
+        if (res.ok) {
+          const data = await res.json();
+          const userInfo = data?.clientPrincipal;
+          if (userInfo) setUser(userInfo);
+        }
+      } catch (err) {
+        console.error("Error fetching user info:", err);
+      }
+    };
+    fetchUser();
+  }, []);
+
+  // 🔹 Trigger Power Automate flow via the secure proxy route
   const handleSearch = async () => {
     if (!uid.trim()) {
       alert("Please enter a UID before searching.");
@@ -61,16 +55,11 @@ export default function App() {
     setLoading(true);
 
     try {
-      const response = await fetch(
-        "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net:443/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ UID: uid }),
-        }
-      );
+      const response = await fetch("/api/uid", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ UID: uid }),
+      });
 
       if (response.ok) {
         alert(`✅ Flow triggered successfully for UID: ${uid}`);
@@ -97,31 +86,55 @@ export default function App() {
           padding: "20px",
           display: "flex",
           flexDirection: "column",
+          justifyContent: "space-between",
         }}
       >
-        <Text
-          variant="xLarge"
-          styles={{ root: { color: "#fff", marginBottom: 20, fontWeight: 600 } }}
-        >
-          🔍 FiberTools
-        </Text>
-        <Nav
-          groups={navLinks}
-          styles={{
-            root: {
-              width: 240,
-              boxSizing: "border-box",
-              background: "#002050",
-              color: "#ffffff",
-            },
-            linkText: { color: "#ffffff" },
-            compositeLink: { selectors: { ":hover": { background: "#0078D4" } } },
-          }}
-        />
-        <Separator styles={{ root: { borderColor: "#fff", marginTop: 20 } }} />
-        <Text variant="small" styles={{ root: { color: "#d0d0d0", marginTop: 10 } }}>
-          Built by Josh Maclean | Microsoft
-        </Text>
+        <div>
+          <Text
+            variant="xLarge"
+            styles={{ root: { color: "#fff", marginBottom: 20, fontWeight: 600 } }}
+          >
+            🔍 FiberTools
+          </Text>
+          <Nav
+            groups={navLinks}
+            styles={{
+              root: {
+                width: 240,
+                boxSizing: "border-box",
+                background: "#002050",
+                color: "#ffffff",
+              },
+              linkText: { color: "#ffffff" },
+              compositeLink: { selectors: { ":hover": { background: "#0078D4" } } },
+            }}
+          />
+        </div>
+
+        <div>
+          <Separator styles={{ root: { borderColor: "#fff", marginTop: 20 } }} />
+          {user ? (
+            <Text
+              variant="small"
+              styles={{ root: { color: "#d0d0d0", marginTop: 10 } }}
+            >
+              Signed in as <strong>{user.userDetails}</strong>
+            </Text>
+          ) : (
+            <Text
+              variant="small"
+              styles={{ root: { color: "#d0d0d0", marginTop: 10 } }}
+            >
+              Loading user info...
+            </Text>
+          )}
+          <Text
+            variant="small"
+            styles={{ root: { color: "#d0d0d0", marginTop: 5 } }}
+          >
+            Built by Josh Maclean | Microsoft
+          </Text>
+        </div>
       </div>
 
       {/* Main Content */}

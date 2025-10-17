@@ -1,61 +1,153 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
+import {
+  initializeIcons,
+  Stack,
+  Text,
+  TextField,
+  PrimaryButton,
+  Nav,
+  Separator
+} from "@fluentui/react";
 
-interface Endpoint {
-  ADevice: string;
-  APort: string;
-  ZDevice: string;
-  ZPort: string;
-}
+initializeIcons();
 
-function App() {
-  const [data, setData] = useState<Endpoint[]>([]);
+const navLinks = [
+  {
+    links: [
+      {
+        name: "UID Search",
+        key: "uidSearch",
+        icon: "Search",
+        url: "#",
+      },
+      {
+        name: "Fiber Spans",
+        key: "fiberSpans",
+        icon: "NetworkTower",
+        url: "#",
+      },
+      {
+        name: "Device Lookup",
+        key: "deviceLookup",
+        icon: "DeviceBug",
+        url: "#",
+      },
+      {
+        name: "Reports",
+        key: "reports",
+        icon: "BarChartVertical",
+        url: "#",
+      },
+      {
+        name: "Settings",
+        key: "settings",
+        icon: "Settings",
+        url: "#",
+      },
+    ],
+  },
+];
 
-  useEffect(() => {
-    // Load sample JSON from public folder
-    fetch("sample.json")
-      .then((res) => res.json())
-      .then(setData)
-      .catch((err) => console.error("Failed to load JSON", err));
-  }, []);
+export default function App() {
+  const [uid, setUid] = useState("");
+
+  const handleSearch = () => {
+    alert(`Searching UID: ${uid}`);
+    // later: integrate your Logic App or API here
+  };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      <h1 className="text-3xl font-bold mb-6 text-blue-400">
-        OLS Optical Link Summary
-      </h1>
-
-      <div className="overflow-x-auto bg-gray-800 rounded-xl shadow-lg p-4">
-        <table className="table-auto w-full text-sm">
-          <thead className="bg-gray-700 text-blue-300">
-            <tr>
-              <th className="px-2 py-1">#</th>
-              <th className="px-2 py-1">ADevice</th>
-              <th className="px-2 py-1">APort</th>
-              <th className="px-2 py-1">ZDevice</th>
-              <th className="px-2 py-1">ZPort</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.map((row, i) => (
-              <tr key={i} className="odd:bg-gray-800 even:bg-gray-700">
-                <td className="px-2 py-1">{i + 1}</td>
-                <td className="px-2 py-1">{row.ADevice}</td>
-                <td className="px-2 py-1">{row.APort}</td>
-                <td className="px-2 py-1">{row.ZDevice}</td>
-                <td className="px-2 py-1">{row.ZPort}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div style={{ display: "flex", height: "100vh", backgroundColor: "#f3f2f1" }}>
+      {/* Sidebar */}
+      <div
+        style={{
+          width: "260px",
+          backgroundColor: "#002050",
+          color: "white",
+          padding: "20px",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <Text variant="xLarge" styles={{ root: { color: "#fff", marginBottom: 20 } }}>
+          🔍 FiberTools
+        </Text>
+        <Nav
+          groups={navLinks}
+          styles={{
+            root: {
+              width: 240,
+              boxSizing: "border-box",
+              background: "#002050",
+              color: "#ffffff",
+            },
+            linkText: { color: "#ffffff" },
+            compositeLink: { selectors: { ":hover": { background: "#0078D4" } } },
+          }}
+        />
+        <Separator styles={{ root: { borderColor: "#fff", marginTop: 20 } }} />
+        <Text variant="small" styles={{ root: { color: "#d0d0d0", marginTop: 10 } }}>
+          Built by Josh Maclean | Microsoft
+        </Text>
       </div>
 
-      <div className="mt-6 flex gap-2">
-        <button className="bg-blue-600 px-3 py-1 rounded">Copy All</button>
-        <button className="bg-green-600 px-3 py-1 rounded">Export CSV</button>
-        <button className="bg-gray-600 px-3 py-1 rounded">Refresh</button>
-      </div>
+      {/* Main Content */}
+      <Stack
+        tokens={{ childrenGap: 20 }}
+        styles={{
+          root: {
+            flexGrow: 1,
+            padding: "60px",
+            background: "linear-gradient(135deg, #e6f0ff 0%, #ffffff 100%)",
+          },
+        }}
+        verticalAlign="center"
+        horizontalAlign="center"
+      >
+        <Text variant="xxLargePlus" styles={{ root: { color: "#002050" } }}>
+          UID Lookup Portal
+        </Text>
+        <Text
+          variant="mediumPlus"
+          styles={{
+            root: { color: "#555", textAlign: "center", maxWidth: 480, marginBottom: 20 },
+          }}
+        >
+          Enter a UID below to retrieve network, fiber span, or optical device details.
+        </Text>
+
+        <Stack
+          horizontal
+          tokens={{ childrenGap: 10 }}
+          horizontalAlign="center"
+          styles={{ root: { marginTop: 10 } }}
+        >
+          <TextField
+            placeholder="Enter UID (e.g., UID123456)"
+            value={uid}
+            onChange={(_e, v) => setUid(v ?? "")}
+            styles={{
+              fieldGroup: {
+                width: 300,
+                border: "1px solid #0078D4",
+                borderRadius: "6px",
+              },
+            }}
+          />
+          <PrimaryButton
+            text="Search"
+            onClick={handleSearch}
+            styles={{
+              root: {
+                background: "#0078D4",
+                borderRadius: "6px",
+                padding: "0 24px",
+              },
+              rootHovered: { background: "#106EBE" },
+            }}
+          />
+        </Stack>
+      </Stack>
     </div>
   );
 }
-
-export default App;

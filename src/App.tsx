@@ -47,9 +47,10 @@ export default function App() {
       key,
       name: key,
       fieldName: key,
-      minWidth: 80,
-      maxWidth: 240,
+      minWidth: 90,
+      maxWidth: 220,
       isResizable: true,
+      isMultiline: false,
       onRender: (item: any) => {
         const val = item[key];
         if (
@@ -77,11 +78,9 @@ export default function App() {
       alert("Please enter a UID before searching.");
       return;
     }
-
     setLoading(true);
     setError(null);
     setData(null);
-    setShowAllOLS(false);
     setSummary("Analyzing data...");
 
     const triggerUrl = `https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ&UID=${encodeURIComponent(
@@ -97,15 +96,13 @@ export default function App() {
       result.AssociatedUIDs?.sort(
         (a: any, b: any) => parseInt(b.Uid) - parseInt(a.Uid)
       );
-      result.MGFXA?.sort((a: any, b: any) =>
-        a.XOMT.localeCompare(b.XOMT, undefined, { numeric: true })
-      );
-      result.MGFXZ?.sort((a: any, b: any) =>
-        a.XOMT.localeCompare(b.XOMT, undefined, { numeric: true })
-      );
 
       setData(result);
-      setTimeout(() => makeSummary(result), 800);
+      setSummary(
+        `Found ${result.OLSLinks?.length || 0} active optical paths, ${
+          result.AssociatedUIDs?.length || 0
+        } associated UIDs, and ${result.GDCOTickets?.length || 0} related GDCO tickets.`
+      );
     } catch (err: any) {
       setError(err.message || "Network error occurred.");
       setSummary("Error retrieving data.");
@@ -114,78 +111,39 @@ export default function App() {
     }
   };
 
-  const makeSummary = (d: Record<string, any>) => {
-    if (!d) return;
-    const links = d.OLSLinks?.length || 0;
-    const uids = d.AssociatedUIDs?.length || 0;
-    const mgfxA = d.MGFXA?.length || 0;
-    const mgfxZ = d.MGFXZ?.length || 0;
-    const tickets = d.GDCOTickets?.length || 0;
-    setSummary(
-      `Found ${links} active optical paths, ${uids} associated UIDs, ${mgfxA + mgfxZ
-      } MGFX fiber ends, and ${tickets} related GDCO tickets.`
-    );
-  };
-
   const Section = ({ title, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
-    const filtered = rows.map((r: any) => {
-      const copy = { ...r };
-      delete copy.Side;
-      return copy;
-    });
 
     return (
-      <div
-        className="compact-table"
-        style={{
-          background: "#181818",
-          borderRadius: 8,
-          padding: "8px 10px",
-          border: "1px solid #2b2b2b",
-          marginBottom: 14,
-        }}
-      >
+      <div className="table-section">
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
-          <Text
-            variant="large"
-            styles={{
-              root: {
-                color: "#50b3ff",
-                fontWeight: 600,
-                marginBottom: 6,
-              },
-            }}
-          >
-            {title}
-          </Text>
+          <Text className="section-title">{title}</Text>
           <Stack horizontal tokens={{ childrenGap: 6 }}>
             <IconButton
               iconProps={{ iconName: "Copy" }}
               title="Copy JSON"
               onClick={() =>
-                navigator.clipboard.writeText(JSON.stringify(filtered, null, 2))
+                navigator.clipboard.writeText(JSON.stringify(rows, null, 2))
               }
             />
             <IconButton
               iconProps={{ iconName: "OneNoteLogo" }}
               title="Export to OneNote"
-              onClick={() => exportToOneNote(filtered, title)}
+              onClick={() => exportToOneNote(rows, title)}
             />
           </Stack>
         </Stack>
 
         <DetailsList
-          items={filtered}
-          columns={buildColumns(filtered)}
-          layoutMode={DetailsListLayoutMode.justified}
+          items={rows}
+          columns={buildColumns(rows)}
+          layoutMode={DetailsListLayoutMode.fixedColumns}
           compact={true}
           styles={{
             root: {
               background: "#181818",
-              overflowX: "hidden",
-              maxWidth: "fit-content",
               borderRadius: 4,
+              paddingTop: 4,
             },
           }}
           onRenderRow={(props, defaultRender) => {
@@ -214,7 +172,7 @@ export default function App() {
     const html = `
       <div style="font-family:Segoe UI;background:#1b1b1b;color:#fff;padding:10px">
         <h2 style="color:#fff;background:linear-gradient(135deg,#005AB4,#0078D4,#50B3FF);padding:4px 10px;border-radius:4px">${title}</h2>
-        <table border="1" cellspacing="0" cellpadding="4" style="width:auto;border-collapse:collapse;border-color:#333">
+        <table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;border-color:#333">
           <tr style="background:linear-gradient(135deg,#005AB4,#0078D4,#50B3FF);color:#fff;font-weight:600">${headers
             .map((h) => `<th>${h}</th>`)
             .join("")}</tr>
@@ -236,156 +194,41 @@ export default function App() {
     a.click();
   };
 
-  const OLSSection = ({ title, rows }: any) => {
-    if (!rows?.length) return null;
-    const displayed = showAllOLS ? rows : rows.slice(0, 10);
-    return (
-      <>
-        <Section title={title} rows={displayed} />
-        {rows.length > 10 && !showAllOLS && (
-          <PrimaryButton
-            text="Show More"
-            onClick={() => setShowAllOLS(true)}
-            styles={{
-              root: {
-                marginTop: 6,
-                background: "#0078D4",
-                borderRadius: 6,
-                padding: "0 16px",
-              },
-              rootHovered: { background: "#106EBE" },
-            }}
-          />
-        )}
-      </>
-    );
-  };
-
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
-      {/* Sidebar */}
-      <div
-        style={{
-          width: 240,
-          backgroundColor: "#0a0a0a",
-          padding: 20,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <Text
-          variant="xLarge"
-          styles={{ root: { color: "#50b3ff", marginBottom: 20 } }}
-        >
+      <div className="sidebar">
+        <Text variant="xLarge" className="logo">
           ⚡ FiberTools
         </Text>
-        <Nav
-          groups={navLinks}
-          styles={{
-            link: {
-              color: "#ccc",
-              selectors: { ":hover": { background: "#0078D4", color: "#fff" } },
-            },
-          }}
-        />
-        <Separator styles={{ root: { borderColor: "#3AA0FF", marginTop: 20 } }} />
-        <Text
-          variant="small"
-          styles={{
-            root: {
-              color: "#999",
-              marginTop: "auto",
-              textAlign: "center",
-              borderTop: "1px solid #333",
-              paddingTop: 8,
-            },
-          }}
-        >
+        <Nav groups={navLinks} />
+        <Separator />
+        <Text className="footer">
           Built by <b>Josh Maclean</b> | Microsoft
-          <br />
-          <span style={{ color: "#50b3ff" }}>All rights reserved ©2025</span>
         </Text>
       </div>
 
-      {/* Main */}
-      <Stack
-        tokens={{ childrenGap: 18 }}
-        styles={{
-          root: {
-            flexGrow: 1,
-            padding: 30,
-            overflowY: "auto",
-            alignItems: "flex-start",
-          },
-        }}
-      >
-        <Text
-          variant="xxLargePlus"
-          styles={{
-            root: {
-              textAlign: "center",
-              color: "#50b3ff",
-              fontWeight: 700,
-              textShadow: "0 0 10px rgba(80,179,255,0.6)",
-              marginBottom: 10,
-              width: "100%",
-            },
-          }}
-        >
-          UID Lookup Portal
-        </Text>
+      <Stack className="main">
+        <Text className="portal-title">UID Lookup Portal</Text>
 
-        {/* UID Input */}
         <Stack horizontalAlign="center" tokens={{ childrenGap: 10 }}>
           <Stack horizontal tokens={{ childrenGap: 10 }}>
             <TextField
               placeholder="Enter UID (e.g., 20190610163)"
               value={uid}
               onChange={(_e, v) => setUid(v ?? "")}
-              styles={{
-                fieldGroup: {
-                  width: 300,
-                  border: "1px solid #50b3ff",
-                  borderRadius: 8,
-                  background: "#1c1c1c",
-                },
-                field: { color: "#fff" },
-              }}
+              className="input-field"
             />
             <PrimaryButton
               text={loading ? "Loading..." : "Search"}
               disabled={loading}
               onClick={handleSearch}
-              styles={{
-                root: {
-                  background: "#0078D4",
-                  borderRadius: 8,
-                  padding: "0 24px",
-                },
-                rootHovered: { background: "#106EBE" },
-              }}
+              className="search-btn"
             />
           </Stack>
-          {loading && (
-            <Spinner
-              size={SpinnerSize.large}
-              label="Fetching data..."
-              styles={{ label: { color: "#50b3ff", fontSize: 14 } }}
-            />
-          )}
+          {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         </Stack>
 
-        <div
-          style={{
-            marginTop: 8,
-            textAlign: "center",
-            color: "#50b3ff",
-            fontWeight: 500,
-            fontSize: 14,
-          }}
-        >
-          {summary}
-        </div>
+        <div className="summary">{summary}</div>
 
         {error && (
           <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>
@@ -393,7 +236,7 @@ export default function App() {
 
         {data && (
           <>
-            <OLSSection title="OLS Optical Link Summary" rows={data.OLSLinks} />
+            <Section title="OLS Optical Link Summary" rows={data.OLSLinks} />
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Section
                 title="Associated UIDs"

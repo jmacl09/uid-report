@@ -1,77 +1,87 @@
-/* === Default CRA styling === */
-.App {
-  text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+/* Layout */
+.sidebar {
+  width: 240px;
+  background: #0a0a0a;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
 }
 
-.App-link {
-  color: #61dafb;
+.logo {
+  color: #50b3ff !important;
+  margin-bottom: 20px;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.footer {
+  color: #999 !important;
+  margin-top: auto;
+  text-align: center;
+  border-top: 1px solid #333;
+  padding-top: 8px;
 }
 
-/* === FiberTools Custom Table Styling === */
+.main {
+  flex-grow: 1;
+  padding: 30px;
+  overflow-y: auto;
+}
 
-/* Prevent table from stretching full width */
+.portal-title {
+  text-align: center;
+  color: #50b3ff;
+  font-weight: 700;
+  text-shadow: 0 0 10px rgba(80, 179, 255, 0.6);
+  margin-bottom: 10px;
+}
+
+/* Search */
+.input-field .ms-TextField-fieldGroup {
+  width: 300px;
+  border: 1px solid #50b3ff;
+  border-radius: 8px;
+  background: #1c1c1c;
+}
+.input-field input {
+  color: #fff;
+}
+.search-btn {
+  background: #0078d4 !important;
+  border-radius: 8px;
+}
+.search-btn:hover {
+  background: #106ebe !important;
+}
+
+/* Summary */
+.summary {
+  margin-top: 8px;
+  text-align: center;
+  color: #50b3ff;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+/* Table Sections */
+.table-section {
+  background: #181818;
+  border-radius: 8px;
+  padding: 8px 10px;
+  border: 1px solid #2b2b2b;
+  margin-bottom: 14px;
+  width: fit-content;
+  max-width: 900px;
+}
+.section-title {
+  color: #50b3ff !important;
+  font-weight: 600 !important;
+  margin-bottom: 6px !important;
+}
+
+/* DetailsList */
 .ms-DetailsList {
-  width: fit-content !important;
-  table-layout: auto !important;
   border-collapse: collapse !important;
 }
 
-/* Row and cell border gridlines */
-.ms-DetailsRow-cell {
-  padding: 4px 8px !important;
-  white-space: nowrap !important;
-  border-bottom: 1px solid #2b2b2b !important;
-  border-right: 1px solid #2b2b2b !important;
-  min-width: auto !important;
-  width: auto !important;
-  font-size: 13px !important;
-  color: #e0e0e0 !important;
-}
-
-/* Column header dividers */
-.ms-DetailsHeader-cell {
-  border-right: 1px solid #2b2b2b !important;
-}
-
-/* Fix header alignment with justified layout */
-.ms-DetailsHeader-cell,
-.ms-DetailsRow-cell {
-  display: table-cell !important;
-  vertical-align: middle !important;
-}
-
-/* Gradient blue “glass” header */
 .ms-DetailsHeader {
   background: linear-gradient(
     135deg,
@@ -81,122 +91,40 @@
     rgba(0, 90, 180, 0.95) 100%
   ) !important;
   color: #fff !important;
-  border-bottom: 2px solid #1e1e1e !important;
-  height: 32px !important;
+  border-bottom: 1px solid #1e1e1e !important;
+  height: 30px !important;
   align-items: center !important;
   backdrop-filter: blur(4px);
-  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.05);
 }
 
-/* Header text alignment and spacing */
 .ms-DetailsHeader-cellTitle {
-  color: #ffffff !important;
+  color: #fff !important;
   font-weight: 600 !important;
-  text-transform: none !important;
   font-size: 13px !important;
-  padding-left: 6px !important;
-  line-height: 18px !important;
+  text-transform: none !important;
 }
 
-/* Enhance header gloss */
-.ms-DetailsHeader::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 50%;
-  background: linear-gradient(
-    rgba(255, 255, 255, 0.12),
-    rgba(255, 255, 255, 0)
-  );
-  pointer-events: none;
-  border-top-left-radius: 4px;
-  border-top-right-radius: 4px;
+.ms-DetailsRow-cell {
+  padding: 3px 8px !important;
+  white-space: nowrap !important;
+  border-bottom: 1px solid #2b2b2b !important;
+  color: #d0d0d0 !important;
+  font-size: 13px !important;
 }
 
-/* Alternate dark rows */
+/* Alternating rows */
 .ms-DetailsRow:nth-child(even) {
-  background-color: #171717 !important;
+  background: #171717 !important;
 }
 .ms-DetailsRow:nth-child(odd) {
-  background-color: #111 !important;
+  background: #111 !important;
 }
-
-/* Row hover */
 .ms-DetailsRow:hover {
   background-color: #232323 !important;
-  box-shadow: inset 0 0 5px rgba(80, 179, 255, 0.35) !important;
-}
-
-/* Hide horizontal scrollbars */
-.ms-Viewport {
-  overflow-x: hidden !important;
-}
-
-/* Compact paired table layout */
-.compact-table {
-  display: inline-block;
-  vertical-align: top;
-  margin-right: 20px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
-  background: #181818;
-  border-radius: 8px;
-  padding: 8px 10px;
-  border: 1px solid #2b2b2b;
-  margin-bottom: 14px;
-}
-
-/* Rounded container edges */
-.ms-DetailsList-contentWrapper {
-  border-radius: 4px !important;
-  overflow: hidden !important;
+  box-shadow: inset 0 0 4px rgba(80, 179, 255, 0.3) !important;
 }
 
 /* Copy/OneNote icons */
 .ms-Button--icon {
-  margin-left: 2px !important;
   color: #50b3ff !important;
-}
-
-/* Section title alignment */
-.compact-table .ms-Text {
-  margin-bottom: 4px !important;
-  display: inline-block;
-  color: #50b3ff !important;
-  font-weight: 600 !important;
-}
-
-/* Minor spacing for adjacent tables */
-.compact-table + .compact-table {
-  margin-left: 20px;
-}
-
-/* UID Highlight Glow */
-.ms-DetailsRow.highlighted {
-  box-shadow: 0 0 8px rgba(80, 179, 255, 0.7) !important;
-  border-radius: 4px !important;
-}
-
-/* Section shadows */
-.compact-table {
-  transition: box-shadow 0.2s ease-in-out;
-}
-.compact-table:hover {
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
-}
-
-/* Adjust link appearance */
-a {
-  color: #3aa0ff;
-  text-decoration: none;
-}
-a:hover {
-  text-decoration: underline;
-}
-
-/* Ensure headers and data line up perfectly */
-.ms-DetailsList-cell,
-.ms-DetailsHeader-cell {
-  box-sizing: border-box !important;
 }

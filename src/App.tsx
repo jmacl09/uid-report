@@ -37,7 +37,6 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [summary, setSummary] = useState<string>("Awaiting UID lookup...");
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("uidHistory") || "[]");
@@ -61,7 +60,6 @@ export default function App() {
     setLoading(true);
     setError(null);
     setData(null);
-    setSummary("Analyzing data...");
 
     const triggerUrl = `https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ&UID=${encodeURIComponent(
       query
@@ -77,16 +75,10 @@ export default function App() {
       result.MGFXZ?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
 
       setData(result);
-      setSummary(
-        `Found ${result.OLSLinks?.length || 0} active optical paths, ${
-          result.AssociatedUIDs?.length || 0
-        } associated UIDs, and ${result.GDCOTickets?.length || 0} related GDCO tickets.`
-      );
 
       if (!history.includes(query)) setHistory([query, ...history]);
     } catch (err: any) {
       setError(err.message || "Network error occurred.");
-      setSummary("Error retrieving data.");
     } finally {
       setLoading(false);
     }
@@ -145,7 +137,7 @@ export default function App() {
   const Table = ({ title, headers, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
     const scrollable: React.CSSProperties = {};
-    if (title === "GDCO Tickets" || title === "Associated UIDs") {
+    if ((title === "GDCO Tickets" || title === "Associated UIDs") && rows.length > 5) {
       scrollable.maxHeight = 230;
       scrollable.overflowY = "auto";
     }
@@ -205,24 +197,40 @@ export default function App() {
     );
   };
 
-  const ExpansionButtons = ({ side }: { side: "A" | "Z" }) => {
-    const expansions = side === "A" ? data?.AExpansions : data?.ZExpansions;
-    if (!expansions) return null;
+  const OpticalHeaderButtons = () => {
+    if (!data?.AExpansions || !data?.ZExpansions) return null;
     return (
-      <div className="expansion-buttons">
-        <Text className="expansion-title">{side} Side:</Text>
-        <button
-          className="sleek-btn wan"
-          onClick={() => window.open(expansions[`${side}Url`], "_blank")}
-        >
-          WAN Checker
-        </button>
-        <button
-          className="sleek-btn optical"
-          onClick={() => window.open(expansions[`${side}OpticalUrl`], "_blank")}
-        >
-          Optical Validator
-        </button>
+      <div className="optical-header">
+        <div className="side-buttons left">
+          <Text className="side-label">A Side:</Text>
+          <button
+            className="sleek-btn wan"
+            onClick={() => window.open(data.AExpansions.AUrl, "_blank")}
+          >
+            WAN Checker
+          </button>
+          <button
+            className="sleek-btn optical"
+            onClick={() => window.open(data.AExpansions.AOpticalUrl, "_blank")}
+          >
+            Optical Validator
+          </button>
+        </div>
+        <div className="side-buttons right">
+          <Text className="side-label">Z Side:</Text>
+          <button
+            className="sleek-btn wan"
+            onClick={() => window.open(data.ZExpansions.ZUrl, "_blank")}
+          >
+            WAN Checker
+          </button>
+          <button
+            className="sleek-btn optical"
+            onClick={() => window.open(data.ZExpansions.ZOpticalUrl, "_blank")}
+          >
+            Optical Validator
+          </button>
+        </div>
       </div>
     );
   };
@@ -271,34 +279,33 @@ export default function App() {
           {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         </Stack>
 
-        {/* ✅ Summary restored to fix ESLint and show status */}
-        <div className="summary">{summary}</div>
-
         {error && (
           <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>
         )}
 
         {data && (
           <>
-            <Stack horizontal tokens={{ childrenGap: 20 }} horizontalAlign="center">
-              <ExpansionButtons side="A" />
-              <ExpansionButtons side="Z" />
-            </Stack>
+            <Stack tokens={{ childrenGap: 10 }}>
+              <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
+                <Text className="section-title">Optical Link Summary</Text>
+                <OpticalHeaderButtons />
+              </Stack>
 
-            <Table
-              title="Optical Link Summary"
-              headers={[
-                "A Device",
-                "A Port",
-                "Z Device",
-                "Z Port",
-                "A Optical Device",
-                "Z Optical Device",
-                "Z Optical Port",
-                "Workflow",
-              ]}
-              rows={data.OLSLinks}
-            />
+              <Table
+                title=""
+                headers={[
+                  "A Device",
+                  "A Port",
+                  "Z Device",
+                  "Z Port",
+                  "A Optical Device",
+                  "Z Optical Device",
+                  "Z Optical Port",
+                  "Workflow",
+                ]}
+                rows={data.OLSLinks}
+              />
+            </Stack>
 
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Table
@@ -337,12 +344,12 @@ export default function App() {
                 title="MGFX A-Side"
                 headers={[
                   "XOMT",
-                  "CO Device",
-                  "CO Port",
-                  "MO Device",
-                  "MO Port",
-                  "CO Diff",
-                  "MO Diff",
+                  "C0 Device",
+                  "C0 Port",
+                  "M0 Device",
+                  "M0 Port",
+                  "C0 Diff",
+                  "M0 Diff",
                 ]}
                 rows={data.MGFXA?.map(({ Side, ...keep }: any) => keep)}
               />
@@ -350,12 +357,12 @@ export default function App() {
                 title="MGFX Z-Side"
                 headers={[
                   "XOMT",
-                  "CO Device",
-                  "CO Port",
-                  "MO Device",
-                  "MO Port",
-                  "CO Diff",
-                  "MO Diff",
+                  "C0 Device",
+                  "C0 Port",
+                  "M0 Device",
+                  "M0 Port",
+                  "C0 Diff",
+                  "M0 Diff",
                 ]}
                 rows={data.MGFXZ?.map(({ Side, ...keep }: any) => keep)}
               />

@@ -331,7 +331,7 @@ export default function App() {
               <Table
                 title="MGFX Z-Side"
                 headers={[
-                  "XOMT",
+                  "X0MT",
                   "C0 Device",
                   "C0 Port",
                   "M0 Device",

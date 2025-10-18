@@ -92,12 +92,12 @@ export default function App() {
     }
   };
 
-  const copyTableText = (title: string, rows: any[], headers: string[]) => {
+  const copyTableText = (title: string, rows: Record<string, any>[], headers: string[]) => {
     const text =
       `${title}\n` +
       headers.join("\t") +
       "\n" +
-      rows.map((r) => Object.values(r).join("\t")).join("\n") +
+      rows.map((r: Record<string, any>) => Object.values(r).join("\t")).join("\n") +
       "\n\n";
     navigator.clipboard.writeText(text);
     alert(`Copied ${title} (plain text) ✅`);
@@ -181,7 +181,7 @@ export default function App() {
     for (const s of sections) {
       if (s.rows && s.rows.length > 0) {
         combinedText += `${s.title}\n${s.headers.join("\t")}\n${s.rows
-          .map((r) => Object.values(r).join("\t"))
+          .map((r: Record<string, any>) => Object.values(r).join("\t"))
           .join("\n")}\n\n`;
       }
     }
@@ -238,7 +238,6 @@ export default function App() {
     const fileName = `UID_Report_${uid}_OneNote.mht`;
     saveAs(blob, fileName);
 
-    // Attempt to open automatically in OneNote
     setTimeout(() => {
       window.location.href = `onenote:${fileName}`;
     }, 800);
@@ -317,7 +316,6 @@ export default function App() {
       </div>
 
       <Stack className="main">
-        {/* Top Header */}
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="portal-title">UID Lookup Portal</Text>
           <Stack horizontal tokens={{ childrenGap: 10 }}>
@@ -342,7 +340,6 @@ export default function App() {
           </Stack>
         </Stack>
 
-        {/* Search */}
         <Stack horizontalAlign="center" tokens={{ childrenGap: 10 }}>
           <Stack horizontal tokens={{ childrenGap: 10 }}>
             <TextField
@@ -361,7 +358,6 @@ export default function App() {
           {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         </Stack>
 
-        {/* UID History */}
         {history.length > 0 && (
           <div className="uid-history">
             Recent:{" "}

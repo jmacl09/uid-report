@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   initializeIcons,
   Stack,
@@ -35,16 +35,22 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showScroll, setShowScroll] = useState<boolean>(false);
+
+  useEffect(() => {
+    const onScroll = () => setShowScroll(window.scrollY > 300);
+    window.addEventListener("scroll", onScroll);
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const buildColumns = (objArray: any[]) =>
     Object.keys(objArray[0] || {}).map((key) => ({
       key,
       name: key,
       fieldName: key,
-      minWidth: 100,
-      maxWidth: 250,
+      minWidth: 80,
+      maxWidth: 200,
       isResizable: true,
-      styles: { root: { color: "#fff" } },
       onRender: (item: any) =>
         key.toLowerCase().includes("workflow") ||
         key.toLowerCase().includes("diff") ||
@@ -58,52 +64,9 @@ export default function App() {
             Open
           </a>
         ) : (
-          <span style={{ color: "#ccc" }}>{item[key]}</span>
+          <span style={{ color: "#d0d0d0" }}>{item[key]}</span>
         ),
     }));
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    alert("Copied to clipboard!");
-  };
-
-  const exportToExcel = (tableData: any[], title: string) => {
-    const headers = Object.keys(tableData[0] || {});
-    const csv = [
-      headers.join(","),
-      ...tableData.map((row) =>
-        headers.map((h) => JSON.stringify(row[h] ?? "")).join(",")
-      ),
-    ].join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title}.csv`;
-    a.click();
-  };
-
-  const exportToOneNote = (tableData: any[], title: string) => {
-    const headers = Object.keys(tableData[0] || {});
-    const html = `
-      <h2>${title}</h2>
-      <table border="1" cellpadding="4" cellspacing="0">
-        <tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr>
-        ${tableData
-          .map(
-            (row) =>
-              `<tr>${headers.map((h) => `<td>${row[h] ?? ""}</td>`).join("")}</tr>`
-          )
-          .join("")}
-      </table>`;
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title}.html`;
-    a.click();
-  };
 
   const handleSearch = async () => {
     if (!uid.trim()) {
@@ -122,47 +85,167 @@ export default function App() {
     try {
       const start = await fetch(triggerUrl, { method: "GET" });
 
-      if (start.status === 202) {
-        const statusUrl = start.headers.get("location");
-        if (!statusUrl) throw new Error("No status URL returned by Logic App.");
-
-        let result = null;
-        for (let i = 0; i < 30; i++) {
-          await new Promise((r) => setTimeout(r, 1000));
-          const poll = await fetch(statusUrl);
-          if (poll.status === 200) {
-            result = await poll.json();
-            break;
-          }
-        }
-
-        if (result) setData(result);
-        else throw new Error("Timed out waiting for Logic App to complete.");
-      } else if (start.ok) {
+      if (start.ok) {
         const result = await start.json();
+        result.MGFXA?.sort((a: any, b: any) =>
+          a.XOMT.localeCompare(b.XOMT, undefined, { numeric: true })
+        );
+        result.MGFXZ?.sort((a: any, b: any) =>
+          a.XOMT.localeCompare(b.XOMT, undefined, { numeric: true })
+        );
         setData(result);
       } else {
-        const text = await start.text();
-        throw new Error(`HTTP ${start.status}: ${text}`);
+        throw new Error(`HTTP ${start.status}: ${await start.text()}`);
       }
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Network or Logic App error occurred.");
+      setError(err.message || "Network error occurred.");
     } finally {
       setLoading(false);
     }
   };
 
-  const copyPageData = () => {
+  const exportToOneNote = (tableData: any[], title: string) => {
+    const headers = Object.keys(tableData[0] || {});
+    const html = `
+      <div style="font-family:Segoe UI;background:#1b1b1b;color:#fff;padding:10px">
+        <h2 style="color:#50b3ff;border-left:4px solid #50b3ff;padding-left:6px">${title}</h2>
+        <table border="1" cellspacing="0" cellpadding="4" style="width:100%;border-collapse:collapse;border-color:#333">
+          <tr style="background:#222;color:#50b3ff">${headers
+            .map((h) => `<th>${h}</th>`)
+            .join("")}</tr>
+          ${tableData
+            .map(
+              (row, i) =>
+                `<tr style="background:${
+                  i % 2 === 0 ? "#181818" : "#202020"
+                }">${headers.map((h) => `<td>${row[h] ?? ""}</td>`).join("")}</tr>`
+            )
+            .join("")}
+        </table>
+      </div>`;
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title}.html`;
+    a.click();
+  };
+
+  const copyPageHTML = () => {
     if (!data) return;
-    const allData = {
-      OLSLinks: data.OLSLinks,
-      AssociatedUIDs: data.AssociatedUIDs,
-      MGFXA: data.MGFXA,
-      MGFXZ: data.MGFXZ,
-      GDCOTickets: data.GDCOTickets,
-    };
-    copyToClipboard(JSON.stringify(allData, null, 2));
+    const sections = [
+      { title: "OLS Optical Link Summary", rows: data.OLSLinks },
+      { title: "Associated UIDs", rows: data.AssociatedUIDs },
+      { title: "MGFX A-Side", rows: data.MGFXA },
+      { title: "MGFX Z-Side", rows: data.MGFXZ },
+      { title: "GDCO Tickets", rows: data.GDCOTickets },
+    ];
+    let html = `<div style="font-family:Segoe UI;background:#1b1b1b;color:#fff">`;
+    for (const s of sections) {
+      if (!s.rows?.length) continue;
+      const headers = Object.keys(s.rows[0]);
+      html += `
+        <h2 style="color:#50b3ff;border-left:4px solid #50b3ff;padding-left:6px">${s.title}</h2>
+        <table border="1" cellspacing="0" cellpadding="4" style="width:100%;border-collapse:collapse;border-color:#333;margin-bottom:15px">
+          <tr style="background:#222;color:#50b3ff">${headers
+            .map((h) => `<th>${h}</th>`)
+            .join("")}</tr>
+          ${s.rows
+            .map(
+              (row, i) =>
+                `<tr style="background:${
+                  i % 2 === 0 ? "#181818" : "#202020"
+                }">${headers.map((h) => `<td>${row[h] ?? ""}</td>`).join("")}</tr>`
+            )
+            .join("")}
+        </table>`;
+    }
+    html += "</div>";
+    navigator.clipboard.writeText(html);
+    alert("All tables copied as formatted HTML for OneNote ✅");
+  };
+
+  const Section = ({ title, rows }: any) => {
+    if (!rows?.length) return null;
+    const filtered = rows.map((r: any) => {
+      const copy = { ...r };
+      delete copy.Side;
+      return copy;
+    });
+    return (
+      <div
+        style={{
+          background: "#181818",
+          borderRadius: "12px",
+          padding: "12px",
+          boxShadow: "0 0 10px rgba(0,0,0,0.5)",
+          border: "1px solid #2b2b2b",
+        }}
+      >
+        <Stack horizontal horizontalAlign="space-between">
+          <Text
+            variant="large"
+            styles={{
+              root: {
+                color: "#50b3ff",
+                fontWeight: 600,
+                borderLeft: "4px solid #50b3ff",
+                paddingLeft: 10,
+              },
+            }}
+          >
+            {title}
+          </Text>
+          <Stack horizontal tokens={{ childrenGap: 6 }}>
+            <IconButton
+              iconProps={{ iconName: "Copy" }}
+              title="Copy Table"
+              onClick={() =>
+                navigator.clipboard.writeText(
+                  JSON.stringify(filtered, null, 2)
+                )
+              }
+            />
+            <IconButton
+              iconProps={{ iconName: "OneNoteLogo" }}
+              title="Export to OneNote"
+              onClick={() => exportToOneNote(filtered, title)}
+            />
+          </Stack>
+        </Stack>
+
+        <DetailsList
+          items={filtered}
+          columns={buildColumns(filtered)}
+          layoutMode={DetailsListLayoutMode.justified}
+          styles={{
+            root: {
+              marginTop: 6,
+              background: "#181818",
+            },
+            headerWrapper: {
+              background: "#222",
+            },
+            contentWrapper: {
+              selectors: {
+                ".ms-DetailsRow": {
+                  backgroundColor: "#181818",
+                  minHeight: 26,
+                },
+                ".ms-DetailsRow:hover": {
+                  backgroundColor: "#242424",
+                  boxShadow: "0 0 6px rgba(80,179,255,0.4)",
+                },
+                ".ms-DetailsRow:nth-child(even)": {
+                  backgroundColor: "#202020",
+                },
+              },
+            },
+          }}
+        />
+      </div>
+    );
   };
 
   return (
@@ -177,20 +260,17 @@ export default function App() {
       {/* Sidebar */}
       <div
         style={{
-          width: "260px",
+          width: "240px",
           backgroundColor: "#0a0a0a",
           color: "white",
           padding: "20px",
           display: "flex",
           flexDirection: "column",
-          boxShadow: "2px 0 8px rgba(0,0,0,0.5)",
         }}
       >
         <Text
           variant="xLarge"
-          styles={{
-            root: { color: "#50b3ff", marginBottom: 20, fontWeight: 700 },
-          }}
+          styles={{ root: { color: "#50b3ff", marginBottom: 20 } }}
         >
           ⚡ FiberTools
         </Text>
@@ -198,20 +278,12 @@ export default function App() {
           groups={navLinks}
           styles={{
             root: {
-              width: 240,
+              width: 220,
               background: "transparent",
-              selectors: {
-                ".ms-Nav-compositeLink.is-selected": {
-                  backgroundColor: "#0078D4",
-                },
-                ".ms-Button-flexContainer": { color: "#ffffff" },
-              },
             },
             link: {
-              color: "#d0d0d0",
-              selectors: {
-                ":hover": { background: "#0078D4", color: "#fff" },
-              },
+              color: "#ccc",
+              selectors: { ":hover": { background: "#0078D4", color: "#fff" } },
             },
           }}
         />
@@ -220,11 +292,11 @@ export default function App() {
           variant="small"
           styles={{
             root: {
-              color: "#aaaaaa",
+              color: "#999",
               marginTop: "auto",
               textAlign: "center",
               borderTop: "1px solid #333",
-              paddingTop: 10,
+              paddingTop: 8,
             },
           }}
         >
@@ -236,22 +308,22 @@ export default function App() {
 
       {/* Main Content */}
       <Stack
-        tokens={{ childrenGap: 20 }}
+        tokens={{ childrenGap: 18 }}
         styles={{
           root: {
             flexGrow: 1,
-            padding: "40px",
-            background: "radial-gradient(circle at top left,#1a1a1a 0%,#111 100%)",
+            padding: "30px",
             overflowY: "auto",
           },
         }}
       >
-        {/* Header */}
-        <Stack horizontal horizontalAlign="space-between">
+        <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
+          <div style={{ flex: 1 }} />
           <Text
             variant="xxLargePlus"
             styles={{
               root: {
+                textAlign: "center",
                 color: "#50b3ff",
                 fontWeight: 700,
                 textShadow: "0 0 10px rgba(80,179,255,0.6)",
@@ -260,26 +332,25 @@ export default function App() {
           >
             UID Lookup Portal
           </Text>
-          <PrimaryButton
-            text="Copy Page"
-            iconProps={{ iconName: "Copy" }}
-            onClick={copyPageData}
-            styles={{
-              root: {
-                background: "#0078D4",
-                borderRadius: "6px",
-              },
-              rootHovered: { background: "#106EBE" },
-            }}
-          />
+          <div style={{ width: 260, textAlign: "right" }}>
+            <div
+              style={{
+                background: "#181818",
+                borderRadius: 8,
+                padding: "8px 12px",
+                border: "1px solid #333",
+                color: "#ccc",
+                fontSize: 13,
+              }}
+            >
+              <b>AI Summary:</b>  
+              <div style={{ color: "#50b3ff" }}>Awaiting UID lookup...</div>
+            </div>
+          </div>
         </Stack>
 
-        {/* Search Input */}
-        <Stack
-          horizontalAlign="center"
-          tokens={{ childrenGap: 10 }}
-          style={{ marginTop: 10 }}
-        >
+        {/* UID Input */}
+        <Stack horizontalAlign="center" tokens={{ childrenGap: 10 }}>
           <Stack horizontal tokens={{ childrenGap: 10 }}>
             <TextField
               placeholder="Enter UID (e.g., 20190610163)"
@@ -287,7 +358,7 @@ export default function App() {
               onChange={(_e, v) => setUid(v ?? "")}
               styles={{
                 fieldGroup: {
-                  width: 320,
+                  width: 300,
                   border: "1px solid #50b3ff",
                   borderRadius: "8px",
                   background: "#1c1c1c",
@@ -310,29 +381,11 @@ export default function App() {
             />
           </Stack>
           {loading && (
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                marginTop: 20,
-                gap: 12,
-              }}
-            >
+            <div style={{ marginTop: 10 }}>
               <Spinner
                 size={SpinnerSize.large}
                 label="Fetching data..."
-                styles={{
-                  label: { color: "#50b3ff", fontSize: 16 },
-                }}
-              />
-              <div
-                style={{
-                  width: 200,
-                  height: 8,
-                  borderRadius: 4,
-                  background: "linear-gradient(90deg,#0078D4,#50b3ff,#0078D4)",
-                  animation: "pulse 2s infinite linear",
-                }}
+                styles={{ label: { color: "#50b3ff", fontSize: 14 } }}
               />
             </div>
           )}
@@ -344,86 +397,64 @@ export default function App() {
 
         {data && (
           <>
-            <Section title="OLS Optical Link Summary" data={data.OLSLinks} buildColumns={buildColumns} exportToExcel={exportToExcel} exportToOneNote={exportToOneNote}/>
-            <Section title="Associated UIDs" data={data.AssociatedUIDs} buildColumns={buildColumns} exportToExcel={exportToExcel} exportToOneNote={exportToOneNote}/>
+            <Section title="OLS Optical Link Summary" rows={data.OLSLinks} />
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Stack grow>
-                <Section title="MGFX A-Side" data={data.MGFXA} buildColumns={buildColumns} exportToExcel={exportToExcel} exportToOneNote={exportToOneNote}/>
+                <Section title="Associated UIDs" rows={data.AssociatedUIDs} />
               </Stack>
               <Stack grow>
-                <Section title="MGFX Z-Side" data={data.MGFXZ} buildColumns={buildColumns} exportToExcel={exportToExcel} exportToOneNote={exportToOneNote}/>
+                <Section title="GDCO Tickets" rows={data.GDCOTickets} />
               </Stack>
             </Stack>
-            <Section title="GDCO Tickets" data={data.GDCOTickets} buildColumns={buildColumns} exportToExcel={exportToExcel} exportToOneNote={exportToOneNote}/>
+            <Stack horizontal tokens={{ childrenGap: 20 }}>
+              <Stack grow>
+                <Section title="MGFX A-Side" rows={data.MGFXA} />
+              </Stack>
+              <Stack grow>
+                <Section title="MGFX Z-Side" rows={data.MGFXZ} />
+              </Stack>
+            </Stack>
           </>
         )}
       </Stack>
-    </div>
-  );
-}
 
-const Section = ({ title, data, buildColumns, exportToExcel, exportToOneNote }: any) => {
-  if (!data?.length) return null;
-  return (
-    <div
-      style={{
-        background: "#181818",
-        borderRadius: "12px",
-        padding: "20px",
-        boxShadow: "0 0 15px rgba(0,0,0,0.6)",
-        border: "1px solid #333",
-        transition: "0.2s ease",
-      }}
-    >
-      <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
-        <Text
-          variant="xLarge"
-          styles={{
-            root: {
-              color: "#50b3ff",
-              fontWeight: 600,
-              borderLeft: "4px solid #50b3ff",
-              paddingLeft: 10,
-            },
+      {/* Scroll to Top Button */}
+      {showScroll && (
+        <button
+          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          style={{
+            position: "fixed",
+            bottom: 30,
+            right: 30,
+            background: "#0078D4",
+            border: "none",
+            color: "#fff",
+            padding: "10px 14px",
+            borderRadius: "50%",
+            fontSize: 18,
+            boxShadow: "0 0 10px rgba(80,179,255,0.6)",
+            cursor: "pointer",
           }}
         >
-          {title}
-        </Text>
-        <Stack horizontal tokens={{ childrenGap: 8 }}>
-          <IconButton iconProps={{ iconName: "Copy" }} title="Copy Table" onClick={() => navigator.clipboard.writeText(JSON.stringify(data, null, 2))}/>
-          <IconButton iconProps={{ iconName: "ExcelDocument" }} title="Export to Excel" onClick={() => exportToExcel(data, title)}/>
-          <IconButton iconProps={{ iconName: "OneNoteLogo" }} title="Export to OneNote" onClick={() => exportToOneNote(data, title)}/>
-        </Stack>
-      </Stack>
-      <DetailsList
-        items={data}
-        columns={buildColumns(data)}
-        layoutMode={DetailsListLayoutMode.justified}
+          ↑
+        </button>
+      )}
+
+      <PrimaryButton
+        text="Copy Page"
+        onClick={copyPageHTML}
+        iconProps={{ iconName: "Copy" }}
         styles={{
           root: {
-            marginTop: 10,
-            background: "#181818",
+            position: "fixed",
+            top: 30,
+            right: 30,
+            background: "#0078D4",
+            borderRadius: "8px",
           },
-          headerWrapper: {
-            background: "#222",
-          },
-          contentWrapper: {
-            selectors: {
-              ".ms-DetailsRow": {
-                backgroundColor: "#181818",
-                color: "#fff",
-              },
-              ".ms-DetailsRow:hover": {
-                backgroundColor: "#242424",
-                boxShadow: "0 0 10px rgba(80,179,255,0.3)",
-              },
-              ".ms-DetailsRow:nth-child(even)": {
-                backgroundColor: "#202020",
-              },
-            },
-          },
+          rootHovered: { background: "#106EBE" },
         }}
       />
     </div>
   );
-};
+}

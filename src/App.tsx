@@ -14,6 +14,7 @@ import {
   MessageBar,
   MessageBarType,
   IconButton,
+  IColumn
 } from "@fluentui/react";
 import "./App.css";
 
@@ -41,13 +42,14 @@ export default function App() {
   const naturalSort = (a: string, b: string) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 
-  const buildColumns = (objArray: any[]) =>
-    Object.keys(objArray[0] || {}).map((key) => ({
+  const buildColumns = (objArray: any[]): IColumn[] => {
+    if (!objArray?.length) return [];
+    return Object.keys(objArray[0]).map((key) => ({
       key,
       name: key,
       fieldName: key,
-      minWidth: 90,
-      maxWidth: 220,
+      minWidth: 80,
+      maxWidth: 160,
       isResizable: true,
       isMultiline: false,
       onRender: (item: any) => {
@@ -68,15 +70,17 @@ export default function App() {
             </a>
           );
         }
-        return <span style={{ color: "#d0d0d0" }}>{val}</span>;
+        return <span>{val}</span>;
       },
     }));
+  };
 
   const handleSearch = async () => {
     if (!uid.trim()) {
       alert("Please enter a UID before searching.");
       return;
     }
+
     setLoading(true);
     setError(null);
     setData(null);
@@ -125,72 +129,21 @@ export default function App() {
                 navigator.clipboard.writeText(JSON.stringify(rows, null, 2))
               }
             />
-            <IconButton
-              iconProps={{ iconName: "OneNoteLogo" }}
-              title="Export to OneNote"
-              onClick={() => exportToOneNote(rows, title)}
-            />
           </Stack>
         </Stack>
 
         <DetailsList
           items={rows}
           columns={buildColumns(rows)}
-          layoutMode={DetailsListLayoutMode.fixedColumns}
           compact={true}
+          layoutMode={DetailsListLayoutMode.fixedColumns}
           styles={{
-            root: {
-              background: "#181818",
-              borderRadius: 4,
-              paddingTop: 4,
-            },
-          }}
-          onRenderRow={(props, defaultRender) => {
-            if (!props) return null;
-            const isHighlight = highlightUid && props.item.Uid === highlightUid;
-            return (
-              <div
-                style={{
-                  boxShadow: isHighlight
-                    ? "0 0 8px rgba(80,179,255,0.7)"
-                    : "none",
-                  borderRadius: isHighlight ? 4 : 0,
-                }}
-              >
-                {defaultRender?.(props)}
-              </div>
-            );
+            root: { background: "#181818", borderRadius: 4, paddingTop: 4 },
+            contentWrapper: { overflowX: "hidden" },
           }}
         />
       </div>
     );
-  };
-
-  const exportToOneNote = (tableData: any[], title: string) => {
-    const headers = Object.keys(tableData[0] || {});
-    const html = `
-      <div style="font-family:Segoe UI;background:#1b1b1b;color:#fff;padding:10px">
-        <h2 style="color:#fff;background:linear-gradient(135deg,#005AB4,#0078D4,#50B3FF);padding:4px 10px;border-radius:4px">${title}</h2>
-        <table border="1" cellspacing="0" cellpadding="4" style="border-collapse:collapse;border-color:#333">
-          <tr style="background:linear-gradient(135deg,#005AB4,#0078D4,#50B3FF);color:#fff;font-weight:600">${headers
-            .map((h) => `<th>${h}</th>`)
-            .join("")}</tr>
-          ${tableData
-            .map(
-              (row, i) =>
-                `<tr style="background:${i % 2 === 0 ? "#181818" : "#202020"}">${headers
-                  .map((h) => `<td>${row[h] ?? ""}</td>`)
-                  .join("")}</tr>`
-            )
-            .join("")}
-        </table>
-      </div>`;
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title}.html`;
-    a.click();
   };
 
   return (

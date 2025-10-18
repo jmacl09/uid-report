@@ -37,6 +37,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [showScroll, setShowScroll] = useState<boolean>(false);
   const [summary, setSummary] = useState<string>("Awaiting UID lookup...");
+  const [showAllOLS, setShowAllOLS] = useState<boolean>(false);
 
   useEffect(() => {
     const onScroll = () => setShowScroll(window.scrollY > 300);
@@ -44,29 +45,37 @@ export default function App() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
+  const naturalSort = (a: string, b: string) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+
   const buildColumns = (objArray: any[]) =>
     Object.keys(objArray[0] || {}).map((key) => ({
       key,
       name: key,
       fieldName: key,
       minWidth: 80,
-      maxWidth: 200,
+      maxWidth: 220,
       isResizable: true,
-      onRender: (item: any) =>
-        key.toLowerCase().includes("workflow") ||
-        key.toLowerCase().includes("diff") ||
-        key.toLowerCase().includes("ticketlink") ? (
-          <a
-            href={item[key]}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "#3AA0FF", textDecoration: "none" }}
-          >
-            Open
-          </a>
-        ) : (
-          <span style={{ color: "#d0d0d0" }}>{item[key]}</span>
-        ),
+      onRender: (item: any) => {
+        const val = item[key];
+        if (
+          key.toLowerCase().includes("workflow") ||
+          key.toLowerCase().includes("diff") ||
+          key.toLowerCase().includes("ticketlink")
+        ) {
+          return (
+            <a
+              href={val}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "#3AA0FF", textDecoration: "none" }}
+            >
+              Open
+            </a>
+          );
+        }
+        return <span style={{ color: "#d0d0d0" }}>{val}</span>;
+      },
     }));
 
   const handleSearch = async () => {
@@ -79,6 +88,7 @@ export default function App() {
     setError(null);
     setData(null);
     setSummary("Analyzing data...");
+    setShowAllOLS(false);
 
     const triggerUrl = `https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ&UID=${encodeURIComponent(
       uid
@@ -89,7 +99,15 @@ export default function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
 
-      // Sort MGFX by XOMT
+      // Sort OLS ascending by APort
+      result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
+
+      // Sort UIDs descending
+      result.AssociatedUIDs?.sort(
+        (a: any, b: any) => parseInt(b.Uid) - parseInt(a.Uid)
+      );
+
+      // Sort MGFX sides
       result.MGFXA?.sort((a: any, b: any) =>
         a.XOMT.localeCompare(b.XOMT, undefined, { numeric: true })
       );
@@ -107,7 +125,6 @@ export default function App() {
     }
   };
 
-  // ---------- Smart Summary ----------
   const makeSummary = (d: Record<string, any>) => {
     if (!d) return;
     const links = d.OLSLinks?.length || 0;
@@ -121,12 +138,11 @@ export default function App() {
     setSummary(msg);
   };
 
-  // ---------- Export Helpers ----------
   const exportToOneNote = (tableData: any[], title: string) => {
     const headers = Object.keys(tableData[0] || {});
     const html = `
       <div style="font-family:Segoe UI;background:#1b1b1b;color:#fff;padding:10px">
-        <h2 style="color:#50b3ff;border-left:4px solid #50b3ff;padding-left:6px">${title}</h2>
+        <h2 style="color:#fff;background:linear-gradient(90deg,#0078D4,#3AA0FF);padding:4px 10px;border-radius:4px">${title}</h2>
         <table border="1" cellspacing="0" cellpadding="4" style="width:100%;border-collapse:collapse;border-color:#333">
           <tr style="background:#222;color:#50b3ff">${headers
             .map((h) => `<th>${h}</th>`)
@@ -134,9 +150,9 @@ export default function App() {
           ${tableData
             .map(
               (row, i) =>
-                `<tr style="background:${
-                  i % 2 === 0 ? "#181818" : "#202020"
-                }">${headers.map((h) => `<td>${row[h] ?? ""}</td>`).join("")}</tr>`
+                `<tr style="background:${i % 2 === 0 ? "#181818" : "#202020"}">${headers
+                  .map((h) => `<td>${row[h] ?? ""}</td>`)
+                  .join("")}</tr>`
             )
             .join("")}
         </table>
@@ -149,48 +165,15 @@ export default function App() {
     a.click();
   };
 
-  const copyPageHTML = () => {
-    if (!data) return;
-    const sections = [
-      { title: "OLS Optical Link Summary", rows: data.OLSLinks },
-      { title: "Associated UIDs", rows: data.AssociatedUIDs },
-      { title: "MGFX A-Side", rows: data.MGFXA },
-      { title: "MGFX Z-Side", rows: data.MGFXZ },
-      { title: "GDCO Tickets", rows: data.GDCOTickets },
-    ];
-    let html = `<div style="font-family:Segoe UI;background:#1b1b1b;color:#fff">`;
-    for (const s of sections) {
-      if (!s.rows?.length) continue;
-      const headers = Object.keys(s.rows[0]);
-      html += `
-        <h2 style="color:#50b3ff;border-left:4px solid #50b3ff;padding-left:6px">${s.title}</h2>
-        <table border="1" cellspacing="0" cellpadding="4" style="width:100%;border-collapse:collapse;border-color:#333;margin-bottom:15px">
-          <tr style="background:#222;color:#50b3ff">${headers
-            .map((h) => `<th>${h}</th>`)
-            .join("")}</tr>
-          ${s.rows
-            .map(
-              (row: Record<string, any>, i: number) =>
-                `<tr style="background:${
-                  i % 2 === 0 ? "#181818" : "#202020"
-                }">${headers.map((h) => `<td>${row[h] ?? ""}</td>`).join("")}</tr>`
-            )
-            .join("")}
-        </table>`;
-    }
-    html += "</div>";
-    navigator.clipboard.writeText(html);
-    alert("All tables copied as formatted HTML for OneNote ✅");
-  };
-
-  // ---------- Section ----------
-  const Section = ({ title, rows }: any) => {
+  const Section = ({ title, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
+
     const filtered = rows.map((r: any) => {
       const copy = { ...r };
       delete copy.Side;
       return copy;
     });
+
     return (
       <div
         style={{
@@ -198,6 +181,8 @@ export default function App() {
           borderRadius: "10px",
           padding: "10px 14px",
           border: "1px solid #2b2b2b",
+          maxWidth: "fit-content",
+          marginBottom: 14,
         }}
       >
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
@@ -205,10 +190,11 @@ export default function App() {
             variant="large"
             styles={{
               root: {
-                color: "#50b3ff",
+                color: "#fff",
+                background: "linear-gradient(90deg,#0078D4,#3AA0FF)",
+                padding: "4px 12px",
+                borderRadius: 6,
                 fontWeight: 600,
-                borderLeft: "4px solid #50b3ff",
-                paddingLeft: 10,
               },
             }}
           >
@@ -233,10 +219,10 @@ export default function App() {
         <DetailsList
           items={filtered}
           columns={buildColumns(filtered)}
-          layoutMode={DetailsListLayoutMode.justified}
+          layoutMode={DetailsListLayoutMode.fixedColumns}
           styles={{
             root: { marginTop: 6, background: "#181818" },
-            headerWrapper: { background: "#222" },
+            headerWrapper: { background: "#181818" },
             contentWrapper: {
               selectors: {
                 ".ms-DetailsRow": {
@@ -251,12 +237,53 @@ export default function App() {
               },
             },
           }}
+          onRenderRow={(props, defaultRender) => {
+            if (!props) return null;
+            const isHighlight =
+              highlightUid && props.item.Uid === highlightUid;
+            return (
+              <div
+                style={{
+                  boxShadow: isHighlight
+                    ? "0 0 10px rgba(80,179,255,0.7)"
+                    : "none",
+                  borderRadius: isHighlight ? 4 : 0,
+                }}
+              >
+                {defaultRender?.(props)}
+              </div>
+            );
+          }}
         />
       </div>
     );
   };
 
-  // ---------- Main Layout ----------
+  const OLSSection = ({ title, rows }: any) => {
+    if (!rows?.length) return null;
+    const displayed = showAllOLS ? rows : rows.slice(0, 10);
+    return (
+      <>
+        <Section title={title} rows={displayed} />
+        {rows.length > 10 && !showAllOLS && (
+          <PrimaryButton
+            text="Show More"
+            onClick={() => setShowAllOLS(true)}
+            styles={{
+              root: {
+                marginTop: 6,
+                background: "#0078D4",
+                borderRadius: 6,
+                padding: "0 16px",
+              },
+              rootHovered: { background: "#106EBE" },
+            }}
+          />
+        )}
+      </>
+    );
+  };
+
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
       {/* Sidebar */}
@@ -297,7 +324,7 @@ export default function App() {
             },
           }}
         >
-          Built by <b>Josh Maclean</b> | Microsoft  
+          Built by <b>Josh Maclean</b> | Microsoft
           <br />
           <span style={{ color: "#50b3ff" }}>All rights reserved ©2025</span>
         </Text>
@@ -308,36 +335,20 @@ export default function App() {
         tokens={{ childrenGap: 18 }}
         styles={{ root: { flexGrow: 1, padding: 30, overflowY: "auto" } }}
       >
-        <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
-          <div style={{ flex: 1 }} />
-          <Text
-            variant="xxLargePlus"
-            styles={{
-              root: {
-                textAlign: "center",
-                color: "#50b3ff",
-                fontWeight: 700,
-                textShadow: "0 0 10px rgba(80,179,255,0.6)",
-              },
-            }}
-          >
-            UID Lookup Portal
-          </Text>
-          <div
-            style={{
-              width: 260,
-              background: "#181818",
-              borderRadius: 8,
-              padding: "8px 12px",
-              border: "1px solid #333",
-              color: "#ccc",
-              fontSize: 13,
-            }}
-          >
-            <b>AI Summary:</b>
-            <div style={{ color: "#50b3ff", marginTop: 4 }}>{summary}</div>
-          </div>
-        </Stack>
+        {/* Title */}
+        <Text
+          variant="xxLargePlus"
+          styles={{
+            root: {
+              textAlign: "center",
+              color: "#50b3ff",
+              fontWeight: 700,
+              textShadow: "0 0 10px rgba(80,179,255,0.6)",
+            },
+          }}
+        >
+          UID Lookup Portal
+        </Text>
 
         {/* UID Input */}
         <Stack horizontalAlign="center" tokens={{ childrenGap: 10 }}>
@@ -381,28 +392,37 @@ export default function App() {
           )}
         </Stack>
 
+        {/* Summary */}
+        <div
+          style={{
+            marginTop: 6,
+            textAlign: "center",
+            color: "#50b3ff",
+            fontWeight: 500,
+            fontSize: 14,
+          }}
+        >
+          {summary}
+        </div>
+
         {error && (
           <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>
         )}
 
         {data && (
           <>
-            <Section title="OLS Optical Link Summary" rows={data.OLSLinks} />
+            <OLSSection title="OLS Optical Link Summary" rows={data.OLSLinks} />
             <Stack horizontal tokens={{ childrenGap: 20 }}>
-              <Stack grow>
-                <Section title="Associated UIDs" rows={data.AssociatedUIDs} />
-              </Stack>
-              <Stack grow>
-                <Section title="GDCO Tickets" rows={data.GDCOTickets} />
-              </Stack>
+              <Section
+                title="Associated UIDs"
+                rows={data.AssociatedUIDs}
+                highlightUid={uid}
+              />
+              <Section title="GDCO Tickets" rows={data.GDCOTickets} />
             </Stack>
             <Stack horizontal tokens={{ childrenGap: 20 }}>
-              <Stack grow>
-                <Section title="MGFX A-Side" rows={data.MGFXA} />
-              </Stack>
-              <Stack grow>
-                <Section title="MGFX Z-Side" rows={data.MGFXZ} />
-              </Stack>
+              <Section title="MGFX A-Side" rows={data.MGFXA} />
+              <Section title="MGFX Z-Side" rows={data.MGFXZ} />
             </Stack>
           </>
         )}
@@ -429,23 +449,6 @@ export default function App() {
           ↑
         </button>
       )}
-
-      {/* Copy Page Button */}
-      <PrimaryButton
-        text="Copy Page"
-        onClick={copyPageHTML}
-        iconProps={{ iconName: "Copy" }}
-        styles={{
-          root: {
-            position: "fixed",
-            top: 30,
-            right: 30,
-            background: "#0078D4",
-            borderRadius: "8px",
-          },
-          rootHovered: { background: "#106EBE" },
-        }}
-      />
     </div>
   );
 }

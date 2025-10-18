@@ -72,14 +72,9 @@ export default function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
 
-      // Sorting
       result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
-      result.MGFXA?.sort((a: any, b: any) =>
-        naturalSort(a.XOMT, b.XOMT)
-      );
-      result.MGFXZ?.sort((a: any, b: any) =>
-        naturalSort(a.XOMT, b.XOMT)
-      );
+      result.MGFXA?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
+      result.MGFXZ?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
 
       setData(result);
       setSummary(
@@ -107,8 +102,8 @@ export default function App() {
           <Stack horizontal tokens={{ childrenGap: 6 }}>
             <IconButton
               iconProps={{ iconName: "Copy" }}
-              title="Copy Table HTML"
-              onClick={() => copyTableHTML(title)}
+              title="Copy Table (Text Only)"
+              onClick={() => copyTableText(title, rows, headers)}
             />
           </Stack>
         </Stack>
@@ -126,10 +121,7 @@ export default function App() {
               const highlight =
                 highlightUid && row.Uid?.toString() === highlightUid;
               return (
-                <tr
-                  key={i}
-                  className={highlight ? "highlight-row" : ""}
-                >
+                <tr key={i} className={highlight ? "highlight-row" : ""}>
                   {keys.map((key, j) => {
                     const val = row[key];
                     if (
@@ -159,13 +151,17 @@ export default function App() {
     );
   };
 
-  const copyTableHTML = (title: string) => {
-    const tables = document.querySelectorAll(".data-table");
-    let html = `<div style='font-family:Segoe UI;background:#1b1b1b;color:#fff;padding:10px'>`;
-    tables.forEach((tbl: any) => (html += tbl.outerHTML));
-    html += "</div>";
-    navigator.clipboard.writeText(html);
-    alert(`Copied ${title} HTML ✅`);
+  const copyTableText = (title: string, rows: any[], headers: string[]) => {
+    const text =
+      title +
+      "\n\n" +
+      headers.join("\t") +
+      "\n" +
+      rows
+        .map((r) => Object.values(r).join("\t"))
+        .join("\n");
+    navigator.clipboard.writeText(text);
+    alert(`Copied ${title} table to clipboard ✅`);
   };
 
   const exportExcel = () => {
@@ -196,13 +192,34 @@ export default function App() {
   const exportOneNote = () => {
     if (!data || !uid) return;
     const tables = document.querySelectorAll(".data-table");
-    let html = `<html><head><meta charset="utf-8"><title>UID Report ${uid}</title></head><body style='font-family:Segoe UI;background:#1b1b1b;color:#fff;'>`;
-    html += `<h1 style='color:#50b3ff;'>UID Report ${uid}</h1>`;
+    let html = `
+      <html><head><meta charset="utf-8">
+      <title>UID Report ${uid}</title>
+      <style>
+        body {font-family:'Segoe UI';background:#1b1b1b;color:#fff;}
+        h1 {color:#50b3ff;}
+        table {border-collapse:collapse;margin-bottom:20px;width:auto;background:#181818;border-radius:6px;overflow:hidden;}
+        th {background:linear-gradient(90deg,#005aa7,#0078d4,#50b3ff);color:#fff;padding:6px 10px;text-align:left;}
+        td {padding:5px 10px;border-bottom:1px solid #333;}
+        tr:nth-child(even){background:#151515;}
+      </style>
+      </head><body><h1>UID Report ${uid}</h1>`;
+
     tables.forEach((tbl: any) => (html += tbl.outerHTML));
     html += "</body></html>";
 
-    const blob = new Blob([html], { type: "application/onenote" });
-    saveAs(blob, `UID_Report_${uid}.one`);
+    const blob = new Blob([html], { type: "text/html" });
+    const fileName = `UID_Report_${uid}_OneNote.html`;
+    saveAs(blob, fileName);
+
+    // Try to automatically open OneNote
+    setTimeout(() => {
+      try {
+        window.location.href = `onenote:https://localhost/${fileName}`;
+      } catch (err) {
+        console.warn("OneNote auto-open failed", err);
+      }
+    }, 800);
   };
 
   return (
@@ -223,11 +240,6 @@ export default function App() {
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="portal-title">UID Lookup Portal</Text>
           <Stack horizontal tokens={{ childrenGap: 10 }}>
-            <IconButton
-              iconProps={{ iconName: "Copy" }}
-              title="Copy HTML"
-              onClick={() => copyTableHTML("All Tables")}
-            />
             <IconButton
               iconProps={{ iconName: "ExcelLogo" }}
               title="Export to Excel"
@@ -283,7 +295,7 @@ export default function App() {
         {data && (
           <>
             <Table
-              title="OLS Optical Link Summary"
+              title="Optical Link Summary"
               headers={[
                 "A Device",
                 "A Port",
@@ -319,9 +331,9 @@ export default function App() {
                 headers={[
                   "Ticket ID",
                   "Datacenter Code",
-                  "Clean Title",
+                  "Title",
                   "State",
-                  "Clean Assigned To",
+                  "Assigned To",
                   "Ticket Link",
                 ]}
                 rows={data.GDCOTickets}

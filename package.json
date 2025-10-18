@@ -21,7 +21,7 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
-    "postbuild": "copy staticwebapp.config.json build\\",
+    "postbuild": "npx copyfiles staticwebapp.config.json build/",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -42,5 +42,8 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "copyfiles": "^2.4.1"
   }
 }

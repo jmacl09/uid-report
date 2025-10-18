@@ -16,7 +16,7 @@ import {
 import { saveAs } from "file-saver";
 import * as XLSX from "xlsx";
 import "./App.css";
-import logo from "./assets/optical360-logo.png"; 
+import logo from "./assets/optical360-logo.png";
 
 initializeIcons();
 
@@ -74,6 +74,9 @@ export default function App() {
       result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
       result.MGFXA?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
       result.MGFXZ?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
+
+      // 🔽 Sort Associated UIDs in descending order by UID
+      result.AssociatedUIDs?.sort((a: any, b: any) => b.UID.localeCompare(a.UID, undefined, { numeric: true }));
 
       setData(result);
       if (!history.includes(query)) setHistory([query, ...history]);
@@ -136,6 +139,7 @@ export default function App() {
     if ((title === "GDCO Tickets" || title === "Associated UIDs") && rows.length > 5) {
       scrollable.maxHeight = 230;
       scrollable.overflowY = "auto";
+      scrollable.overflowX = "hidden"; // 🚫 No horizontal scroll
     }
 
     return (
@@ -148,42 +152,44 @@ export default function App() {
             onClick={() => copyTableText(title, rows, headers)}
           />
         </Stack>
-        <table className="data-table">
-          <thead>
-            <tr>
-              {headers.map((h: string, i: number) => (
-                <th key={i}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row: any, i: number) => {
-              const keys = Object.keys(row);
-              const highlight = highlightUid && row.Uid?.toString() === highlightUid;
-              return (
-                <tr key={i} className={highlight ? "highlight-row" : ""}>
-                  {keys.map((key, j) => {
-                    const val = row[key];
-                    if (
-                      key.toLowerCase().includes("workflow") ||
-                      key.toLowerCase().includes("diff") ||
-                      key.toLowerCase().includes("ticketlink")
-                    ) {
-                      return (
-                        <td key={j}>
-                          <button className="open-btn" onClick={() => window.open(val, "_blank")}>
-                            Open
-                          </button>
-                        </td>
-                      );
-                    }
-                    return <td key={j}>{val}</td>;
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="table-scroll-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                {headers.map((h: string, i: number) => (
+                  <th key={i}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row: any, i: number) => {
+                const keys = Object.keys(row);
+                const highlight = highlightUid && row.Uid?.toString() === highlightUid;
+                return (
+                  <tr key={i} className={highlight ? "highlight-row" : ""}>
+                    {keys.map((key, j) => {
+                      const val = row[key];
+                      if (
+                        key.toLowerCase().includes("workflow") ||
+                        key.toLowerCase().includes("diff") ||
+                        key.toLowerCase().includes("ticketlink")
+                      ) {
+                        return (
+                          <td key={j}>
+                            <button className="open-btn" onClick={() => window.open(val, "_blank")}>
+                              Open
+                            </button>
+                          </td>
+                        );
+                      }
+                      return <td key={j}>{val}</td>;
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   };
@@ -191,7 +197,7 @@ export default function App() {
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
       <div className="sidebar">
-        <img src={logo} alt="Optical 360 Logo" className="logo-img" /> {/* 👈 New logo */}
+        <img src={logo} alt="Optical 360 Logo" className="logo-img" />
         <Nav groups={navLinks} />
         <Separator />
         <Text className="footer">
@@ -200,8 +206,9 @@ export default function App() {
       </div>
 
       <Stack className="main">
+        {/* 🔹 Removed "UID Lookup Portal" title */}
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
-          <Text className="portal-title">UID Lookup Portal</Text>
+          <div />
           <IconButton
             iconProps={{ iconName: "ExcelLogo" }}
             title="Export to Excel"
@@ -331,7 +338,7 @@ export default function App() {
               <Table
                 title="MGFX Z-Side"
                 headers={[
-                  "X0MT",
+                  "XOMT",
                   "C0 Device",
                   "C0 Port",
                   "M0 Device",

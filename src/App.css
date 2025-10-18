@@ -2,6 +2,8 @@ body {
   font-family: "Segoe UI", sans-serif;
   background-color: #111;
   color: #ddd;
+  margin: 0;
+  overflow-x: hidden;
 }
 
 /* Sidebar */
@@ -17,6 +19,7 @@ body {
   width: 160px;
   margin: 0 auto 20px;
   display: block;
+  filter: drop-shadow(0 0 10px #50b3ff);
 }
 
 /* Footer */
@@ -28,7 +31,7 @@ body {
   padding-top: 8px;
 }
 
-/* Main */
+/* Main Content */
 .main {
   flex-grow: 1;
   padding: 30px;
@@ -65,6 +68,15 @@ body {
   background: #106ebe !important;
 }
 
+/* Excel button (top right) */
+.excel-btn {
+  color: #50b3ff !important;
+}
+.excel-btn:hover {
+  color: #79c0ff !important;
+  text-shadow: 0 0 5px #50b3ff;
+}
+
 /* Table container */
 .table-container {
   background: #181818;
@@ -75,6 +87,12 @@ body {
   display: inline-block;
   width: fit-content;
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+  overflow-x: hidden; /* 🚫 Disable horizontal scroll */
+}
+
+.table-scroll-wrapper {
+  overflow-x: hidden; /* 🚫 No horizontal scroll even when content is large */
+  width: 100%;
 }
 
 .section-title {
@@ -142,7 +160,7 @@ body {
   background-color: #0b6a0b;
 }
 
-/* Align A/Z buttons to left below search */
+/* Header Buttons (A/Z Side) */
 .button-header-align-left {
   display: flex;
   justify-content: flex-start;
@@ -154,6 +172,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .side-label {
@@ -197,4 +216,27 @@ body {
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #666;
+}
+
+/* Utility for containers with tall content */
+.table-container::-webkit-scrollbar {
+  width: 6px;
+}
+.table-container::-webkit-scrollbar-thumb {
+  background-color: #333;
+  border-radius: 3px;
+}
+
+/* Prevent layout shift when scroll appears */
+html {
+  scrollbar-gutter: stable;
+}
+
+/* Adjust layout spacing and consistency */
+.ms-TextField-fieldGroup {
+  background-color: #1a1a1a;
+}
+
+.ms-Button-label {
+  font-weight: 600;
 }

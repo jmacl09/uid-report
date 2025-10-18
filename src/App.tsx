@@ -36,9 +36,6 @@ export default function App() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // ---------------------------
-  // Helper to build Fluent UI columns dynamically
-  // ---------------------------
   const buildColumns = (objArray: any[]) =>
     Object.keys(objArray[0] || {}).map((key) => ({
       key,
@@ -47,9 +44,11 @@ export default function App() {
       minWidth: 100,
       maxWidth: 250,
       isResizable: true,
+      styles: { root: { color: "#fff" } },
       onRender: (item: any) =>
         key.toLowerCase().includes("workflow") ||
-        key.toLowerCase().includes("diff") ? (
+        key.toLowerCase().includes("diff") ||
+        key.toLowerCase().includes("ticketlink") ? (
           <a
             href={item[key]}
             target="_blank"
@@ -59,21 +58,15 @@ export default function App() {
             Open
           </a>
         ) : (
-          <span style={{ color: "#d0d0d0" }}>{item[key]}</span>
+          <span style={{ color: "#ccc" }}>{item[key]}</span>
         ),
     }));
 
-  // ---------------------------
-  // Utility: Copy text to clipboard
-  // ---------------------------
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     alert("Copied to clipboard!");
   };
 
-  // ---------------------------
-  // Table export helper
-  // ---------------------------
   const exportToExcel = (tableData: any[], title: string) => {
     const headers = Object.keys(tableData[0] || {});
     const csv = [
@@ -112,9 +105,6 @@ export default function App() {
     a.click();
   };
 
-  // ---------------------------
-  // Search handler
-  // ---------------------------
   const handleSearch = async () => {
     if (!uid.trim()) {
       alert("Please enter a UID before searching.");
@@ -146,11 +136,8 @@ export default function App() {
           }
         }
 
-        if (result) {
-          setData(result);
-        } else {
-          throw new Error("Timed out waiting for Logic App to complete.");
-        }
+        if (result) setData(result);
+        else throw new Error("Timed out waiting for Logic App to complete.");
       } else if (start.ok) {
         const result = await start.json();
         setData(result);
@@ -166,24 +153,25 @@ export default function App() {
     }
   };
 
-  // ---------------------------
-  // Page-wide Copy
-  // ---------------------------
   const copyPageData = () => {
     if (!data) return;
-    copyToClipboard(JSON.stringify(data, null, 2));
+    const allData = {
+      OLSLinks: data.OLSLinks,
+      AssociatedUIDs: data.AssociatedUIDs,
+      MGFXA: data.MGFXA,
+      MGFXZ: data.MGFXZ,
+      GDCOTickets: data.GDCOTickets,
+    };
+    copyToClipboard(JSON.stringify(allData, null, 2));
   };
 
-  // ---------------------------
-  // UI
-  // ---------------------------
   return (
     <div
       style={{
         display: "flex",
         height: "100vh",
-        backgroundColor: "#1b1a19",
-        color: "#ffffff",
+        backgroundColor: "#111",
+        color: "#fff",
       }}
     >
       {/* Sidebar */}
@@ -253,11 +241,12 @@ export default function App() {
           root: {
             flexGrow: 1,
             padding: "40px",
-            background: "linear-gradient(135deg,#111,#1c1c1c)",
+            background: "radial-gradient(circle at top left,#1a1a1a 0%,#111 100%)",
             overflowY: "auto",
           },
         }}
       >
+        {/* Header */}
         <Stack horizontal horizontalAlign="space-between">
           <Text
             variant="xxLargePlus"
@@ -265,7 +254,7 @@ export default function App() {
               root: {
                 color: "#50b3ff",
                 fontWeight: 700,
-                textShadow: "0 0 10px rgba(80,179,255,0.5)",
+                textShadow: "0 0 10px rgba(80,179,255,0.6)",
               },
             }}
           >
@@ -285,82 +274,87 @@ export default function App() {
           />
         </Stack>
 
-        <Stack horizontal tokens={{ childrenGap: 10 }}>
-          <TextField
-            placeholder="Enter UID (e.g., 20190610163)"
-            value={uid}
-            onChange={(_e, v) => setUid(v ?? "")}
-            styles={{
-              fieldGroup: {
-                width: 300,
-                border: "1px solid #50b3ff",
-                borderRadius: "6px",
-                background: "#2b2b2b",
-              },
-              field: { color: "#fff" },
-            }}
-          />
-          <PrimaryButton
-            text={loading ? "Loading..." : "Search"}
-            disabled={loading}
-            onClick={handleSearch}
-            styles={{
-              root: {
-                background: "#0078D4",
-                borderRadius: "6px",
-                padding: "0 24px",
-              },
-              rootHovered: { background: "#106EBE" },
-            }}
-          />
+        {/* Search Input */}
+        <Stack
+          horizontalAlign="center"
+          tokens={{ childrenGap: 10 }}
+          style={{ marginTop: 10 }}
+        >
+          <Stack horizontal tokens={{ childrenGap: 10 }}>
+            <TextField
+              placeholder="Enter UID (e.g., 20190610163)"
+              value={uid}
+              onChange={(_e, v) => setUid(v ?? "")}
+              styles={{
+                fieldGroup: {
+                  width: 320,
+                  border: "1px solid #50b3ff",
+                  borderRadius: "8px",
+                  background: "#1c1c1c",
+                },
+                field: { color: "#fff" },
+              }}
+            />
+            <PrimaryButton
+              text={loading ? "Loading..." : "Search"}
+              disabled={loading}
+              onClick={handleSearch}
+              styles={{
+                root: {
+                  background: "#0078D4",
+                  borderRadius: "8px",
+                  padding: "0 24px",
+                },
+                rootHovered: { background: "#106EBE" },
+              }}
+            />
+          </Stack>
+          {loading && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                marginTop: 20,
+                gap: 12,
+              }}
+            >
+              <Spinner
+                size={SpinnerSize.large}
+                label="Fetching data..."
+                styles={{
+                  label: { color: "#50b3ff", fontSize: 16 },
+                }}
+              />
+              <div
+                style={{
+                  width: 200,
+                  height: 8,
+                  borderRadius: 4,
+                  background: "linear-gradient(90deg,#0078D4,#50b3ff,#0078D4)",
+                  animation: "pulse 2s infinite linear",
+                }}
+              />
+            </div>
+          )}
         </Stack>
 
-        {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         {error && (
           <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>
         )}
 
         {data && (
           <>
-            {/* ===== OLS Section ===== */}
-            <Section
-              title="OLS Optical Link Summary"
-              tableData={data.OLSLinks || []}
-              buildColumns={buildColumns}
-              exportToExcel={exportToExcel}
-              exportToOneNote={exportToOneNote}
-            />
-
-            {/* ===== Associated UIDs ===== */}
-            <Section
-              title="Associated UIDs"
-              tableData={data.AssociatedUIDs || []}
-              buildColumns={buildColumns}
-              exportToExcel={exportToExcel}
-              exportToOneNote={exportToOneNote}
-            />
-
-            {/* ===== MGFX Split View ===== */}
+            <Section title="OLS Optical Link Summary" data={data.OLSLinks} buildColumns={buildColumns} exportToExcel={exportToExcel} exportToOneNote={exportToOneNote}/>
+            <Section title="Associated UIDs" data={data.AssociatedUIDs} buildColumns={buildColumns} exportToExcel={exportToExcel} exportToOneNote={exportToOneNote}/>
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Stack grow>
-                <Section
-                  title="MGFX A-Side"
-                  tableData={(data.MGFX || []).filter((r: any) => r.Side === "A")}
-                  buildColumns={buildColumns}
-                  exportToExcel={exportToExcel}
-                  exportToOneNote={exportToOneNote}
-                />
+                <Section title="MGFX A-Side" data={data.MGFXA} buildColumns={buildColumns} exportToExcel={exportToExcel} exportToOneNote={exportToOneNote}/>
               </Stack>
               <Stack grow>
-                <Section
-                  title="MGFX Z-Side"
-                  tableData={(data.MGFX || []).filter((r: any) => r.Side === "Z")}
-                  buildColumns={buildColumns}
-                  exportToExcel={exportToExcel}
-                  exportToOneNote={exportToOneNote}
-                />
+                <Section title="MGFX Z-Side" data={data.MGFXZ} buildColumns={buildColumns} exportToExcel={exportToExcel} exportToOneNote={exportToOneNote}/>
               </Stack>
             </Stack>
+            <Section title="GDCO Tickets" data={data.GDCOTickets} buildColumns={buildColumns} exportToExcel={exportToExcel} exportToOneNote={exportToOneNote}/>
           </>
         )}
       </Stack>
@@ -368,19 +362,17 @@ export default function App() {
   );
 }
 
-// ---------------------------
-// Reusable Table Section Component
-// ---------------------------
-const Section = ({ title, tableData, buildColumns, exportToExcel, exportToOneNote }: any) => {
-  if (!tableData?.length) return null;
-
+const Section = ({ title, data, buildColumns, exportToExcel, exportToOneNote }: any) => {
+  if (!data?.length) return null;
   return (
     <div
       style={{
-        background: "#222",
-        borderRadius: "10px",
+        background: "#181818",
+        borderRadius: "12px",
         padding: "20px",
-        boxShadow: "0 0 10px rgba(0,0,0,0.5)",
+        boxShadow: "0 0 15px rgba(0,0,0,0.6)",
+        border: "1px solid #333",
+        transition: "0.2s ease",
       }}
     >
       <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
@@ -398,28 +390,39 @@ const Section = ({ title, tableData, buildColumns, exportToExcel, exportToOneNot
           {title}
         </Text>
         <Stack horizontal tokens={{ childrenGap: 8 }}>
-          <IconButton
-            iconProps={{ iconName: "Copy" }}
-            title="Copy Table"
-            onClick={() => navigator.clipboard.writeText(JSON.stringify(tableData, null, 2))}
-          />
-          <IconButton
-            iconProps={{ iconName: "ExcelDocument" }}
-            title="Export to Excel"
-            onClick={() => exportToExcel(tableData, title)}
-          />
-          <IconButton
-            iconProps={{ iconName: "OneNoteLogo" }}
-            title="Export to OneNote"
-            onClick={() => exportToOneNote(tableData, title)}
-          />
+          <IconButton iconProps={{ iconName: "Copy" }} title="Copy Table" onClick={() => navigator.clipboard.writeText(JSON.stringify(data, null, 2))}/>
+          <IconButton iconProps={{ iconName: "ExcelDocument" }} title="Export to Excel" onClick={() => exportToExcel(data, title)}/>
+          <IconButton iconProps={{ iconName: "OneNoteLogo" }} title="Export to OneNote" onClick={() => exportToOneNote(data, title)}/>
         </Stack>
       </Stack>
-
       <DetailsList
-        items={tableData}
-        columns={buildColumns(tableData)}
+        items={data}
+        columns={buildColumns(data)}
         layoutMode={DetailsListLayoutMode.justified}
+        styles={{
+          root: {
+            marginTop: 10,
+            background: "#181818",
+          },
+          headerWrapper: {
+            background: "#222",
+          },
+          contentWrapper: {
+            selectors: {
+              ".ms-DetailsRow": {
+                backgroundColor: "#181818",
+                color: "#fff",
+              },
+              ".ms-DetailsRow:hover": {
+                backgroundColor: "#242424",
+                boxShadow: "0 0 10px rgba(80,179,255,0.3)",
+              },
+              ".ms-DetailsRow:nth-child(even)": {
+                backgroundColor: "#202020",
+              },
+            },
+          },
+        }}
       />
     </div>
   );

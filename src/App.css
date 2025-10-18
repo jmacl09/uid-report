@@ -40,88 +40,135 @@
 
 /* === FiberTools Custom Table Styling === */
 
-/* Prevent tables from stretching to full width */
+/* Limit table width to data size */
 .ms-DetailsList {
   width: fit-content !important;
   max-width: 900px !important;
-  min-width: auto !important;
   table-layout: auto !important;
 }
 
-/* Compact cell padding and spacing */
+/* Visible borders for clarity */
 .ms-DetailsRow-cell {
-  padding: 3px 6px !important;
+  padding: 4px 8px !important;
+  white-space: nowrap !important;
+  border-bottom: 1px solid #2b2b2b !important;
+  border-right: 1px solid #2b2b2b !important;
   min-width: auto !important;
   width: auto !important;
-  white-space: nowrap !important;
 }
 
-/* Gradient blue table header (replaces white) */
+/* Column header dividers */
+.ms-DetailsHeader-cell {
+  border-right: 1px solid #2b2b2b !important;
+}
+
+/* Gradient blue “glass” header */
 .ms-DetailsHeader {
-  background: linear-gradient(90deg, #0078d4, #3aa0ff) !important;
+  background: linear-gradient(
+    135deg,
+    rgba(0, 90, 180, 0.95) 0%,
+    rgba(0, 120, 212, 0.95) 25%,
+    rgba(80, 179, 255, 0.95) 75%,
+    rgba(0, 90, 180, 0.95) 100%
+  ) !important;
   color: #fff !important;
-  border-bottom: 1px solid #333 !important;
+  border-bottom: 2px solid #1e1e1e !important;
+  height: 32px !important;
+  align-items: center !important;
+  backdrop-filter: blur(4px);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.05);
 }
 
-/* Header text styling */
+/* Header text */
 .ms-DetailsHeader-cellTitle {
-  color: #fff !important;
+  color: #ffffff !important;
   font-weight: 600 !important;
   text-transform: none !important;
   font-size: 13px !important;
+  padding-left: 6px !important;
+  line-height: 18px !important;
 }
 
-/* Alternate row background colors */
+/* Alternating row colors */
 .ms-DetailsRow:nth-child(even) {
-  background-color: #202020 !important;
+  background-color: #171717 !important;
 }
-
 .ms-DetailsRow:nth-child(odd) {
-  background-color: #181818 !important;
+  background-color: #111 !important;
 }
 
-/* Remove horizontal scrollbars */
+/* Row hover highlight */
+.ms-DetailsRow:hover {
+  background-color: #232323 !important;
+  box-shadow: inset 0 0 5px rgba(80, 179, 255, 0.35) !important;
+}
+
+/* Hide horizontal scrollbars */
 .ms-Viewport {
   overflow-x: hidden !important;
 }
 
-/* Cell text color and font size */
+/* Compact font */
 .ms-DetailsRow-cell > span {
-  color: #d0d0d0 !important;
+  color: #e0e0e0 !important;
   font-size: 13px !important;
 }
 
-/* Compact side-by-side layout for paired tables */
+/* Paired table layout */
 .compact-table {
   display: inline-block;
   vertical-align: top;
   margin-right: 20px;
 }
 
-/* Add subtle hover glow to rows */
-.ms-DetailsRow:hover {
-  background-color: #242424 !important;
-  box-shadow: 0 0 4px rgba(80, 179, 255, 0.4) !important;
-}
-
-/* Compact overall font for data rows */
-.ms-DetailsRow-cell span {
-  font-size: 13px !important;
-  color: #e0e0e0 !important;
-}
-
-/* Tighten vertical alignment in rows */
-.ms-DetailsRow-fields {
-  align-items: center !important;
-}
-
-/* Smooth border corners for containers */
+/* Section structure */
 .ms-DetailsList,
 .ms-DetailsRow {
   border-radius: 4px !important;
+  border: 1px solid #2b2b2b !important;
 }
 
-/* Section spacing consistency */
+/* Section spacing */
 .compact-table + .compact-table {
   margin-left: 20px;
+}
+
+/* Rounded corners inside DetailsList */
+.ms-DetailsList-contentWrapper {
+  border-radius: 4px !important;
+  overflow: hidden !important;
+}
+
+/* Icons (Copy, OneNote) */
+.ms-Button--icon {
+  margin-left: 2px !important;
+  color: #50b3ff !important;
+}
+
+/* Subtle outer shadow per section */
+.compact-table {
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+/* Align titles perfectly with table tops */
+.compact-table .ms-Text {
+  margin-bottom: 4px !important;
+  display: inline-block;
+}
+
+/* Enhance header gloss with inner glow */
+.ms-DetailsHeader::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(
+    rgba(255, 255, 255, 0.15),
+    rgba(255, 255, 255, 0)
+  );
+  pointer-events: none;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
 }

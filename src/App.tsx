@@ -115,7 +115,7 @@ export default function App() {
     if (!data || !uid) return;
     const wb = XLSX.utils.book_new();
     const sections = {
-      "OLS Optical Link Summary": data.OLSLinks,
+      "Link Summary": data.OLSLinks,
       "Associated UIDs": data.AssociatedUIDs,
       "GDCO Tickets": data.GDCOTickets,
       "MGFX A-Side": data.MGFXA,
@@ -240,71 +240,62 @@ export default function App() {
           {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         </Stack>
 
+        <div className="table-spacing" />
+
         {error && (
           <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>
         )}
 
         {data && (
           <>
-            <Stack tokens={{ childrenGap: 10 }}>
-              <Stack
-                horizontal
-                horizontalAlign="space-between"
-                verticalAlign="center"
-                className="optical-summary-header"
-              >
-                <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 10 }}>
-                  <Text className="section-title">Optical Link Summary</Text>
+            <div className="button-header-center">
+              <div className="side-buttons left">
+                <Text className="side-label">A Side:</Text>
+                <button
+                  className="sleek-btn wan"
+                  onClick={() => window.open(data?.AExpansions?.AUrl, "_blank")}
+                >
+                  WAN Checker
+                </button>
+                <button
+                  className="sleek-btn optical"
+                  onClick={() => window.open(data?.AExpansions?.AOpticalUrl, "_blank")}
+                >
+                  Optical Validator
+                </button>
+              </div>
 
-                  <div className="side-buttons left">
-                    <Text className="side-label">A Side:</Text>
-                    <button
-                      className="sleek-btn wan"
-                      onClick={() => window.open(data?.AExpansions?.AUrl, "_blank")}
-                    >
-                      WAN Checker
-                    </button>
-                    <button
-                      className="sleek-btn optical"
-                      onClick={() => window.open(data?.AExpansions?.AOpticalUrl, "_blank")}
-                    >
-                      Optical Validator
-                    </button>
-                  </div>
+              <div className="side-buttons right">
+                <Text className="side-label">Z Side:</Text>
+                <button
+                  className="sleek-btn wan"
+                  onClick={() => window.open(data?.ZExpansions?.ZUrl, "_blank")}
+                >
+                  WAN Checker
+                </button>
+                <button
+                  className="sleek-btn optical"
+                  onClick={() => window.open(data?.ZExpansions?.ZOpticalUrl, "_blank")}
+                >
+                  Optical Validator
+                </button>
+              </div>
+            </div>
 
-                  <div className="side-buttons right">
-                    <Text className="side-label">Z Side:</Text>
-                    <button
-                      className="sleek-btn wan"
-                      onClick={() => window.open(data?.ZExpansions?.ZUrl, "_blank")}
-                    >
-                      WAN Checker
-                    </button>
-                    <button
-                      className="sleek-btn optical"
-                      onClick={() => window.open(data?.ZExpansions?.ZOpticalUrl, "_blank")}
-                    >
-                      Optical Validator
-                    </button>
-                  </div>
-                </Stack>
-              </Stack>
-
-              <Table
-                title=""
-                headers={[
-                  "A Device",
-                  "A Port",
-                  "Z Device",
-                  "Z Port",
-                  "A Optical Device",
-                  "Z Optical Device",
-                  "Z Optical Port",
-                  "Workflow",
-                ]}
-                rows={data.OLSLinks}
-              />
-            </Stack>
+            <Table
+              title="Link Summary"
+              headers={[
+                "A Device",
+                "A Port",
+                "Z Device",
+                "Z Port",
+                "A Optical Device",
+                "Z Optical Device",
+                "Z Optical Port",
+                "Workflow",
+              ]}
+              rows={data.OLSLinks}
+            />
 
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Table

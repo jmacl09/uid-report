@@ -41,6 +41,11 @@ body {
   font-size: 26px;
 }
 
+/* Spacing between search and tables */
+.table-spacing {
+  height: 25px;
+}
+
 /* Search Input */
 .input-field .ms-TextField-fieldGroup {
   width: 300px;
@@ -57,30 +62,6 @@ body {
 }
 .search-btn:hover {
   background: #106ebe !important;
-}
-
-/* UID History */
-.uid-history {
-  color: #999;
-  margin: 10px 0;
-  text-align: center;
-}
-.uid-history span {
-  color: #50b3ff;
-  cursor: pointer;
-  margin: 0 4px;
-}
-.uid-history span:hover {
-  text-decoration: underline;
-}
-
-/* Summary */
-.summary {
-  margin-top: 8px;
-  text-align: center;
-  color: #50b3ff;
-  font-weight: 500;
-  font-size: 14px;
 }
 
 /* Table container */
@@ -161,33 +142,24 @@ body {
   background-color: #0b6a0b;
 }
 
-/* Icon buttons */
-.ms-Button--icon {
-  color: #50b3ff !important;
-}
-.excel-btn .ms-Button-icon {
-  color: #107c10 !important;
-}
-.onenote-btn .ms-Button-icon {
-  color: #7719aa !important;
-}
-
-/* Optical Link Header Buttons */
-.optical-summary-header {
-  margin-bottom: 4px;
+/* Centered Header Buttons */
+.button-header-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 60px;
+  margin-bottom: 10px;
 }
 
 .side-buttons {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: 12px;
 }
 
 .side-label {
   color: #ccc;
   font-size: 13px;
-  margin-right: 4px;
 }
 
 .sleek-btn {

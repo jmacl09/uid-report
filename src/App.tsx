@@ -304,16 +304,16 @@ export default function App() {
               <Table
                 title="Associated UIDs"
                 headers={[
-                  "Uid",
+                  "UID",
                   "SrlgId",
                   "Action",
                   "Type",
-                  "DeviceA",
-                  "DeviceZ",
-                  "SiteA",
-                  "SiteZ",
-                  "LagA",
-                  "LagZ",
+                  "Device A",
+                  "Device Z",
+                  "Site A",
+                  "Site Z",
+                  "Lag A",
+                  "Lag Z",
                 ]}
                 rows={data.AssociatedUIDs}
                 highlightUid={uid}
@@ -321,12 +321,12 @@ export default function App() {
               <Table
                 title="GDCO Tickets"
                 headers={[
-                  "TicketId",
-                  "DatacenterCode",
-                  "CleanTitle",
+                  "Ticket Id",
+                  "DC Code",
+                  "Title",
                   "State",
-                  "CleanAssignedTo",
-                  "TicketLink",
+                  "Assigned To",
+                  "Link",
                 ]}
                 rows={data.GDCOTickets}
               />
@@ -337,12 +337,12 @@ export default function App() {
                 title="MGFX A-Side"
                 headers={[
                   "XOMT",
-                  "C0_Device",
-                  "C0_Port",
-                  "M0_Device",
-                  "M0_Port",
-                  "C0_DIFF",
-                  "M0_DIFF",
+                  "C0 Device",
+                  "C0 Port",
+                  "M0 Device",
+                  "M0 Port",
+                  "C0 DIFF",
+                  "M0 DIFF",
                 ]}
                 rows={data.MGFXA?.map(({ Side, ...keep }: any) => keep)}
               />
@@ -350,12 +350,12 @@ export default function App() {
                 title="MGFX Z-Side"
                 headers={[
                   "XOMT",
-                  "C0_Device",
-                  "C0_Port",
-                  "M0_Device",
-                  "M0_Port",
-                  "C0_DIFF",
-                  "M0_DIFF",
+                  "C0 Device",
+                  "C0 Port",
+                  "M0 Device",
+                  "M0 Port",
+                  "C0 DIFF",
+                  "M0 DIFF",
                 ]}
                 rows={data.MGFXZ?.map(({ Side, ...keep }: any) => keep)}
               />

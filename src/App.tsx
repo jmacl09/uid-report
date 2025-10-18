@@ -99,7 +99,6 @@ export default function App() {
 
   const copyTableText = (title: string, rows: Record<string, any>[], headers: string[]) => {
     if (!rows?.length) return;
-
     const colWidths = headers.map((h, i) =>
       Math.max(
         h.length,
@@ -120,11 +119,9 @@ export default function App() {
     alert(`Copied ${title} as structured table ✅`);
   };
 
-  // ✅ Export to Excel
   const exportExcel = () => {
     if (!data || !uid) return;
     const wb = XLSX.utils.book_new();
-
     const sections = {
       "OLS Optical Link Summary": data.OLSLinks,
       "Associated UIDs": data.AssociatedUIDs,
@@ -132,13 +129,11 @@ export default function App() {
       "MGFX A-Side": data.MGFXA,
       "MGFX Z-Side": data.MGFXZ,
     };
-
     for (const [title, rows] of Object.entries(sections)) {
       if (!Array.isArray(rows) || !rows.length) continue;
       const ws = XLSX.utils.json_to_sheet(rows);
       XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
     }
-
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const blob = new Blob([wbout], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -146,37 +141,12 @@ export default function App() {
     saveAs(blob, `UID_Report_${uid}.xlsx`);
   };
 
-  // ✅ Export to OneNote (HTML)
-  const exportOneNote = () => {
-    if (!data || !uid) return;
-    const tables = document.querySelectorAll(".data-table");
-    let html = `
-      <html><head><meta charset="utf-8">
-      <title>UID Report ${uid}</title>
-      <style>
-        body {font-family:'Segoe UI';background:#fff;color:#000;}
-        h1 {color:#0078d4;}
-        table {border-collapse:collapse;margin-bottom:20px;width:100%;background:#f9f9f9;border-radius:6px;overflow:hidden;}
-        th {background:#0078d4;color:#fff;padding:6px 10px;text-align:left;}
-        td {padding:5px 10px;border-bottom:1px solid #ddd;}
-        tr:nth-child(even){background:#f2f2f2;}
-      </style>
-      </head><body><h1>UID Report ${uid}</h1>`;
-
-    tables.forEach((tbl: any) => (html += tbl.outerHTML));
-    html += "</body></html>";
-
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const fileName = `UID_Report_${uid}.html`;
-    saveAs(blob, fileName);
-  };
-
+  // Scrollable + table component
   const Table = ({ title, headers, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
-
     const scrollable: React.CSSProperties = {};
     if (title === "GDCO Tickets" || title === "Associated UIDs") {
-      scrollable.maxHeight = 220;
+      scrollable.maxHeight = 230;
       scrollable.overflowY = "auto";
     }
 
@@ -242,13 +212,13 @@ export default function App() {
       <div className="expansion-buttons">
         <Text className="expansion-title">{side} Side:</Text>
         <button
-          className="wan-btn"
+          className="sleek-btn wan"
           onClick={() => window.open(expansions[`${side}Url`], "_blank")}
         >
           WAN Checker
         </button>
         <button
-          className="optical-btn"
+          className="sleek-btn optical"
           onClick={() => window.open(expansions[`${side}OpticalUrl`], "_blank")}
         >
           Optical Validator
@@ -280,12 +250,6 @@ export default function App() {
               className="excel-btn"
               onClick={exportExcel}
             />
-            <IconButton
-              iconProps={{ iconName: "OneNoteLogo" }}
-              title="Export to OneNote"
-              className="onenote-btn"
-              onClick={exportOneNote}
-            />
           </Stack>
         </Stack>
 
@@ -306,19 +270,6 @@ export default function App() {
           </Stack>
           {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         </Stack>
-
-        {history.length > 0 && (
-          <div className="uid-history">
-            Recent:{" "}
-            {history.map((item, i) => (
-              <span key={i} onClick={() => handleSearch(item)}>
-                {item}
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="summary">{summary}</div>
 
         {error && (
           <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>
@@ -378,17 +329,18 @@ export default function App() {
               />
             </Stack>
 
+            {/* ✅ Restored MGFX A/Z tables */}
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Table
                 title="MGFX A-Side"
                 headers={[
                   "XOMT",
-                  "CO Device",
-                  "CO Port",
-                  "MO Device",
-                  "MO Port",
-                  "CO Diff",
-                  "MO Diff",
+                  "C0 Device",
+                  "C0 Port",
+                  "M0 Device",
+                  "M0 Port",
+                  "C0 Diff",
+                  "M0 Diff",
                 ]}
                 rows={data.MGFXA?.map(({ Side, ...keep }: any) => keep)}
               />
@@ -396,12 +348,12 @@ export default function App() {
                 title="MGFX Z-Side"
                 headers={[
                   "XOMT",
-                  "CO Device",
-                  "CO Port",
-                  "MO Device",
-                  "MO Port",
-                  "CO Diff",
-                  "MO Diff",
+                  "C0 Device",
+                  "C0 Port",
+                  "M0 Device",
+                  "M0 Port",
+                  "C0 Diff",
+                  "M0 Diff",
                 ]}
                 rows={data.MGFXZ?.map(({ Side, ...keep }: any) => keep)}
               />

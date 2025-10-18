@@ -1,60 +1,53 @@
-/* Expansion Button Area */
+/* Sleek WAN/Optical buttons */
 .expansion-buttons {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 10px 0 16px 0;
+  gap: 10px;
+  margin-bottom: 14px;
 }
-
 .expansion-title {
   color: #50b3ff;
   font-weight: 600;
   font-size: 14px;
 }
-
-.wan-btn,
-.optical-btn {
+.sleek-btn {
   border: none;
   border-radius: 6px;
-  color: #fff;
   padding: 6px 14px;
   font-size: 13px;
   cursor: pointer;
+  color: #fff;
   font-weight: 600;
-  transition: all 0.2s ease;
+  transition: 0.2s ease;
+}
+.sleek-btn.wan {
+  background: #107c10;
+}
+.sleek-btn.wan:hover {
+  background: #0b6a0b;
+}
+.sleek-btn.optical {
+  background: #0078d4;
+}
+.sleek-btn.optical:hover {
+  background: #106ebe;
 }
 
-/* Green WAN button */
-.wan-btn {
-  background-color: #107c10;
-  box-shadow: 0 0 6px rgba(0, 255, 100, 0.3);
-}
-.wan-btn:hover {
-  background-color: #0b6a0b;
-}
-
-/* Blue Optical button */
-.optical-btn {
-  background-color: #0078d4;
-  box-shadow: 0 0 6px rgba(80, 179, 255, 0.4);
-}
-.optical-btn:hover {
-  background-color: #106ebe;
-}
-
-/* Scrollbars for long tables */
+/* Scrollable tables for large lists */
 .table-container {
+  overflow-x: auto;
+}
+.table-container[style*="overflow-y: auto"] {
   scrollbar-width: thin;
   scrollbar-color: #444 #181818;
 }
-
-.table-container::-webkit-scrollbar {
+.table-container[style*="overflow-y: auto"]::-webkit-scrollbar {
   width: 8px;
 }
-.table-container::-webkit-scrollbar-thumb {
+.table-container[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
   background: #444;
   border-radius: 4px;
 }
-.table-container::-webkit-scrollbar-thumb:hover {
+.table-container[style*="overflow-y: auto"]::-webkit-scrollbar-thumb:hover {
   background: #666;
 }

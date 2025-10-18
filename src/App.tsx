@@ -13,6 +13,7 @@ import {
   SpinnerSize,
   MessageBar,
   MessageBarType,
+  IconButton,
 } from "@fluentui/react";
 
 initializeIcons();
@@ -35,7 +36,9 @@ export default function App() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Helper to dynamically create Fluent UI columns
+  // ---------------------------
+  // Helper to build Fluent UI columns dynamically
+  // ---------------------------
   const buildColumns = (objArray: any[]) =>
     Object.keys(objArray[0] || {}).map((key) => ({
       key,
@@ -47,14 +50,71 @@ export default function App() {
       onRender: (item: any) =>
         key.toLowerCase().includes("workflow") ||
         key.toLowerCase().includes("diff") ? (
-          <a href={item[key]} target="_blank" rel="noopener noreferrer">
+          <a
+            href={item[key]}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "#3AA0FF", textDecoration: "none" }}
+          >
             Open
           </a>
         ) : (
-          item[key]
+          <span style={{ color: "#d0d0d0" }}>{item[key]}</span>
         ),
     }));
 
+  // ---------------------------
+  // Utility: Copy text to clipboard
+  // ---------------------------
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    alert("Copied to clipboard!");
+  };
+
+  // ---------------------------
+  // Table export helper
+  // ---------------------------
+  const exportToExcel = (tableData: any[], title: string) => {
+    const headers = Object.keys(tableData[0] || {});
+    const csv = [
+      headers.join(","),
+      ...tableData.map((row) =>
+        headers.map((h) => JSON.stringify(row[h] ?? "")).join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title}.csv`;
+    a.click();
+  };
+
+  const exportToOneNote = (tableData: any[], title: string) => {
+    const headers = Object.keys(tableData[0] || {});
+    const html = `
+      <h2>${title}</h2>
+      <table border="1" cellpadding="4" cellspacing="0">
+        <tr>${headers.map((h) => `<th>${h}</th>`).join("")}</tr>
+        ${tableData
+          .map(
+            (row) =>
+              `<tr>${headers.map((h) => `<td>${row[h] ?? ""}</td>`).join("")}</tr>`
+          )
+          .join("")}
+      </table>`;
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title}.html`;
+    a.click();
+  };
+
+  // ---------------------------
+  // Search handler
+  // ---------------------------
   const handleSearch = async () => {
     if (!uid.trim()) {
       alert("Please enter a UID before searching.");
@@ -72,14 +132,12 @@ export default function App() {
     try {
       const start = await fetch(triggerUrl, { method: "GET" });
 
-      // ✅ Handle async response (202 Accepted)
       if (start.status === 202) {
         const statusUrl = start.headers.get("location");
         if (!statusUrl) throw new Error("No status URL returned by Logic App.");
 
         let result = null;
         for (let i = 0; i < 30; i++) {
-          // Poll up to 30× with 1s delay (≈30s max)
           await new Promise((r) => setTimeout(r, 1000));
           const poll = await fetch(statusUrl);
           if (poll.status === 200) {
@@ -93,9 +151,7 @@ export default function App() {
         } else {
           throw new Error("Timed out waiting for Logic App to complete.");
         }
-      }
-      // ✅ Handle direct JSON (200 OK)
-      else if (start.ok) {
+      } else if (start.ok) {
         const result = await start.json();
         setData(result);
       } else {
@@ -110,41 +166,83 @@ export default function App() {
     }
   };
 
+  // ---------------------------
+  // Page-wide Copy
+  // ---------------------------
+  const copyPageData = () => {
+    if (!data) return;
+    copyToClipboard(JSON.stringify(data, null, 2));
+  };
+
+  // ---------------------------
+  // UI
+  // ---------------------------
   return (
-    <div style={{ display: "flex", height: "100vh", backgroundColor: "#f3f2f1" }}>
+    <div
+      style={{
+        display: "flex",
+        height: "100vh",
+        backgroundColor: "#1b1a19",
+        color: "#ffffff",
+      }}
+    >
       {/* Sidebar */}
       <div
         style={{
           width: "260px",
-          backgroundColor: "#002050",
+          backgroundColor: "#0a0a0a",
           color: "white",
           padding: "20px",
           display: "flex",
           flexDirection: "column",
+          boxShadow: "2px 0 8px rgba(0,0,0,0.5)",
         }}
       >
         <Text
           variant="xLarge"
-          styles={{ root: { color: "#fff", marginBottom: 20, fontWeight: 600 } }}
+          styles={{
+            root: { color: "#50b3ff", marginBottom: 20, fontWeight: 700 },
+          }}
         >
-          🔍 FiberTools
+          ⚡ FiberTools
         </Text>
         <Nav
           groups={navLinks}
           styles={{
             root: {
               width: 240,
-              boxSizing: "border-box",
-              background: "#002050",
-              color: "#ffffff",
+              background: "transparent",
+              selectors: {
+                ".ms-Nav-compositeLink.is-selected": {
+                  backgroundColor: "#0078D4",
+                },
+                ".ms-Button-flexContainer": { color: "#ffffff" },
+              },
             },
-            linkText: { color: "#ffffff" },
-            compositeLink: { selectors: { ":hover": { background: "#0078D4" } } },
+            link: {
+              color: "#d0d0d0",
+              selectors: {
+                ":hover": { background: "#0078D4", color: "#fff" },
+              },
+            },
           }}
         />
-        <Separator styles={{ root: { borderColor: "#fff", marginTop: 20 } }} />
-        <Text variant="small" styles={{ root: { color: "#d0d0d0", marginTop: 10 } }}>
-          Built by Josh Maclean | Microsoft
+        <Separator styles={{ root: { borderColor: "#3AA0FF", marginTop: 20 } }} />
+        <Text
+          variant="small"
+          styles={{
+            root: {
+              color: "#aaaaaa",
+              marginTop: "auto",
+              textAlign: "center",
+              borderTop: "1px solid #333",
+              paddingTop: 10,
+            },
+          }}
+        >
+          Built by <b>Josh Maclean</b> | Microsoft  
+          <br />
+          <span style={{ color: "#50b3ff" }}>All rights reserved ©2025</span>
         </Text>
       </div>
 
@@ -155,14 +253,37 @@ export default function App() {
           root: {
             flexGrow: 1,
             padding: "40px",
-            background: "linear-gradient(135deg, #e6f0ff 0%, #ffffff 100%)",
+            background: "linear-gradient(135deg,#111,#1c1c1c)",
             overflowY: "auto",
           },
         }}
       >
-        <Text variant="xxLargePlus" styles={{ root: { color: "#002050" } }}>
-          UID Lookup Portal
-        </Text>
+        <Stack horizontal horizontalAlign="space-between">
+          <Text
+            variant="xxLargePlus"
+            styles={{
+              root: {
+                color: "#50b3ff",
+                fontWeight: 700,
+                textShadow: "0 0 10px rgba(80,179,255,0.5)",
+              },
+            }}
+          >
+            UID Lookup Portal
+          </Text>
+          <PrimaryButton
+            text="Copy Page"
+            iconProps={{ iconName: "Copy" }}
+            onClick={copyPageData}
+            styles={{
+              root: {
+                background: "#0078D4",
+                borderRadius: "6px",
+              },
+              rootHovered: { background: "#106EBE" },
+            }}
+          />
+        </Stack>
 
         <Stack horizontal tokens={{ childrenGap: 10 }}>
           <TextField
@@ -172,9 +293,11 @@ export default function App() {
             styles={{
               fieldGroup: {
                 width: 300,
-                border: "1px solid #0078D4",
+                border: "1px solid #50b3ff",
                 borderRadius: "6px",
+                background: "#2b2b2b",
               },
+              field: { color: "#fff" },
             }}
           />
           <PrimaryButton
@@ -199,38 +322,105 @@ export default function App() {
 
         {data && (
           <>
-            {/* OLS Links */}
-            <Text variant="xLarge" styles={{ root: { marginTop: 40 } }}>
-              OLS Optical Link Summary
-            </Text>
-            <DetailsList
-              items={data.OLSLinks || []}
-              columns={buildColumns(data.OLSLinks || [])}
-              layoutMode={DetailsListLayoutMode.justified}
+            {/* ===== OLS Section ===== */}
+            <Section
+              title="OLS Optical Link Summary"
+              tableData={data.OLSLinks || []}
+              buildColumns={buildColumns}
+              exportToExcel={exportToExcel}
+              exportToOneNote={exportToOneNote}
             />
 
-            {/* Associated UIDs */}
-            <Text variant="xLarge" styles={{ root: { marginTop: 40 } }}>
-              Associated UIDs
-            </Text>
-            <DetailsList
-              items={data.AssociatedUIDs || []}
-              columns={buildColumns(data.AssociatedUIDs || [])}
-              layoutMode={DetailsListLayoutMode.justified}
+            {/* ===== Associated UIDs ===== */}
+            <Section
+              title="Associated UIDs"
+              tableData={data.AssociatedUIDs || []}
+              buildColumns={buildColumns}
+              exportToExcel={exportToExcel}
+              exportToOneNote={exportToOneNote}
             />
 
-            {/* MGFX Summary */}
-            <Text variant="xLarge" styles={{ root: { marginTop: 40 } }}>
-              MGFX Summary
-            </Text>
-            <DetailsList
-              items={data.MGFX || []}
-              columns={buildColumns(data.MGFX || [])}
-              layoutMode={DetailsListLayoutMode.justified}
-            />
+            {/* ===== MGFX Split View ===== */}
+            <Stack horizontal tokens={{ childrenGap: 20 }}>
+              <Stack grow>
+                <Section
+                  title="MGFX A-Side"
+                  tableData={(data.MGFX || []).filter((r: any) => r.Side === "A")}
+                  buildColumns={buildColumns}
+                  exportToExcel={exportToExcel}
+                  exportToOneNote={exportToOneNote}
+                />
+              </Stack>
+              <Stack grow>
+                <Section
+                  title="MGFX Z-Side"
+                  tableData={(data.MGFX || []).filter((r: any) => r.Side === "Z")}
+                  buildColumns={buildColumns}
+                  exportToExcel={exportToExcel}
+                  exportToOneNote={exportToOneNote}
+                />
+              </Stack>
+            </Stack>
           </>
         )}
       </Stack>
     </div>
   );
 }
+
+// ---------------------------
+// Reusable Table Section Component
+// ---------------------------
+const Section = ({ title, tableData, buildColumns, exportToExcel, exportToOneNote }: any) => {
+  if (!tableData?.length) return null;
+
+  return (
+    <div
+      style={{
+        background: "#222",
+        borderRadius: "10px",
+        padding: "20px",
+        boxShadow: "0 0 10px rgba(0,0,0,0.5)",
+      }}
+    >
+      <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
+        <Text
+          variant="xLarge"
+          styles={{
+            root: {
+              color: "#50b3ff",
+              fontWeight: 600,
+              borderLeft: "4px solid #50b3ff",
+              paddingLeft: 10,
+            },
+          }}
+        >
+          {title}
+        </Text>
+        <Stack horizontal tokens={{ childrenGap: 8 }}>
+          <IconButton
+            iconProps={{ iconName: "Copy" }}
+            title="Copy Table"
+            onClick={() => navigator.clipboard.writeText(JSON.stringify(tableData, null, 2))}
+          />
+          <IconButton
+            iconProps={{ iconName: "ExcelDocument" }}
+            title="Export to Excel"
+            onClick={() => exportToExcel(tableData, title)}
+          />
+          <IconButton
+            iconProps={{ iconName: "OneNoteLogo" }}
+            title="Export to OneNote"
+            onClick={() => exportToOneNote(tableData, title)}
+          />
+        </Stack>
+      </Stack>
+
+      <DetailsList
+        items={tableData}
+        columns={buildColumns(tableData)}
+        layoutMode={DetailsListLayoutMode.justified}
+      />
+    </div>
+  );
+};

@@ -1,152 +1,152 @@
-body {
-  font-family: "Segoe UI", sans-serif;
+.app-container {
+  display: flex;
   background-color: #111;
-  color: #ddd;
+  color: white;
+  height: 100vh;
+  overflow: hidden;
 }
 
-/* Sidebar */
 .sidebar {
-  width: 240px;
-  background: #0a0a0a;
+  width: 220px;
+  background-color: #0a0a0a;
   padding: 20px;
   display: flex;
   flex-direction: column;
+  justify-content: space-between;
 }
 
 .logo {
-  color: #50b3ff !important;
-  margin-bottom: 20px;
+  color: #50b3ff;
+  font-weight: bold;
 }
 
 .footer {
-  color: #999 !important;
-  margin-top: auto;
+  font-size: 12px;
+  color: #888;
   text-align: center;
   border-top: 1px solid #333;
   padding-top: 8px;
 }
 
-/* Main */
 .main {
-  flex-grow: 1;
+  flex: 1;
   padding: 30px;
   overflow-y: auto;
 }
 
-.portal-title {
+.main-title {
   color: #50b3ff;
   font-weight: 700;
-  text-shadow: 0 0 10px rgba(80, 179, 255, 0.6);
-  margin-bottom: 10px;
   font-size: 26px;
+  text-shadow: 0 0 8px rgba(80, 179, 255, 0.6);
 }
 
-/* Search & UID */
-.input-field .ms-TextField-fieldGroup {
-  width: 300px;
+.uid-input .ms-TextField-fieldGroup {
   border: 1px solid #50b3ff;
-  border-radius: 8px;
+  border-radius: 6px;
   background: #1c1c1c;
-}
-.input-field input {
-  color: #fff;
-}
-.search-btn {
-  background: #0078d4 !important;
-  border-radius: 8px;
-}
-.search-btn:hover {
-  background: #106ebe !important;
+  width: 300px;
 }
 
 .uid-history {
   color: #999;
-  margin: 10px 0;
-  text-align: center;
+  font-size: 13px;
 }
+
 .uid-history span {
   color: #50b3ff;
+  margin-left: 6px;
   cursor: pointer;
-  margin: 0 4px;
-}
-.uid-history span:hover {
-  text-decoration: underline;
 }
 
-/* Summary */
-.summary {
-  margin-top: 8px;
-  text-align: center;
+.summary-text {
   color: #50b3ff;
-  font-weight: 500;
-  font-size: 14px;
-}
-
-/* Table container */
-.table-container {
-  background: #181818;
-  border-radius: 8px;
-  padding: 8px 10px;
-  border: 1px solid #2b2b2b;
-  margin-bottom: 18px;
-  display: inline-block;
-  width: fit-content;
+  font-size: 13px;
+  margin-top: 4px;
 }
 
 /* Table */
-.data-table {
-  border-collapse: collapse;
-  margin-top: 6px;
-  font-size: 13px;
+.section {
   background: #181818;
-}
-.data-table th {
-  background: linear-gradient(135deg, #005ab4, #0078d4, #50b3ff);
-  color: white;
-  font-weight: 600;
-  padding: 6px 10px;
-  border-bottom: 2px solid #0e0e0e;
-  text-align: left;
-  white-space: nowrap;
-}
-.data-table td {
-  border-bottom: 1px solid #2b2b2b;
-  padding: 5px 10px;
-  white-space: nowrap;
-}
-.data-table tr:nth-child(even) {
-  background: #151515;
-}
-.data-table tr:hover {
-  background: #232323;
-  box-shadow: inset 0 0 6px rgba(80, 179, 255, 0.4);
-}
-.highlight-row {
-  background: #003b3b !important;
-  box-shadow: inset 0 0 10px rgba(0, 130, 114, 0.8);
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #2b2b2b;
+  margin-top: 16px;
 }
 
-/* Buttons */
-.open-btn {
-  background-color: #107c10;
-  border: none;
+.section-title {
+  color: #50b3ff;
+  font-weight: 700;
+  margin-bottom: 4px;
+  border-left: 4px solid #50b3ff;
+  padding-left: 8px;
+  font-size: 15px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 4px;
+}
+
+.data-table thead {
+  border-radius: 6px 6px 0 0;
+  overflow: hidden;
+}
+
+.data-table th {
+  background: linear-gradient(90deg, #0078d4 0%, #1890ff 50%, #50b3ff 100%);
   color: #fff;
+  font-weight: 600;
+  padding: 6px 12px;
+  text-align: left;
+  border: none;
+  white-space: nowrap;
+}
+
+.data-table td {
+  background: #181818;
+  color: #d0d0d0;
+  font-size: 13px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+
+.data-table tr:nth-child(even) td {
+  background: #202020;
+}
+
+.data-table tr:hover td {
+  background: #252525;
+}
+
+.open-btn {
+  background: #107c10;
+  color: #fff;
+  border: none;
   padding: 3px 10px;
   border-radius: 3px;
-  cursor: pointer;
+  text-decoration: none;
   font-size: 12px;
-}
-.open-btn:hover {
-  background-color: #0b6a0b;
+  transition: background 0.2s;
 }
 
-/* Icon buttons */
-.ms-Button--icon {
-  color: #50b3ff !important;
+.open-btn:hover {
+  background: #0b6a0b;
 }
-.excel-btn .ms-Button-icon {
+
+.highlight {
+  background-color: rgba(0, 130, 114, 0.3);
+}
+
+.excel-btn {
   color: #107c10 !important;
 }
-.onenote-btn .ms-Button-icon {
+
+.onenote-btn {
   color: #7719aa !important;
+}
+
+.copy-btn {
+  color: #0078d4 !important;
 }

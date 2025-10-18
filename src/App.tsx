@@ -5,186 +5,117 @@ import {
   Text,
   TextField,
   PrimaryButton,
-  Nav,
-  Separator,
-  Spinner,
-  SpinnerSize,
-  MessageBar,
-  MessageBarType,
   IconButton,
 } from "@fluentui/react";
-import { saveAs } from "file-saver";
 import * as XLSX from "xlsx";
-import "./App.css";
+import { saveAs } from "file-saver";
 
 initializeIcons();
 
-const navLinks = [
-  {
-    links: [
-      { name: "UID Search", key: "uidSearch", icon: "Search", url: "#" },
-      { name: "Fiber Spans", key: "fiberSpans", icon: "NetworkTower", url: "#" },
-      { name: "Device Lookup", key: "deviceLookup", icon: "DeviceBug", url: "#" },
-      { name: "Reports", key: "reports", icon: "BarChartVertical", url: "#" },
-      { name: "Settings", key: "settings", icon: "Settings", url: "#" },
-    ],
-  },
-];
-
 export default function App() {
   const [uid, setUid] = useState<string>("");
-  const [history, setHistory] = useState<string[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string>("Awaiting UID lookup...");
+  const [uidHistory, setUidHistory] = useState<string[]>([]);
 
   useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("uidHistory") || "[]");
-    setHistory(saved);
+    const history = JSON.parse(localStorage.getItem("uidHistory") || "[]");
+    setUidHistory(history);
   }, []);
 
-  useEffect(() => {
-    localStorage.setItem("uidHistory", JSON.stringify(history.slice(0, 10)));
-  }, [history]);
+  const addToHistory = (uidVal: string) => {
+    let history = JSON.parse(localStorage.getItem("uidHistory") || "[]");
+    if (!history.includes(uidVal)) {
+      history.unshift(uidVal);
+      history = history.slice(0, 10);
+      localStorage.setItem("uidHistory", JSON.stringify(history));
+      setUidHistory(history);
+    }
+  };
 
-  const naturalSort = (a: string, b: string) =>
-    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
-
-  const handleSearch = async (searchUid?: string) => {
-    const query = searchUid || uid;
-    if (!query.trim()) {
+  const handleSearch = async () => {
+    if (!uid.trim()) {
       alert("Please enter a UID before searching.");
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    setSummary("Fetching data...");
     setData(null);
-    setSummary("Analyzing data...");
 
     const triggerUrl = `https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ&UID=${encodeURIComponent(
-      query
+      uid
     )}`;
 
     try {
       const res = await fetch(triggerUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
 
-      // Sorting
-      result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
-      result.MGFXA?.sort((a: any, b: any) =>
-        naturalSort(a.XOMT, b.XOMT)
+      // Sort OLS by APort ascending
+      result.OLSLinks?.sort((a: any, b: any) =>
+        a.APort.localeCompare(b.APort, undefined, { numeric: true })
       );
-      result.MGFXZ?.sort((a: any, b: any) =>
-        naturalSort(a.XOMT, b.XOMT)
-      );
+
+      // Sort MGFX A/Z by XOMT numeric order
+      const sortXOMT = (arr: any[]) =>
+        arr?.sort(
+          (a, b) =>
+            parseInt(a.XOMT.replace(/\D/g, "")) -
+            parseInt(b.XOMT.replace(/\D/g, ""))
+        );
+
+      sortXOMT(result.MGFXA);
+      sortXOMT(result.MGFXZ);
 
       setData(result);
       setSummary(
         `Found ${result.OLSLinks?.length || 0} active optical paths, ${
           result.AssociatedUIDs?.length || 0
-        } associated UIDs, and ${result.GDCOTickets?.length || 0} related GDCO tickets.`
+        } associated UIDs, and ${
+          result.GDCOTickets?.length || 0
+        } related GDCO tickets.`
       );
-
-      if (!history.includes(query)) setHistory([query, ...history]);
-    } catch (err: any) {
-      setError(err.message || "Network error occurred.");
+      addToHistory(uid);
+    } catch (err) {
       setSummary("Error retrieving data.");
-    } finally {
-      setLoading(false);
     }
   };
 
-  const Table = ({ title, headers, rows, highlightUid }: any) => {
-    if (!rows?.length) return null;
+  const openLinks = (url: string) => (
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="open-btn"
+    >
+      Open
+    </a>
+  );
 
-    return (
-      <div className="table-container">
-        <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
-          <Text className="section-title">{title}</Text>
-          <Stack horizontal tokens={{ childrenGap: 6 }}>
-            <IconButton
-              iconProps={{ iconName: "Copy" }}
-              title="Copy Table HTML"
-              onClick={() => copyTableHTML(title)}
-            />
-          </Stack>
-        </Stack>
-        <table className="data-table">
-          <thead>
-            <tr>
-              {headers.map((h: string, i: number) => (
-                <th key={i}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row: any, i: number) => {
-              const keys = Object.keys(row);
-              const highlight =
-                highlightUid && row.Uid?.toString() === highlightUid;
-              return (
-                <tr
-                  key={i}
-                  className={highlight ? "highlight-row" : ""}
-                >
-                  {keys.map((key, j) => {
-                    const val = row[key];
-                    if (
-                      key.toLowerCase().includes("workflow") ||
-                      key.toLowerCase().includes("diff") ||
-                      key.toLowerCase().includes("ticketlink")
-                    ) {
-                      return (
-                        <td key={j}>
-                          <button
-                            className="open-btn"
-                            onClick={() => window.open(val, "_blank")}
-                          >
-                            Open
-                          </button>
-                        </td>
-                      );
-                    }
-                    return <td key={j}>{val}</td>;
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
-
-  const copyTableHTML = (title: string) => {
+  // ---------- Export Helpers ----------
+  const copyHTML = () => {
+    if (!data) return;
     const tables = document.querySelectorAll(".data-table");
-    let html = `<div style='font-family:Segoe UI;background:#1b1b1b;color:#fff;padding:10px'>`;
-    tables.forEach((tbl: any) => (html += tbl.outerHTML));
-    html += "</div>";
+    let html = "";
+    tables.forEach((tbl) => (html += tbl.outerHTML));
     navigator.clipboard.writeText(html);
-    alert(`Copied ${title} HTML ✅`);
+    alert("All tables copied as formatted HTML ✅");
   };
 
   const exportExcel = () => {
     if (!data || !uid) return;
     const wb = XLSX.utils.book_new();
 
-    const sections = {
-      "OLS Optical Link Summary": data.OLSLinks,
-      "Associated UIDs": data.AssociatedUIDs,
-      "GDCO Tickets": data.GDCOTickets,
-      "MGFX A-Side": data.MGFXA,
-      "MGFX Z-Side": data.MGFXZ,
+    const addSheet = (rows: any[], name: string) => {
+      if (!rows || !rows.length) return;
+      const ws = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
     };
 
-    for (const [title, rows] of Object.entries(sections)) {
-      if (!Array.isArray(rows) || !rows.length) continue;
-      const ws = XLSX.utils.json_to_sheet(rows);
-      XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
-    }
+    addSheet(data.OLSLinks, "OLS Optical Summary");
+    addSheet(data.AssociatedUIDs, "Associated UIDs");
+    addSheet(data.GDCOTickets, "GDCO Tickets");
+    addSheet(data.MGFXA, "MGFX A-Side");
+    addSheet(data.MGFXZ, "MGFX Z-Side");
 
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
     const blob = new Blob([wbout], {
@@ -195,39 +126,98 @@ export default function App() {
 
   const exportOneNote = () => {
     if (!data || !uid) return;
+
     const tables = document.querySelectorAll(".data-table");
-    let html = `<html><head><meta charset="utf-8"><title>UID Report ${uid}</title></head><body style='font-family:Segoe UI;background:#1b1b1b;color:#fff;'>`;
-    html += `<h1 style='color:#50b3ff;'>UID Report ${uid}</h1>`;
+    let html = `
+      <html><head><meta charset="utf-8">
+      <title>UID Report ${uid}</title>
+      </head>
+      <body style='font-family:Segoe UI;background:#1b1b1b;color:#fff;'>
+        <h1 style='color:#50b3ff;'>UID Report ${uid}</h1>
+    `;
     tables.forEach((tbl: any) => (html += tbl.outerHTML));
     html += "</body></html>";
 
-    const blob = new Blob([html], { type: "application/onenote" });
-    saveAs(blob, `UID_Report_${uid}.one`);
+    const blob = new Blob([html], { type: "text/html" });
+    saveAs(blob, `UID_Report_${uid}.html`);
+  };
+
+  // ---------- Table Renderer ----------
+  const renderTable = (title: string, rows: any[], highlightField?: string) => {
+    if (!rows?.length) return null;
+
+    const headers = Object.keys(rows[0]);
+
+    return (
+      <div className="section">
+        <Stack
+          horizontal
+          horizontalAlign="space-between"
+          verticalAlign="center"
+          className="section-header"
+        >
+          <Text className="section-title">{title}</Text>
+          <IconButton
+            iconProps={{ iconName: "Copy" }}
+            title="Copy Table"
+            onClick={() =>
+              navigator.clipboard.writeText(JSON.stringify(rows, null, 2))
+            }
+          />
+        </Stack>
+        <table className="data-table">
+          <thead>
+            <tr>
+              {headers.map((h) => (
+                <th key={h}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr
+                key={i}
+                className={
+                  highlightField && r[highlightField] === uid ? "highlight" : ""
+                }
+              >
+                {headers.map((h) => (
+                  <td key={h}>
+                    {typeof r[h] === "string" && r[h].startsWith("http") ? (
+                      openLinks(r[h])
+                    ) : (
+                      <span>{r[h]}</span>
+                    )}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
+    <div className="app-container">
+      {/* Sidebar */}
       <div className="sidebar">
         <Text variant="xLarge" className="logo">
           ⚡ FiberTools
         </Text>
-        <Nav groups={navLinks} />
-        <Separator />
-        <Text className="footer">
-          Built by <b>Josh Maclean</b> | Microsoft
-        </Text>
+        <div className="footer">
+          Built by <b>Josh Maclean</b> | Microsoft <br />
+          <span>©2025</span>
+        </div>
       </div>
 
-      <Stack className="main">
-        {/* Top Header */}
+      {/* Main */}
+      <div className="main">
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
-          <Text className="portal-title">UID Lookup Portal</Text>
-          <Stack horizontal tokens={{ childrenGap: 10 }}>
-            <IconButton
-              iconProps={{ iconName: "Copy" }}
-              title="Copy HTML"
-              onClick={() => copyTableHTML("All Tables")}
-            />
+          <Text className="main-title">UID Lookup Portal</Text>
+
+          {/* Action Buttons */}
+          <Stack horizontal tokens={{ childrenGap: 8 }}>
             <IconButton
               iconProps={{ iconName: "ExcelLogo" }}
               title="Export to Excel"
@@ -240,6 +230,12 @@ export default function App() {
               className="onenote-btn"
               onClick={exportOneNote}
             />
+            <IconButton
+              iconProps={{ iconName: "Copy" }}
+              title="Copy HTML"
+              className="copy-btn"
+              onClick={copyHTML}
+            />
           </Stack>
         </Stack>
 
@@ -250,114 +246,43 @@ export default function App() {
               placeholder="Enter UID (e.g., 20190610163)"
               value={uid}
               onChange={(_e, v) => setUid(v ?? "")}
-              className="input-field"
+              className="uid-input"
             />
-            <PrimaryButton
-              text={loading ? "Loading..." : "Search"}
-              disabled={loading}
-              onClick={() => handleSearch()}
-              className="search-btn"
-            />
+            <PrimaryButton text="Search" onClick={handleSearch} />
           </Stack>
-          {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
+
+          {uidHistory.length > 0 && (
+            <div className="uid-history">
+              Recent:{" "}
+              {uidHistory.map((u, i) => (
+                <span key={i} onClick={() => setUid(u)}>
+                  {u}
+                </span>
+              ))}
+            </div>
+          )}
+          <Text className="summary-text">{summary}</Text>
         </Stack>
 
-        {/* UID History */}
-        {history.length > 0 && (
-          <div className="uid-history">
-            Recent:{" "}
-            {history.map((item, i) => (
-              <span key={i} onClick={() => handleSearch(item)}>
-                {item}
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="summary">{summary}</div>
-
-        {error && (
-          <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>
-        )}
-
+        {/* Tables */}
         {data && (
           <>
-            <Table
-              title="OLS Optical Link Summary"
-              headers={[
-                "A Device",
-                "A Port",
-                "Z Device",
-                "Z Port",
-                "A Optical Device",
-                "Z Optical Device",
-                "Z Optical Port",
-                "Workflow",
-              ]}
-              rows={data.OLSLinks}
-            />
+            {renderTable("OLS Optical Link Summary", data.OLSLinks)}
             <Stack horizontal tokens={{ childrenGap: 20 }}>
-              <Table
-                title="Associated UIDs"
-                headers={[
-                  "UID",
-                  "SRLG ID",
-                  "Action",
-                  "Type",
-                  "Device A",
-                  "Device Z",
-                  "Site A",
-                  "Site Z",
-                  "Lag A",
-                  "Lag Z",
-                ]}
-                rows={data.AssociatedUIDs}
-                highlightUid={uid}
-              />
-              <Table
-                title="GDCO Tickets"
-                headers={[
-                  "Ticket ID",
-                  "Datacenter Code",
-                  "Clean Title",
-                  "State",
-                  "Clean Assigned To",
-                  "Ticket Link",
-                ]}
-                rows={data.GDCOTickets}
-              />
+              <Stack grow>
+                {renderTable("Associated UIDs", data.AssociatedUIDs, "Uid")}
+              </Stack>
+              <Stack grow>
+                {renderTable("GDCO Tickets", data.GDCOTickets)}
+              </Stack>
             </Stack>
             <Stack horizontal tokens={{ childrenGap: 20 }}>
-              <Table
-                title="MGFX A-Side"
-                headers={[
-                  "XOMT",
-                  "CO Device",
-                  "CO Port",
-                  "MO Device",
-                  "MO Port",
-                  "CO Diff",
-                  "MO Diff",
-                ]}
-                rows={data.MGFXA.map(({ Side, ...keep }: any) => keep)}
-              />
-              <Table
-                title="MGFX Z-Side"
-                headers={[
-                  "XOMT",
-                  "CO Device",
-                  "CO Port",
-                  "MO Device",
-                  "MO Port",
-                  "CO Diff",
-                  "MO Diff",
-                ]}
-                rows={data.MGFXZ.map(({ Side, ...keep }: any) => keep)}
-              />
+              <Stack grow>{renderTable("MGFX A-Side", data.MGFXA)}</Stack>
+              <Stack grow>{renderTable("MGFX Z-Side", data.MGFXZ)}</Stack>
             </Stack>
           </>
         )}
-      </Stack>
+      </div>
     </div>
   );
 }

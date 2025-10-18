@@ -7,6 +7,12 @@ import {
   PrimaryButton,
   Nav,
   Separator,
+  DetailsList,
+  DetailsListLayoutMode,
+  Spinner,
+  SpinnerSize,
+  MessageBar,
+  MessageBarType,
 } from "@fluentui/react";
 
 initializeIcons();
@@ -26,8 +32,9 @@ const navLinks = [
 export default function App() {
   const [uid, setUid] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
+  const [data, setData] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // ✅ Direct Logic App trigger (GET)
   const handleSearch = async () => {
     if (!uid.trim()) {
       alert("Please enter a UID before searching.");
@@ -35,6 +42,8 @@ export default function App() {
     }
 
     setLoading(true);
+    setError(null);
+    setData(null);
 
     try {
       const response = await fetch(
@@ -44,19 +53,39 @@ export default function App() {
         { method: "GET" }
       );
 
-      if (response.ok) {
-        alert(`✅ Flow triggered successfully for UID: ${uid}`);
-      } else {
-        const text = await response.text();
-        alert(`❌ Flow failed (${response.status}): ${text}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
-    } catch (err) {
+
+      const result = await response.json();
+      setData(result);
+    } catch (err: any) {
       console.error(err);
-      alert("⚠️ Network error while triggering the flow.");
+      setError("Error retrieving data from Logic App.");
     } finally {
       setLoading(false);
     }
   };
+
+  // Helper to build Fluent UI DetailsList columns
+  const buildColumns = (objArray: any[]) =>
+    Object.keys(objArray[0] || {}).map((key) => ({
+      key,
+      name: key,
+      fieldName: key,
+      minWidth: 100,
+      maxWidth: 250,
+      isResizable: true,
+      onRender: (item: any) =>
+        key.toLowerCase().includes("workflow") ||
+        key.toLowerCase().includes("diff") ? (
+          <a href={item[key]} target="_blank" rel="noopener noreferrer">
+            Open
+          </a>
+        ) : (
+          item[key]
+        ),
+    }));
 
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#f3f2f1" }}>
@@ -102,33 +131,19 @@ export default function App() {
         styles={{
           root: {
             flexGrow: 1,
-            padding: "60px",
+            padding: "40px",
             background: "linear-gradient(135deg, #e6f0ff 0%, #ffffff 100%)",
+            overflowY: "auto",
           },
         }}
-        verticalAlign="center"
-        horizontalAlign="center"
       >
         <Text variant="xxLargePlus" styles={{ root: { color: "#002050" } }}>
           UID Lookup Portal
         </Text>
-        <Text
-          variant="mediumPlus"
-          styles={{
-            root: { color: "#555", textAlign: "center", maxWidth: 480, marginBottom: 20 },
-          }}
-        >
-          Enter a UID below to retrieve network, fiber span, or optical device details.
-        </Text>
 
-        <Stack
-          horizontal
-          tokens={{ childrenGap: 10 }}
-          horizontalAlign="center"
-          styles={{ root: { marginTop: 10 } }}
-        >
+        <Stack horizontal tokens={{ childrenGap: 10 }}>
           <TextField
-            placeholder="Enter UID (e.g., UID123456)"
+            placeholder="Enter UID (e.g., 20190610163)"
             value={uid}
             onChange={(_e, v) => setUid(v ?? "")}
             styles={{
@@ -140,7 +155,7 @@ export default function App() {
             }}
           />
           <PrimaryButton
-            text={loading ? "Triggering..." : "Search"}
+            text={loading ? "Loading..." : "Search"}
             disabled={loading}
             onClick={handleSearch}
             styles={{
@@ -153,6 +168,45 @@ export default function App() {
             }}
           />
         </Stack>
+
+        {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
+        {error && (
+          <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>
+        )}
+
+        {data && (
+          <>
+            {/* OLS Links Table */}
+            <Text variant="xLarge" styles={{ root: { marginTop: 40 } }}>
+              OLS Optical Link Summary
+            </Text>
+            <DetailsList
+              items={data.OLSLinks || []}
+              columns={buildColumns(data.OLSLinks || [])}
+              layoutMode={DetailsListLayoutMode.justified}
+            />
+
+            {/* Associated UIDs */}
+            <Text variant="xLarge" styles={{ root: { marginTop: 40 } }}>
+              Associated UIDs
+            </Text>
+            <DetailsList
+              items={data.AssociatedUIDs || []}
+              columns={buildColumns(data.AssociatedUIDs || [])}
+              layoutMode={DetailsListLayoutMode.justified}
+            />
+
+            {/* MGFX Summary */}
+            <Text variant="xLarge" styles={{ root: { marginTop: 40 } }}>
+              MGFX Summary
+            </Text>
+            <DetailsList
+              items={data.MGFX || []}
+              columns={buildColumns(data.MGFX || [])}
+              layoutMode={DetailsListLayoutMode.justified}
+            />
+          </>
+        )}
       </Stack>
     </div>
   );

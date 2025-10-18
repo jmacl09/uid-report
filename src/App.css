@@ -1,3 +1,4 @@
+/* === Default CRA styling === */
 .App {
   text-align: center;
 }
@@ -35,4 +36,92 @@
   to {
     transform: rotate(360deg);
   }
+}
+
+/* === FiberTools Custom Table Styling === */
+
+/* Prevent tables from stretching to full width */
+.ms-DetailsList {
+  width: fit-content !important;
+  max-width: 900px !important;
+  min-width: auto !important;
+  table-layout: auto !important;
+}
+
+/* Compact cell padding and spacing */
+.ms-DetailsRow-cell {
+  padding: 3px 6px !important;
+  min-width: auto !important;
+  width: auto !important;
+  white-space: nowrap !important;
+}
+
+/* Gradient blue table header (replaces white) */
+.ms-DetailsHeader {
+  background: linear-gradient(90deg, #0078d4, #3aa0ff) !important;
+  color: #fff !important;
+  border-bottom: 1px solid #333 !important;
+}
+
+/* Header text styling */
+.ms-DetailsHeader-cellTitle {
+  color: #fff !important;
+  font-weight: 600 !important;
+  text-transform: none !important;
+  font-size: 13px !important;
+}
+
+/* Alternate row background colors */
+.ms-DetailsRow:nth-child(even) {
+  background-color: #202020 !important;
+}
+
+.ms-DetailsRow:nth-child(odd) {
+  background-color: #181818 !important;
+}
+
+/* Remove horizontal scrollbars */
+.ms-Viewport {
+  overflow-x: hidden !important;
+}
+
+/* Cell text color and font size */
+.ms-DetailsRow-cell > span {
+  color: #d0d0d0 !important;
+  font-size: 13px !important;
+}
+
+/* Compact side-by-side layout for paired tables */
+.compact-table {
+  display: inline-block;
+  vertical-align: top;
+  margin-right: 20px;
+}
+
+/* Add subtle hover glow to rows */
+.ms-DetailsRow:hover {
+  background-color: #242424 !important;
+  box-shadow: 0 0 4px rgba(80, 179, 255, 0.4) !important;
+}
+
+/* Compact overall font for data rows */
+.ms-DetailsRow-cell span {
+  font-size: 13px !important;
+  color: #e0e0e0 !important;
+}
+
+/* Tighten vertical alignment in rows */
+.ms-DetailsRow-fields {
+  align-items: center !important;
+}
+
+/* Smooth border corners for containers */
+.ms-DetailsList,
+.ms-DetailsRow {
+  border-radius: 4px !important;
+}
+
+/* Section spacing consistency */
+.compact-table + .compact-table {
+  margin-left: 20px;
 }

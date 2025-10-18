@@ -14,8 +14,8 @@ import {
   MessageBar,
   MessageBarType,
   IconButton,
-  IColumn,
 } from "@fluentui/react";
+import "./App.css";
 
 initializeIcons();
 
@@ -36,8 +36,8 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showScroll, setShowScroll] = useState<boolean>(false);
   const [summary, setSummary] = useState<string>("Awaiting UID lookup...");
+  const [showScroll, setShowScroll] = useState<boolean>(false);
   const [showAllOLS, setShowAllOLS] = useState<boolean>(false);
 
   useEffect(() => {
@@ -49,13 +49,13 @@ export default function App() {
   const naturalSort = (a: string, b: string) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 
-  const buildColumns = (objArray: any[]): IColumn[] =>
+  const buildColumns = (objArray: any[]) =>
     Object.keys(objArray[0] || {}).map((key) => ({
       key,
       name: key,
       fieldName: key,
-      minWidth: 80,
-      maxWidth: 220,
+      minWidth: 70,
+      maxWidth: 180,
       isResizable: true,
       isMultiline: false,
       onRender: (item: any) => {
@@ -89,8 +89,8 @@ export default function App() {
     setLoading(true);
     setError(null);
     setData(null);
-    setSummary("Analyzing data...");
     setShowAllOLS(false);
+    setSummary("Analyzing data...");
 
     const triggerUrl = `https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ&UID=${encodeURIComponent(
       uid
@@ -101,7 +101,6 @@ export default function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
 
-      // Sorting rules
       result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
       result.AssociatedUIDs?.sort(
         (a: any, b: any) => parseInt(b.Uid) - parseInt(a.Uid)
@@ -146,12 +145,12 @@ export default function App() {
 
     return (
       <div
+        className="compact-table"
         style={{
           background: "#181818",
           borderRadius: 8,
-          padding: "10px 14px",
+          padding: "8px 10px",
           border: "1px solid #2b2b2b",
-          maxWidth: "fit-content",
           marginBottom: 14,
         }}
       >
@@ -191,45 +190,19 @@ export default function App() {
           compact={true}
           styles={{
             root: {
-              marginTop: 4,
               background: "#181818",
-              maxWidth: "fit-content",
               overflowX: "hidden",
-            },
-            headerWrapper: {
-              background: "linear-gradient(90deg,#0078D4,#3AA0FF)",
-              color: "#fff",
-              fontWeight: 600,
-            },
-            contentWrapper: {
-              selectors: {
-                ".ms-DetailsRow": {
-                  backgroundColor: "#181818",
-                  minHeight: 24,
-                },
-                ".ms-DetailsRow:nth-child(even)": {
-                  backgroundColor: "#202020",
-                },
-                ".ms-DetailsRow:hover": {
-                  backgroundColor: "#242424",
-                  boxShadow: "0 0 6px rgba(80,179,255,0.4)",
-                },
-                ".ms-DetailsHeader-cellTitle": {
-                  color: "#fff",
-                  fontWeight: 600,
-                },
-              },
+              maxWidth: "fit-content",
             },
           }}
           onRenderRow={(props, defaultRender) => {
             if (!props) return null;
-            const isHighlight =
-              highlightUid && props.item.Uid === highlightUid;
+            const isHighlight = highlightUid && props.item.Uid === highlightUid;
             return (
               <div
                 style={{
                   boxShadow: isHighlight
-                    ? "0 0 10px rgba(80,179,255,0.7)"
+                    ? "0 0 8px rgba(80,179,255,0.7)"
                     : "none",
                   borderRadius: isHighlight ? 4 : 0,
                 }}
@@ -353,7 +326,6 @@ export default function App() {
           },
         }}
       >
-        {/* Title */}
         <Text
           variant="xxLargePlus"
           styles={{
@@ -410,7 +382,6 @@ export default function App() {
           )}
         </Stack>
 
-        {/* Summary */}
         <div
           style={{
             marginTop: 8,
@@ -445,28 +416,6 @@ export default function App() {
           </>
         )}
       </Stack>
-
-      {/* Scroll to Top */}
-      {showScroll && (
-        <button
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          style={{
-            position: "fixed",
-            bottom: 30,
-            right: 30,
-            background: "#0078D4",
-            border: "none",
-            color: "#fff",
-            padding: "10px 14px",
-            borderRadius: "50%",
-            fontSize: 18,
-            boxShadow: "0 0 10px rgba(80,179,255,0.6)",
-            cursor: "pointer",
-          }}
-        >
-          ↑
-        </button>
-      )}
     </div>
   );
 }

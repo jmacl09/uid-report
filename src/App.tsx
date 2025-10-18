@@ -231,7 +231,7 @@ export default function App() {
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
       <div className="sidebar">
         <Text variant="xLarge" className="logo">
-          ⚡ FiberTools
+          ⚡ Optical 360
         </Text>
         <Nav groups={navLinks} />
         <Separator />

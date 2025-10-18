@@ -133,7 +133,6 @@ export default function App() {
     saveAs(blob, `UID_Report_${uid}.xlsx`);
   };
 
-  // Scrollable + table component
   const Table = ({ title, headers, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
     const scrollable: React.CSSProperties = {};
@@ -197,44 +196,6 @@ export default function App() {
     );
   };
 
-  const OpticalHeaderButtons = () => {
-    if (!data?.AExpansions || !data?.ZExpansions) return null;
-    return (
-      <div className="optical-header">
-        <div className="side-buttons left">
-          <Text className="side-label">A Side:</Text>
-          <button
-            className="sleek-btn wan"
-            onClick={() => window.open(data.AExpansions.AUrl, "_blank")}
-          >
-            WAN Checker
-          </button>
-          <button
-            className="sleek-btn optical"
-            onClick={() => window.open(data.AExpansions.AOpticalUrl, "_blank")}
-          >
-            Optical Validator
-          </button>
-        </div>
-        <div className="side-buttons right">
-          <Text className="side-label">Z Side:</Text>
-          <button
-            className="sleek-btn wan"
-            onClick={() => window.open(data.ZExpansions.ZUrl, "_blank")}
-          >
-            WAN Checker
-          </button>
-          <button
-            className="sleek-btn optical"
-            onClick={() => window.open(data.ZExpansions.ZOpticalUrl, "_blank")}
-          >
-            Optical Validator
-          </button>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
       <div className="sidebar">
@@ -286,9 +247,47 @@ export default function App() {
         {data && (
           <>
             <Stack tokens={{ childrenGap: 10 }}>
-              <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
-                <Text className="section-title">Optical Link Summary</Text>
-                <OpticalHeaderButtons />
+              <Stack
+                horizontal
+                horizontalAlign="space-between"
+                verticalAlign="center"
+                className="optical-summary-header"
+              >
+                <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 10 }}>
+                  <Text className="section-title">Optical Link Summary</Text>
+
+                  <div className="side-buttons left">
+                    <Text className="side-label">A Side:</Text>
+                    <button
+                      className="sleek-btn wan"
+                      onClick={() => window.open(data?.AExpansions?.AUrl, "_blank")}
+                    >
+                      WAN Checker
+                    </button>
+                    <button
+                      className="sleek-btn optical"
+                      onClick={() => window.open(data?.AExpansions?.AOpticalUrl, "_blank")}
+                    >
+                      Optical Validator
+                    </button>
+                  </div>
+
+                  <div className="side-buttons right">
+                    <Text className="side-label">Z Side:</Text>
+                    <button
+                      className="sleek-btn wan"
+                      onClick={() => window.open(data?.ZExpansions?.ZUrl, "_blank")}
+                    >
+                      WAN Checker
+                    </button>
+                    <button
+                      className="sleek-btn optical"
+                      onClick={() => window.open(data?.ZExpansions?.ZOpticalUrl, "_blank")}
+                    >
+                      Optical Validator
+                    </button>
+                  </div>
+                </Stack>
               </Stack>
 
               <Table

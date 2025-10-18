@@ -271,6 +271,9 @@ export default function App() {
           {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         </Stack>
 
+        {/* ✅ Summary restored to fix ESLint and show status */}
+        <div className="summary">{summary}</div>
+
         {error && (
           <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>
         )}
@@ -329,7 +332,6 @@ export default function App() {
               />
             </Stack>
 
-            {/* ✅ Restored MGFX A/Z tables */}
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Table
                 title="MGFX A-Side"

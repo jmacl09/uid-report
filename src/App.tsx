@@ -7,14 +7,11 @@ import {
   PrimaryButton,
   Nav,
   Separator,
-  DetailsList,
-  DetailsListLayoutMode,
   Spinner,
   SpinnerSize,
   MessageBar,
   MessageBarType,
   IconButton,
-  IColumn
 } from "@fluentui/react";
 import "./App.css";
 
@@ -39,42 +36,6 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string>("Awaiting UID lookup...");
 
-  const naturalSort = (a: string, b: string) =>
-    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
-
-  const buildColumns = (objArray: any[]): IColumn[] => {
-    if (!objArray?.length) return [];
-    return Object.keys(objArray[0]).map((key) => ({
-      key,
-      name: key,
-      fieldName: key,
-      minWidth: 80,
-      maxWidth: 160,
-      isResizable: true,
-      isMultiline: false,
-      onRender: (item: any) => {
-        const val = item[key];
-        if (
-          key.toLowerCase().includes("workflow") ||
-          key.toLowerCase().includes("diff") ||
-          key.toLowerCase().includes("ticketlink")
-        ) {
-          return (
-            <a
-              href={val}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: "#3AA0FF", textDecoration: "none" }}
-            >
-              Open
-            </a>
-          );
-        }
-        return <span>{val}</span>;
-      },
-    }));
-  };
-
   const handleSearch = async () => {
     if (!uid.trim()) {
       alert("Please enter a UID before searching.");
@@ -95,11 +56,6 @@ export default function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
 
-      result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
-      result.AssociatedUIDs?.sort(
-        (a: any, b: any) => parseInt(b.Uid) - parseInt(a.Uid)
-      );
-
       setData(result);
       setSummary(
         `Found ${result.OLSLinks?.length || 0} active optical paths, ${
@@ -114,11 +70,10 @@ export default function App() {
     }
   };
 
-  const Section = ({ title, rows, highlightUid }: any) => {
+  const Table = ({ title, headers, rows }: any) => {
     if (!rows?.length) return null;
-
     return (
-      <div className="table-section">
+      <div className="table-container">
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="section-title">{title}</Text>
           <Stack horizontal tokens={{ childrenGap: 6 }}>
@@ -131,17 +86,43 @@ export default function App() {
             />
           </Stack>
         </Stack>
-
-        <DetailsList
-          items={rows}
-          columns={buildColumns(rows)}
-          compact={true}
-          layoutMode={DetailsListLayoutMode.fixedColumns}
-          styles={{
-            root: { background: "#181818", borderRadius: 4, paddingTop: 4 },
-            contentWrapper: { overflowX: "hidden" },
-          }}
-        />
+        <table className="data-table">
+          <thead>
+            <tr>
+              {headers.map((h: string, i: number) => (
+                <th key={i}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row: any, i: number) => (
+              <tr key={i}>
+                {headers.map((h: string, j: number) => {
+                  const key = Object.keys(row)[j];
+                  const value = row[key];
+                  if (
+                    key.toLowerCase().includes("workflow") ||
+                    key.toLowerCase().includes("diff") ||
+                    key.toLowerCase().includes("ticketlink")
+                  ) {
+                    return (
+                      <td key={j}>
+                        <a
+                          href={value}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Open
+                        </a>
+                      </td>
+                    );
+                  }
+                  return <td key={j}>{value}</td>;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   };
@@ -188,18 +169,81 @@ export default function App() {
 
         {data && (
           <>
-            <Section title="OLS Optical Link Summary" rows={data.OLSLinks} />
+            <Table
+              title="OLS Optical Link Summary"
+              headers={[
+                "A Device",
+                "A Port",
+                "Z Device",
+                "Z Port",
+                "A Optical Device",
+                "Z Optical Device",
+                "Z Optical Port",
+                "Workflow",
+              ]}
+              rows={data.OLSLinks}
+            />
             <Stack horizontal tokens={{ childrenGap: 20 }}>
-              <Section
+              <Table
                 title="Associated UIDs"
+                headers={[
+                  "UID",
+                  "SRLG ID",
+                  "Action",
+                  "Type",
+                  "Device A",
+                  "Device Z",
+                  "Site A",
+                  "Site Z",
+                  "Lag A",
+                  "Lag Z",
+                ]}
                 rows={data.AssociatedUIDs}
-                highlightUid={uid}
               />
-              <Section title="GDCO Tickets" rows={data.GDCOTickets} />
+              <Table
+                title="GDCO Tickets"
+                headers={[
+                  "Ticket ID",
+                  "Datacenter Code",
+                  "Clean Title",
+                  "State",
+                  "Clean Assigned To",
+                  "Ticket Link",
+                ]}
+                rows={data.GDCOTickets}
+              />
             </Stack>
             <Stack horizontal tokens={{ childrenGap: 20 }}>
-              <Section title="MGFX A-Side" rows={data.MGFXA} />
-              <Section title="MGFX Z-Side" rows={data.MGFXZ} />
+              <Table
+                title="MGFX A-Side"
+                headers={[
+                  "XOMT",
+                  "CO Device",
+                  "CO Port",
+                  "MO Device",
+                  "MO Port",
+                  "CO Diff",
+                  "MO Diff",
+                ]}
+                rows={data.MGFXA.map(
+                  ({ Side, ...keep }: Record<string, any>) => keep
+                )}
+              />
+              <Table
+                title="MGFX Z-Side"
+                headers={[
+                  "XOMT",
+                  "CO Device",
+                  "CO Port",
+                  "MO Device",
+                  "MO Port",
+                  "CO Diff",
+                  "MO Diff",
+                ]}
+                rows={data.MGFXZ.map(
+                  ({ Side, ...keep }: Record<string, any>) => keep
+                )}
+              />
             </Stack>
           </>
         )}

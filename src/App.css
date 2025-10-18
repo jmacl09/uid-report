@@ -1,3 +1,10 @@
+body {
+  font-family: "Segoe UI", sans-serif;
+  background-color: #111;
+  color: #ddd;
+}
+
+/* Sidebar */
 .sidebar {
   width: 240px;
   background: #0a0a0a;
@@ -19,6 +26,7 @@
   padding-top: 8px;
 }
 
+/* Main Area */
 .main {
   flex-grow: 1;
   padding: 30px;
@@ -33,6 +41,7 @@
   margin-bottom: 10px;
 }
 
+/* Search Section */
 .input-field .ms-TextField-fieldGroup {
   width: 300px;
   border: 1px solid #50b3ff;
@@ -58,13 +67,15 @@
   font-size: 14px;
 }
 
-.table-section {
+/* Tables */
+.table-container {
   background: #181818;
   border-radius: 8px;
   padding: 8px 10px;
   border: 1px solid #2b2b2b;
-  margin-bottom: 14px;
+  margin-bottom: 18px;
   display: inline-block;
+  width: fit-content;
 }
 
 .section-title {
@@ -73,45 +84,49 @@
   margin-bottom: 6px !important;
 }
 
-/* Gradient header */
-.ms-DetailsHeader {
+/* Data Tables */
+.data-table {
+  border-collapse: collapse;
+  margin-top: 6px;
+  width: 100%;
+  font-size: 13px;
+  background: #181818;
+}
+
+.data-table th {
   background: linear-gradient(135deg, #005ab4, #0078d4, #50b3ff);
-  color: white !important;
-  height: 32px !important;
+  color: white;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-bottom: 2px solid #0e0e0e;
+  white-space: nowrap;
+  text-align: left;
 }
 
-.ms-DetailsHeader-cellTitle {
-  font-weight: 600 !important;
-  color: #fff !important;
-  font-size: 13px !important;
+.data-table td {
+  border-bottom: 1px solid #2b2b2b;
+  padding: 5px 10px;
+  white-space: nowrap;
 }
 
-/* Rows */
-.ms-DetailsRow-cell {
-  padding: 3px 8px !important;
-  white-space: nowrap !important;
-  color: #d0d0d0 !important;
-  font-size: 13px !important;
-  border-bottom: 1px solid #2b2b2b !important;
+.data-table tr:nth-child(even) {
+  background: #151515;
+}
+.data-table tr:hover {
+  background: #232323;
+  box-shadow: inset 0 0 6px rgba(80, 179, 255, 0.4);
 }
 
-.ms-DetailsRow:nth-child(even) {
-  background: #161616 !important;
+.data-table a {
+  color: #3aa0ff;
+  text-decoration: none;
+  font-weight: 500;
 }
-.ms-DetailsRow:nth-child(odd) {
-  background: #121212 !important;
-}
-.ms-DetailsRow:hover {
-  background-color: #232323 !important;
-  box-shadow: inset 0 0 4px rgba(80, 179, 255, 0.3) !important;
+.data-table a:hover {
+  text-decoration: underline;
 }
 
-/* Remove scrollbars */
-.ms-Viewport {
-  overflow-x: hidden !important;
-}
-
-/* Compact icon buttons */
+/* Copy Icon */
 .ms-Button--icon {
   color: #50b3ff !important;
 }

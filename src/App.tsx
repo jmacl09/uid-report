@@ -92,17 +92,38 @@ export default function App() {
     }
   };
 
-  // ✅ Copy table (plain text only)
-  const copyTableText = (title: string, rows: Record<string, any>[], headers: string[]) => {
-    let text = `${title}\n${headers.join("\t")}\n`;
-    rows.forEach((r: Record<string, any>) => {
-      text += Object.values(r).join("\t") + "\n";
-    });
-    navigator.clipboard.writeText(text.trim());
-    alert(`Copied ${title} as plain text ✅`);
+  // 🔧 Helper for padding text into aligned columns
+  const pad = (text: string, width: number) => {
+    text = text == null ? "" : String(text);
+    return text.padEnd(width, " ");
   };
 
-  // ✅ Copy all tables (plain text only)
+  // ✅ Copy table as structured monospaced table
+  const copyTableText = (title: string, rows: Record<string, any>[], headers: string[]) => {
+    if (!rows?.length) return;
+
+    // Calculate max width for each column
+    const colWidths = headers.map((h, i) =>
+      Math.max(
+        h.length,
+        ...rows.map((r) => String(Object.values(r)[i] ?? "").length)
+      ) + 2
+    );
+
+    let output = `${title}\n`;
+    output += headers.map((h, i) => pad(h, colWidths[i])).join("") + "\n";
+    output += "-".repeat(colWidths.reduce((a, b) => a + b, 0)) + "\n";
+
+    for (const r of rows) {
+      const vals = Object.values(r);
+      output += vals.map((v, i) => pad(v, colWidths[i])).join("") + "\n";
+    }
+
+    navigator.clipboard.writeText(output.trimEnd());
+    alert(`Copied ${title} as structured table ✅`);
+  };
+
+  // ✅ Copy all tables as structured text
   const copyAllTables = () => {
     if (!data) return;
 
@@ -177,17 +198,33 @@ export default function App() {
       },
     ];
 
-    let combinedText = "";
+    let allText = "";
+
     for (const s of sections) {
-      if (s.rows && s.rows.length > 0) {
-        combinedText += `${s.title}\n${s.headers.join("\t")}\n${s.rows
-          .map((r: Record<string, any>) => Object.values(r).join("\t"))
-          .join("\n")}\n\n`;
+      if (!s.rows?.length) continue;
+
+      const colWidths = s.headers.map((h, i) =>
+        Math.max(
+          h.length,
+          ...s.rows.map((r: Record<string, any>) =>
+            String(Object.values(r)[i] ?? "").length
+          )
+        ) + 2
+      );
+
+      allText += `${s.title}\n`;
+      allText += s.headers.map((h, i) => pad(h, colWidths[i])).join("") + "\n";
+      allText += "-".repeat(colWidths.reduce((a, b) => a + b, 0)) + "\n";
+
+      for (const r of s.rows) {
+        const vals = Object.values(r);
+        allText += vals.map((v, i) => pad(String(v), colWidths[i])).join("") + "\n";
       }
+      allText += "\n\n";
     }
 
-    navigator.clipboard.writeText(combinedText.trim());
-    alert("Copied all tables (plain text) ✅");
+    navigator.clipboard.writeText(allText.trimEnd());
+    alert("Copied all tables as structured text ✅");
   };
 
   // ✅ Export to Excel
@@ -216,7 +253,7 @@ export default function App() {
     saveAs(blob, `UID_Report_${uid}.xlsx`);
   };
 
-  // ✅ Export to OneNote (as HTML)
+  // ✅ Export to OneNote (HTML)
   const exportOneNote = () => {
     if (!data || !uid) return;
     const tables = document.querySelectorAll(".data-table");
@@ -248,7 +285,7 @@ export default function App() {
     }, 800);
   };
 
-  // ✅ Table rendering component
+  // ✅ Table component
   const Table = ({ title, headers, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
 
@@ -259,7 +296,7 @@ export default function App() {
           <Stack horizontal tokens={{ childrenGap: 6 }}>
             <IconButton
               iconProps={{ iconName: "Copy" }}
-              title="Copy Table (Plain Text)"
+              title="Copy Table (Structured Text)"
               onClick={() => copyTableText(title, rows, headers)}
             />
           </Stack>
@@ -308,7 +345,7 @@ export default function App() {
     );
   };
 
-  // ✅ UI Layout
+  // ✅ Layout
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
       <div className="sidebar">
@@ -328,7 +365,7 @@ export default function App() {
           <Stack horizontal tokens={{ childrenGap: 10 }}>
             <IconButton
               iconProps={{ iconName: "Copy" }}
-              title="Copy All Tables (Plain Text)"
+              title="Copy All Tables (Structured Text)"
               className="copy-all-btn"
               onClick={copyAllTables}
             />

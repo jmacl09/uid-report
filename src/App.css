@@ -13,11 +13,13 @@ body {
   flex-direction: column;
 }
 
-.logo {
-  color: #50b3ff !important;
-  margin-bottom: 20px;
+.logo-img {
+  width: 160px;
+  margin: 0 auto 20px;
+  display: block;
 }
 
+/* Footer */
 .footer {
   color: #999 !important;
   margin-top: auto;
@@ -41,7 +43,6 @@ body {
   font-size: 26px;
 }
 
-/* Spacing between search and tables */
 .table-spacing {
   height: 25px;
 }
@@ -95,7 +96,6 @@ body {
   min-width: 100%;
 }
 
-/* Header gradient */
 .data-table thead tr {
   background: linear-gradient(90deg, #005aa7, #0078d4, #50b3ff);
 }
@@ -142,13 +142,12 @@ body {
   background-color: #0b6a0b;
 }
 
-/* Centered Header Buttons */
-.button-header-center {
+/* Align A/Z buttons to left below search */
+.button-header-align-left {
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
-  gap: 60px;
-  margin-bottom: 10px;
+  margin: 10px 0 15px 0;
 }
 
 .side-buttons {
@@ -175,16 +174,13 @@ body {
 .sleek-btn.wan {
   background: #0078d4;
 }
-
 .sleek-btn.wan:hover {
   background: #106ebe;
   box-shadow: 0 0 6px #0078d4;
 }
-
 .sleek-btn.optical {
   background: #1b6f5b;
 }
-
 .sleek-btn.optical:hover {
   background: #21836c;
   box-shadow: 0 0 6px #1b6f5b;

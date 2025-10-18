@@ -16,6 +16,7 @@ import {
 import { saveAs } from "file-saver";
 import * as XLSX from "xlsx";
 import "./App.css";
+import logo from "./assets/optical360-logo.png"; 
 
 initializeIcons();
 
@@ -75,7 +76,6 @@ export default function App() {
       result.MGFXZ?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
 
       setData(result);
-
       if (!history.includes(query)) setHistory([query, ...history]);
     } catch (err: any) {
       setError(err.message || "Network error occurred.");
@@ -92,10 +92,7 @@ export default function App() {
   const copyTableText = (title: string, rows: Record<string, any>[], headers: string[]) => {
     if (!rows?.length) return;
     const colWidths = headers.map((h, i) =>
-      Math.max(
-        h.length,
-        ...rows.map((r) => String(Object.values(r)[i] ?? "").length)
-      ) + 2
+      Math.max(h.length, ...rows.map((r) => String(Object.values(r)[i] ?? "").length)) + 2
     );
 
     let output = `${title}\n`;
@@ -145,13 +142,11 @@ export default function App() {
       <div className="table-container" style={scrollable}>
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="section-title">{title}</Text>
-          <Stack horizontal tokens={{ childrenGap: 6 }}>
-            <IconButton
-              iconProps={{ iconName: "Copy" }}
-              title="Copy Table"
-              onClick={() => copyTableText(title, rows, headers)}
-            />
-          </Stack>
+          <IconButton
+            iconProps={{ iconName: "Copy" }}
+            title="Copy Table"
+            onClick={() => copyTableText(title, rows, headers)}
+          />
         </Stack>
         <table className="data-table">
           <thead>
@@ -176,10 +171,7 @@ export default function App() {
                     ) {
                       return (
                         <td key={j}>
-                          <button
-                            className="open-btn"
-                            onClick={() => window.open(val, "_blank")}
-                          >
+                          <button className="open-btn" onClick={() => window.open(val, "_blank")}>
                             Open
                           </button>
                         </td>
@@ -199,9 +191,7 @@ export default function App() {
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
       <div className="sidebar">
-        <Text variant="xLarge" className="logo">
-          ⚡ Optical 360
-        </Text>
+        <img src={logo} alt="Optical 360 Logo" className="logo-img" /> {/* 👈 New logo */}
         <Nav groups={navLinks} />
         <Separator />
         <Text className="footer">
@@ -212,14 +202,12 @@ export default function App() {
       <Stack className="main">
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="portal-title">UID Lookup Portal</Text>
-          <Stack horizontal tokens={{ childrenGap: 10 }}>
-            <IconButton
-              iconProps={{ iconName: "ExcelLogo" }}
-              title="Export to Excel"
-              className="excel-btn"
-              onClick={exportExcel}
-            />
-          </Stack>
+          <IconButton
+            iconProps={{ iconName: "ExcelLogo" }}
+            title="Export to Excel"
+            className="excel-btn"
+            onClick={exportExcel}
+          />
         </Stack>
 
         <Stack horizontalAlign="center" tokens={{ childrenGap: 10 }}>
@@ -242,14 +230,12 @@ export default function App() {
 
         <div className="table-spacing" />
 
-        {error && (
-          <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>
-        )}
+        {error && <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>}
 
         {data && (
           <>
-            <div className="button-header-center">
-              <div className="side-buttons left">
+            <div className="button-header-align-left">
+              <div className="side-buttons">
                 <Text className="side-label">A Side:</Text>
                 <button
                   className="sleek-btn wan"
@@ -263,10 +249,9 @@ export default function App() {
                 >
                   Optical Validator
                 </button>
-              </div>
-
-              <div className="side-buttons right">
-                <Text className="side-label">Z Side:</Text>
+                <Text className="side-label" style={{ marginLeft: "40px" }}>
+                  Z Side:
+                </Text>
                 <button
                   className="sleek-btn wan"
                   onClick={() => window.open(data?.ZExpansions?.ZUrl, "_blank")}

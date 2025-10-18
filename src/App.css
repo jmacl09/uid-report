@@ -26,7 +26,7 @@ body {
   padding-top: 8px;
 }
 
-/* Main Area */
+/* Main */
 .main {
   flex-grow: 1;
   padding: 30px;
@@ -34,14 +34,14 @@ body {
 }
 
 .portal-title {
-  text-align: center;
   color: #50b3ff;
   font-weight: 700;
   text-shadow: 0 0 10px rgba(80, 179, 255, 0.6);
   margin-bottom: 10px;
+  font-size: 26px;
 }
 
-/* Search Section */
+/* Search & UID */
 .input-field .ms-TextField-fieldGroup {
   width: 300px;
   border: 1px solid #50b3ff;
@@ -59,6 +59,21 @@ body {
   background: #106ebe !important;
 }
 
+.uid-history {
+  color: #999;
+  margin: 10px 0;
+  text-align: center;
+}
+.uid-history span {
+  color: #50b3ff;
+  cursor: pointer;
+  margin: 0 4px;
+}
+.uid-history span:hover {
+  text-decoration: underline;
+}
+
+/* Summary */
 .summary {
   margin-top: 8px;
   text-align: center;
@@ -67,7 +82,7 @@ body {
   font-size: 14px;
 }
 
-/* Tables */
+/* Table container */
 .table-container {
   background: #181818;
   border-radius: 8px;
@@ -78,37 +93,27 @@ body {
   width: fit-content;
 }
 
-.section-title {
-  color: #50b3ff !important;
-  font-weight: 600 !important;
-  margin-bottom: 6px !important;
-}
-
-/* Data Tables */
+/* Table */
 .data-table {
   border-collapse: collapse;
   margin-top: 6px;
-  width: 100%;
   font-size: 13px;
   background: #181818;
 }
-
 .data-table th {
   background: linear-gradient(135deg, #005ab4, #0078d4, #50b3ff);
   color: white;
   font-weight: 600;
   padding: 6px 10px;
   border-bottom: 2px solid #0e0e0e;
-  white-space: nowrap;
   text-align: left;
+  white-space: nowrap;
 }
-
 .data-table td {
   border-bottom: 1px solid #2b2b2b;
   padding: 5px 10px;
   white-space: nowrap;
 }
-
 .data-table tr:nth-child(even) {
   background: #151515;
 }
@@ -116,17 +121,32 @@ body {
   background: #232323;
   box-shadow: inset 0 0 6px rgba(80, 179, 255, 0.4);
 }
-
-.data-table a {
-  color: #3aa0ff;
-  text-decoration: none;
-  font-weight: 500;
-}
-.data-table a:hover {
-  text-decoration: underline;
+.highlight-row {
+  background: #003b3b !important;
+  box-shadow: inset 0 0 10px rgba(0, 130, 114, 0.8);
 }
 
-/* Copy Icon */
+/* Buttons */
+.open-btn {
+  background-color: #107c10;
+  border: none;
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.open-btn:hover {
+  background-color: #0b6a0b;
+}
+
+/* Icon buttons */
 .ms-Button--icon {
   color: #50b3ff !important;
+}
+.excel-btn .ms-Button-icon {
+  color: #107c10 !important;
+}
+.onenote-btn .ms-Button-icon {
+  color: #7719aa !important;
 }

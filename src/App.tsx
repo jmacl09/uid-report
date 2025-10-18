@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   initializeIcons,
   Stack,
@@ -13,6 +13,8 @@ import {
   MessageBarType,
   IconButton,
 } from "@fluentui/react";
+import { saveAs } from "file-saver";
+import * as XLSX from "xlsx";
 import "./App.css";
 
 initializeIcons();
@@ -31,13 +33,27 @@ const navLinks = [
 
 export default function App() {
   const [uid, setUid] = useState<string>("");
+  const [history, setHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string>("Awaiting UID lookup...");
 
-  const handleSearch = async () => {
-    if (!uid.trim()) {
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem("uidHistory") || "[]");
+    setHistory(saved);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("uidHistory", JSON.stringify(history.slice(0, 10)));
+  }, [history]);
+
+  const naturalSort = (a: string, b: string) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+
+  const handleSearch = async (searchUid?: string) => {
+    const query = searchUid || uid;
+    if (!query.trim()) {
       alert("Please enter a UID before searching.");
       return;
     }
@@ -48,7 +64,7 @@ export default function App() {
     setSummary("Analyzing data...");
 
     const triggerUrl = `https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ&UID=${encodeURIComponent(
-      uid
+      query
     )}`;
 
     try {
@@ -56,12 +72,23 @@ export default function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
 
+      // Sorting
+      result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
+      result.MGFXA?.sort((a: any, b: any) =>
+        naturalSort(a.XOMT, b.XOMT)
+      );
+      result.MGFXZ?.sort((a: any, b: any) =>
+        naturalSort(a.XOMT, b.XOMT)
+      );
+
       setData(result);
       setSummary(
         `Found ${result.OLSLinks?.length || 0} active optical paths, ${
           result.AssociatedUIDs?.length || 0
         } associated UIDs, and ${result.GDCOTickets?.length || 0} related GDCO tickets.`
       );
+
+      if (!history.includes(query)) setHistory([query, ...history]);
     } catch (err: any) {
       setError(err.message || "Network error occurred.");
       setSummary("Error retrieving data.");
@@ -70,8 +97,9 @@ export default function App() {
     }
   };
 
-  const Table = ({ title, headers, rows }: any) => {
+  const Table = ({ title, headers, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
+
     return (
       <div className="table-container">
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
@@ -79,10 +107,8 @@ export default function App() {
           <Stack horizontal tokens={{ childrenGap: 6 }}>
             <IconButton
               iconProps={{ iconName: "Copy" }}
-              title="Copy JSON"
-              onClick={() =>
-                navigator.clipboard.writeText(JSON.stringify(rows, null, 2))
-              }
+              title="Copy Table HTML"
+              onClick={() => copyTableHTML(title)}
             />
           </Stack>
         </Stack>
@@ -95,36 +121,88 @@ export default function App() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row: any, i: number) => (
-              <tr key={i}>
-                {headers.map((h: string, j: number) => {
-                  const key = Object.keys(row)[j];
-                  const value = row[key];
-                  if (
-                    key.toLowerCase().includes("workflow") ||
-                    key.toLowerCase().includes("diff") ||
-                    key.toLowerCase().includes("ticketlink")
-                  ) {
-                    return (
-                      <td key={j}>
-                        <a
-                          href={value}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          Open
-                        </a>
-                      </td>
-                    );
-                  }
-                  return <td key={j}>{value}</td>;
-                })}
-              </tr>
-            ))}
+            {rows.map((row: any, i: number) => {
+              const keys = Object.keys(row);
+              const highlight =
+                highlightUid && row.Uid?.toString() === highlightUid;
+              return (
+                <tr
+                  key={i}
+                  className={highlight ? "highlight-row" : ""}
+                >
+                  {keys.map((key, j) => {
+                    const val = row[key];
+                    if (
+                      key.toLowerCase().includes("workflow") ||
+                      key.toLowerCase().includes("diff") ||
+                      key.toLowerCase().includes("ticketlink")
+                    ) {
+                      return (
+                        <td key={j}>
+                          <button
+                            className="open-btn"
+                            onClick={() => window.open(val, "_blank")}
+                          >
+                            Open
+                          </button>
+                        </td>
+                      );
+                    }
+                    return <td key={j}>{val}</td>;
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
     );
+  };
+
+  const copyTableHTML = (title: string) => {
+    const tables = document.querySelectorAll(".data-table");
+    let html = `<div style='font-family:Segoe UI;background:#1b1b1b;color:#fff;padding:10px'>`;
+    tables.forEach((tbl: any) => (html += tbl.outerHTML));
+    html += "</div>";
+    navigator.clipboard.writeText(html);
+    alert(`Copied ${title} HTML ✅`);
+  };
+
+  const exportExcel = () => {
+    if (!data || !uid) return;
+    const wb = XLSX.utils.book_new();
+
+    const sections = {
+      "OLS Optical Link Summary": data.OLSLinks,
+      "Associated UIDs": data.AssociatedUIDs,
+      "GDCO Tickets": data.GDCOTickets,
+      "MGFX A-Side": data.MGFXA,
+      "MGFX Z-Side": data.MGFXZ,
+    };
+
+    for (const [title, rows] of Object.entries(sections)) {
+      if (!Array.isArray(rows) || !rows.length) continue;
+      const ws = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
+    }
+
+    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([wbout], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    saveAs(blob, `UID_Report_${uid}.xlsx`);
+  };
+
+  const exportOneNote = () => {
+    if (!data || !uid) return;
+    const tables = document.querySelectorAll(".data-table");
+    let html = `<html><head><meta charset="utf-8"><title>UID Report ${uid}</title></head><body style='font-family:Segoe UI;background:#1b1b1b;color:#fff;'>`;
+    html += `<h1 style='color:#50b3ff;'>UID Report ${uid}</h1>`;
+    tables.forEach((tbl: any) => (html += tbl.outerHTML));
+    html += "</body></html>";
+
+    const blob = new Blob([html], { type: "application/onenote" });
+    saveAs(blob, `UID_Report_${uid}.one`);
   };
 
   return (
@@ -141,8 +219,31 @@ export default function App() {
       </div>
 
       <Stack className="main">
-        <Text className="portal-title">UID Lookup Portal</Text>
+        {/* Top Header */}
+        <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
+          <Text className="portal-title">UID Lookup Portal</Text>
+          <Stack horizontal tokens={{ childrenGap: 10 }}>
+            <IconButton
+              iconProps={{ iconName: "Copy" }}
+              title="Copy HTML"
+              onClick={() => copyTableHTML("All Tables")}
+            />
+            <IconButton
+              iconProps={{ iconName: "ExcelLogo" }}
+              title="Export to Excel"
+              className="excel-btn"
+              onClick={exportExcel}
+            />
+            <IconButton
+              iconProps={{ iconName: "OneNoteLogo" }}
+              title="Export to OneNote"
+              className="onenote-btn"
+              onClick={exportOneNote}
+            />
+          </Stack>
+        </Stack>
 
+        {/* Search */}
         <Stack horizontalAlign="center" tokens={{ childrenGap: 10 }}>
           <Stack horizontal tokens={{ childrenGap: 10 }}>
             <TextField
@@ -154,12 +255,24 @@ export default function App() {
             <PrimaryButton
               text={loading ? "Loading..." : "Search"}
               disabled={loading}
-              onClick={handleSearch}
+              onClick={() => handleSearch()}
               className="search-btn"
             />
           </Stack>
           {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         </Stack>
+
+        {/* UID History */}
+        {history.length > 0 && (
+          <div className="uid-history">
+            Recent:{" "}
+            {history.map((item, i) => (
+              <span key={i} onClick={() => handleSearch(item)}>
+                {item}
+              </span>
+            ))}
+          </div>
+        )}
 
         <div className="summary">{summary}</div>
 
@@ -199,6 +312,7 @@ export default function App() {
                   "Lag Z",
                 ]}
                 rows={data.AssociatedUIDs}
+                highlightUid={uid}
               />
               <Table
                 title="GDCO Tickets"
@@ -225,9 +339,7 @@ export default function App() {
                   "CO Diff",
                   "MO Diff",
                 ]}
-                rows={data.MGFXA.map(
-                  ({ Side, ...keep }: Record<string, any>) => keep
-                )}
+                rows={data.MGFXA.map(({ Side, ...keep }: any) => keep)}
               />
               <Table
                 title="MGFX Z-Side"
@@ -240,9 +352,7 @@ export default function App() {
                   "CO Diff",
                   "MO Diff",
                 ]}
-                rows={data.MGFXZ.map(
-                  ({ Side, ...keep }: Record<string, any>) => keep
-                )}
+                rows={data.MGFXZ.map(({ Side, ...keep }: any) => keep)}
               />
             </Stack>
           </>

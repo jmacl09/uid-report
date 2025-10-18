@@ -92,17 +92,14 @@ export default function App() {
     }
   };
 
-  // 🔧 Helper for padding text into aligned columns
   const pad = (text: string, width: number) => {
     text = text == null ? "" : String(text);
     return text.padEnd(width, " ");
   };
 
-  // ✅ Copy table as structured monospaced table
   const copyTableText = (title: string, rows: Record<string, any>[], headers: string[]) => {
     if (!rows?.length) return;
 
-    // Calculate max width for each column
     const colWidths = headers.map((h, i) =>
       Math.max(
         h.length,
@@ -123,174 +120,18 @@ export default function App() {
     alert(`Copied ${title} as structured table ✅`);
   };
 
-  // ✅ Copy all tables as structured text
-  const copyAllTables = () => {
-    if (!data) return;
-
-    const sections = [
-      {
-        title: "Optical Link Summary",
-        rows: data.OLSLinks,
-        headers: [
-          "A Device",
-          "A Port",
-          "Z Device",
-          "Z Port",
-          "A Optical Device",
-          "Z Optical Device",
-          "Z Optical Port",
-          "Workflow",
-        ],
-      },
-      {
-        title: "Associated UIDs",
-        rows: data.AssociatedUIDs,
-        headers: [
-          "UID",
-          "SRLG ID",
-          "Action",
-          "Type",
-          "Device A",
-          "Device Z",
-          "Site A",
-          "Site Z",
-          "Lag A",
-          "Lag Z",
-        ],
-      },
-      {
-        title: "GDCO Tickets",
-        rows: data.GDCOTickets,
-        headers: [
-          "Ticket ID",
-          "Datacenter Code",
-          "Title",
-          "State",
-          "Assigned To",
-          "Ticket Link",
-        ],
-      },
-      {
-        title: "MGFX A-Side",
-        rows: data.MGFXA?.map(({ Side, ...keep }: any) => keep),
-        headers: [
-          "XOMT",
-          "CO Device",
-          "CO Port",
-          "MO Device",
-          "MO Port",
-          "CO Diff",
-          "MO Diff",
-        ],
-      },
-      {
-        title: "MGFX Z-Side",
-        rows: data.MGFXZ?.map(({ Side, ...keep }: any) => keep),
-        headers: [
-          "XOMT",
-          "CO Device",
-          "CO Port",
-          "MO Device",
-          "MO Port",
-          "CO Diff",
-          "MO Diff",
-        ],
-      },
-    ];
-
-    let allText = "";
-
-    for (const s of sections) {
-      if (!s.rows?.length) continue;
-
-      const colWidths = s.headers.map((h, i) =>
-        Math.max(
-          h.length,
-          ...s.rows.map((r: Record<string, any>) =>
-            String(Object.values(r)[i] ?? "").length
-          )
-        ) + 2
-      );
-
-      allText += `${s.title}\n`;
-      allText += s.headers.map((h, i) => pad(h, colWidths[i])).join("") + "\n";
-      allText += "-".repeat(colWidths.reduce((a, b) => a + b, 0)) + "\n";
-
-      for (const r of s.rows) {
-        const vals = Object.values(r);
-        allText += vals.map((v, i) => pad(String(v), colWidths[i])).join("") + "\n";
-      }
-      allText += "\n\n";
-    }
-
-    navigator.clipboard.writeText(allText.trimEnd());
-    alert("Copied all tables as structured text ✅");
-  };
-
-  // ✅ Export to Excel
-  const exportExcel = () => {
-    if (!data || !uid) return;
-    const wb = XLSX.utils.book_new();
-
-    const sections = {
-      "OLS Optical Link Summary": data.OLSLinks,
-      "Associated UIDs": data.AssociatedUIDs,
-      "GDCO Tickets": data.GDCOTickets,
-      "MGFX A-Side": data.MGFXA,
-      "MGFX Z-Side": data.MGFXZ,
-    };
-
-    for (const [title, rows] of Object.entries(sections)) {
-      if (!Array.isArray(rows) || !rows.length) continue;
-      const ws = XLSX.utils.json_to_sheet(rows);
-      XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
-    }
-
-    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([wbout], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    saveAs(blob, `UID_Report_${uid}.xlsx`);
-  };
-
-  // ✅ Export to OneNote (HTML)
-  const exportOneNote = () => {
-    if (!data || !uid) return;
-    const tables = document.querySelectorAll(".data-table");
-    let html = `
-      <html><head><meta charset="utf-8">
-      <title>UID Report ${uid}</title>
-      <style>
-        body {font-family:'Segoe UI';background:#fff;color:#000;}
-        h1 {color:#0078d4;}
-        table {border-collapse:collapse;margin-bottom:20px;width:100%;background:#f9f9f9;border-radius:6px;overflow:hidden;}
-        th {background:#0078d4;color:#fff;padding:6px 10px;text-align:left;}
-        td {padding:5px 10px;border-bottom:1px solid #ddd;}
-        tr:nth-child(even){background:#f2f2f2;}
-      </style>
-      </head><body><h1>UID Report ${uid}</h1>`;
-
-    tables.forEach((tbl: any) => (html += tbl.outerHTML));
-    html += "</body></html>";
-
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const fileName = `UID_Report_${uid}.html`;
-    saveAs(blob, fileName);
-
-    setTimeout(() => {
-      window.open(
-        `https://www.onenote.com/import?from=${encodeURIComponent(fileName)}`,
-        "_blank"
-      );
-    }, 800);
-  };
-
-  // ✅ Table component
+  // ✅ Table with scrollable fix
   const Table = ({ title, headers, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
 
+    const scrollable: React.CSSProperties = {};
+    if (title === "GDCO Tickets" || title === "Associated UIDs") {
+      scrollable.maxHeight = 220;
+      scrollable.overflowY = "auto";
+    }
+
     return (
-      <div className="table-container">
+      <div className="table-container" style={scrollable}>
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="section-title">{title}</Text>
           <Stack horizontal tokens={{ childrenGap: 6 }}>
@@ -312,8 +153,7 @@ export default function App() {
           <tbody>
             {rows.map((row: any, i: number) => {
               const keys = Object.keys(row);
-              const highlight =
-                highlightUid && row.Uid?.toString() === highlightUid;
+              const highlight = highlightUid && row.Uid?.toString() === highlightUid;
               return (
                 <tr key={i} className={highlight ? "highlight-row" : ""}>
                   {keys.map((key, j) => {
@@ -345,7 +185,29 @@ export default function App() {
     );
   };
 
-  // ✅ Layout
+  // ✅ WAN / Optical buttons section
+  const ExpansionButtons = ({ side }: { side: "A" | "Z" }) => {
+    const expansions = side === "A" ? data?.AExpansions : data?.ZExpansions;
+    if (!expansions) return null;
+    return (
+      <div className="expansion-buttons">
+        <Text className="expansion-title">{side} Side:</Text>
+        <button
+          className="wan-btn"
+          onClick={() => window.open(expansions[`${side}Url`], "_blank")}
+        >
+          WAN Checker
+        </button>
+        <button
+          className="optical-btn"
+          onClick={() => window.open(expansions[`${side}OpticalUrl`], "_blank")}
+        >
+          Optical Validator
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
       <div className="sidebar">
@@ -362,26 +224,6 @@ export default function App() {
       <Stack className="main">
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="portal-title">UID Lookup Portal</Text>
-          <Stack horizontal tokens={{ childrenGap: 10 }}>
-            <IconButton
-              iconProps={{ iconName: "Copy" }}
-              title="Copy All Tables (Structured Text)"
-              className="copy-all-btn"
-              onClick={copyAllTables}
-            />
-            <IconButton
-              iconProps={{ iconName: "ExcelLogo" }}
-              title="Export to Excel"
-              className="excel-btn"
-              onClick={exportExcel}
-            />
-            <IconButton
-              iconProps={{ iconName: "OneNoteLogo" }}
-              title="Export to OneNote"
-              className="onenote-btn"
-              onClick={exportOneNote}
-            />
-          </Stack>
         </Stack>
 
         <Stack horizontalAlign="center" tokens={{ childrenGap: 10 }}>
@@ -421,6 +263,11 @@ export default function App() {
 
         {data && (
           <>
+            <Stack horizontal tokens={{ childrenGap: 20 }} horizontalAlign="center">
+              <ExpansionButtons side="A" />
+              <ExpansionButtons side="Z" />
+            </Stack>
+
             <Table
               title="Optical Link Summary"
               headers={[
@@ -435,6 +282,7 @@ export default function App() {
               ]}
               rows={data.OLSLinks}
             />
+
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Table
                 title="Associated UIDs"
@@ -466,6 +314,7 @@ export default function App() {
                 rows={data.GDCOTickets}
               />
             </Stack>
+
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Table
                 title="MGFX A-Side"

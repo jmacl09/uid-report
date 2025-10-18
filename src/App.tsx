@@ -47,10 +47,9 @@ export default function App() {
       key,
       name: key,
       fieldName: key,
-      minWidth: 70,
-      maxWidth: 180,
+      minWidth: 80,
+      maxWidth: 240,
       isResizable: true,
-      isMultiline: false,
       onRender: (item: any) => {
         const val = item[key];
         if (
@@ -69,7 +68,7 @@ export default function App() {
             </a>
           );
         }
-        return <span style={{ color: "#d0d0d0", whiteSpace: "nowrap" }}>{val}</span>;
+        return <span style={{ color: "#d0d0d0" }}>{val}</span>;
       },
     }));
 
@@ -179,13 +178,14 @@ export default function App() {
         <DetailsList
           items={filtered}
           columns={buildColumns(filtered)}
-          layoutMode={DetailsListLayoutMode.fixedColumns}
+          layoutMode={DetailsListLayoutMode.justified}
           compact={true}
           styles={{
             root: {
               background: "#181818",
               overflowX: "hidden",
               maxWidth: "fit-content",
+              borderRadius: 4,
             },
           }}
           onRenderRow={(props, defaultRender) => {
@@ -213,9 +213,9 @@ export default function App() {
     const headers = Object.keys(tableData[0] || {});
     const html = `
       <div style="font-family:Segoe UI;background:#1b1b1b;color:#fff;padding:10px">
-        <h2 style="color:#fff;background:linear-gradient(90deg,#0078D4,#3AA0FF);padding:4px 10px;border-radius:4px">${title}</h2>
+        <h2 style="color:#fff;background:linear-gradient(135deg,#005AB4,#0078D4,#50B3FF);padding:4px 10px;border-radius:4px">${title}</h2>
         <table border="1" cellspacing="0" cellpadding="4" style="width:auto;border-collapse:collapse;border-color:#333">
-          <tr style="background:linear-gradient(90deg,#0078D4,#3AA0FF);color:#fff;font-weight:600">${headers
+          <tr style="background:linear-gradient(135deg,#005AB4,#0078D4,#50B3FF);color:#fff;font-weight:600">${headers
             .map((h) => `<th>${h}</th>`)
             .join("")}</tr>
           ${tableData

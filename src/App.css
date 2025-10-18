@@ -40,14 +40,14 @@
 
 /* === FiberTools Custom Table Styling === */
 
-/* Limit table width to data size */
+/* Prevent table from stretching full width */
 .ms-DetailsList {
   width: fit-content !important;
-  max-width: 900px !important;
   table-layout: auto !important;
+  border-collapse: collapse !important;
 }
 
-/* Visible borders for clarity */
+/* Row and cell border gridlines */
 .ms-DetailsRow-cell {
   padding: 4px 8px !important;
   white-space: nowrap !important;
@@ -55,11 +55,20 @@
   border-right: 1px solid #2b2b2b !important;
   min-width: auto !important;
   width: auto !important;
+  font-size: 13px !important;
+  color: #e0e0e0 !important;
 }
 
 /* Column header dividers */
 .ms-DetailsHeader-cell {
   border-right: 1px solid #2b2b2b !important;
+}
+
+/* Fix header alignment with justified layout */
+.ms-DetailsHeader-cell,
+.ms-DetailsRow-cell {
+  display: table-cell !important;
+  vertical-align: middle !important;
 }
 
 /* Gradient blue “glass” header */
@@ -79,7 +88,7 @@
   box-shadow: inset 0 -1px 0 rgba(255, 255, 255, 0.05);
 }
 
-/* Header text */
+/* Header text alignment and spacing */
 .ms-DetailsHeader-cellTitle {
   color: #ffffff !important;
   font-weight: 600 !important;
@@ -89,7 +98,24 @@
   line-height: 18px !important;
 }
 
-/* Alternating row colors */
+/* Enhance header gloss */
+.ms-DetailsHeader::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(
+    rgba(255, 255, 255, 0.12),
+    rgba(255, 255, 255, 0)
+  );
+  pointer-events: none;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+}
+
+/* Alternate dark rows */
 .ms-DetailsRow:nth-child(even) {
   background-color: #171717 !important;
 }
@@ -97,7 +123,7 @@
   background-color: #111 !important;
 }
 
-/* Row hover highlight */
+/* Row hover */
 .ms-DetailsRow:hover {
   background-color: #232323 !important;
   box-shadow: inset 0 0 5px rgba(80, 179, 255, 0.35) !important;
@@ -108,67 +134,69 @@
   overflow-x: hidden !important;
 }
 
-/* Compact font */
-.ms-DetailsRow-cell > span {
-  color: #e0e0e0 !important;
-  font-size: 13px !important;
-}
-
-/* Paired table layout */
+/* Compact paired table layout */
 .compact-table {
   display: inline-block;
   vertical-align: top;
   margin-right: 20px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+  background: #181818;
+  border-radius: 8px;
+  padding: 8px 10px;
+  border: 1px solid #2b2b2b;
+  margin-bottom: 14px;
 }
 
-/* Section structure */
-.ms-DetailsList,
-.ms-DetailsRow {
-  border-radius: 4px !important;
-  border: 1px solid #2b2b2b !important;
-}
-
-/* Section spacing */
-.compact-table + .compact-table {
-  margin-left: 20px;
-}
-
-/* Rounded corners inside DetailsList */
+/* Rounded container edges */
 .ms-DetailsList-contentWrapper {
   border-radius: 4px !important;
   overflow: hidden !important;
 }
 
-/* Icons (Copy, OneNote) */
+/* Copy/OneNote icons */
 .ms-Button--icon {
   margin-left: 2px !important;
   color: #50b3ff !important;
 }
 
-/* Subtle outer shadow per section */
-.compact-table {
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
-}
-
-/* Align titles perfectly with table tops */
+/* Section title alignment */
 .compact-table .ms-Text {
   margin-bottom: 4px !important;
   display: inline-block;
+  color: #50b3ff !important;
+  font-weight: 600 !important;
 }
 
-/* Enhance header gloss with inner glow */
-.ms-DetailsHeader::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 50%;
-  background: linear-gradient(
-    rgba(255, 255, 255, 0.15),
-    rgba(255, 255, 255, 0)
-  );
-  pointer-events: none;
-  border-top-left-radius: 4px;
-  border-top-right-radius: 4px;
+/* Minor spacing for adjacent tables */
+.compact-table + .compact-table {
+  margin-left: 20px;
+}
+
+/* UID Highlight Glow */
+.ms-DetailsRow.highlighted {
+  box-shadow: 0 0 8px rgba(80, 179, 255, 0.7) !important;
+  border-radius: 4px !important;
+}
+
+/* Section shadows */
+.compact-table {
+  transition: box-shadow 0.2s ease-in-out;
+}
+.compact-table:hover {
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.45);
+}
+
+/* Adjust link appearance */
+a {
+  color: #3aa0ff;
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* Ensure headers and data line up perfectly */
+.ms-DetailsList-cell,
+.ms-DetailsHeader-cell {
+  box-sizing: border-box !important;
 }

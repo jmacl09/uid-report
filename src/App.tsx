@@ -92,6 +92,158 @@ export default function App() {
     }
   };
 
+  const copyTableText = (title: string, rows: any[], headers: string[]) => {
+    const text =
+      `${title}\n` +
+      headers.join("\t") +
+      "\n" +
+      rows.map((r) => Object.values(r).join("\t")).join("\n") +
+      "\n\n";
+    navigator.clipboard.writeText(text);
+    alert(`Copied ${title} (plain text) ✅`);
+  };
+
+  const copyAllTables = () => {
+    if (!data) return;
+
+    const sections = [
+      {
+        title: "Optical Link Summary",
+        rows: data.OLSLinks,
+        headers: [
+          "A Device",
+          "A Port",
+          "Z Device",
+          "Z Port",
+          "A Optical Device",
+          "Z Optical Device",
+          "Z Optical Port",
+          "Workflow",
+        ],
+      },
+      {
+        title: "Associated UIDs",
+        rows: data.AssociatedUIDs,
+        headers: [
+          "UID",
+          "SRLG ID",
+          "Action",
+          "Type",
+          "Device A",
+          "Device Z",
+          "Site A",
+          "Site Z",
+          "Lag A",
+          "Lag Z",
+        ],
+      },
+      {
+        title: "GDCO Tickets",
+        rows: data.GDCOTickets,
+        headers: [
+          "Ticket ID",
+          "Datacenter Code",
+          "Title",
+          "State",
+          "Assigned To",
+          "Ticket Link",
+        ],
+      },
+      {
+        title: "MGFX A-Side",
+        rows: data.MGFXA?.map(({ Side, ...keep }: any) => keep),
+        headers: [
+          "XOMT",
+          "CO Device",
+          "CO Port",
+          "MO Device",
+          "MO Port",
+          "CO Diff",
+          "MO Diff",
+        ],
+      },
+      {
+        title: "MGFX Z-Side",
+        rows: data.MGFXZ?.map(({ Side, ...keep }: any) => keep),
+        headers: [
+          "XOMT",
+          "CO Device",
+          "CO Port",
+          "MO Device",
+          "MO Port",
+          "CO Diff",
+          "MO Diff",
+        ],
+      },
+    ];
+
+    let combinedText = "";
+    for (const s of sections) {
+      if (s.rows && s.rows.length > 0) {
+        combinedText += `${s.title}\n${s.headers.join("\t")}\n${s.rows
+          .map((r) => Object.values(r).join("\t"))
+          .join("\n")}\n\n`;
+      }
+    }
+
+    navigator.clipboard.writeText(combinedText.trim());
+    alert("Copied all tables (plain text) ✅");
+  };
+
+  const exportExcel = () => {
+    if (!data || !uid) return;
+    const wb = XLSX.utils.book_new();
+
+    const sections = {
+      "OLS Optical Link Summary": data.OLSLinks,
+      "Associated UIDs": data.AssociatedUIDs,
+      "GDCO Tickets": data.GDCOTickets,
+      "MGFX A-Side": data.MGFXA,
+      "MGFX Z-Side": data.MGFXZ,
+    };
+
+    for (const [title, rows] of Object.entries(sections)) {
+      if (!Array.isArray(rows) || !rows.length) continue;
+      const ws = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
+    }
+
+    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([wbout], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    saveAs(blob, `UID_Report_${uid}.xlsx`);
+  };
+
+  const exportOneNote = () => {
+    if (!data || !uid) return;
+    const tables = document.querySelectorAll(".data-table");
+    let html = `
+      <html><head><meta charset="utf-8">
+      <title>UID Report ${uid}</title>
+      <style>
+        body {font-family:'Segoe UI';background:#fff;color:#000;}
+        h1 {color:#0078d4;}
+        table {border-collapse:collapse;margin-bottom:20px;width:100%;background:#f9f9f9;border-radius:6px;overflow:hidden;}
+        th {background:#0078d4;color:#fff;padding:6px 10px;text-align:left;}
+        td {padding:5px 10px;border-bottom:1px solid #ddd;}
+        tr:nth-child(even){background:#f2f2f2;}
+      </style>
+      </head><body><h1>UID Report ${uid}</h1>`;
+
+    tables.forEach((tbl: any) => (html += tbl.outerHTML));
+    html += "</body></html>";
+
+    const blob = new Blob([html], { type: "multipart/related" });
+    const fileName = `UID_Report_${uid}_OneNote.mht`;
+    saveAs(blob, fileName);
+
+    // Attempt to open automatically in OneNote
+    setTimeout(() => {
+      window.location.href = `onenote:${fileName}`;
+    }, 800);
+  };
+
   const Table = ({ title, headers, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
 
@@ -102,7 +254,7 @@ export default function App() {
           <Stack horizontal tokens={{ childrenGap: 6 }}>
             <IconButton
               iconProps={{ iconName: "Copy" }}
-              title="Copy Table (Text Only)"
+              title="Copy Table (Plain Text)"
               onClick={() => copyTableText(title, rows, headers)}
             />
           </Stack>
@@ -151,77 +303,6 @@ export default function App() {
     );
   };
 
-  const copyTableText = (title: string, rows: any[], headers: string[]) => {
-    const text =
-      title +
-      "\n\n" +
-      headers.join("\t") +
-      "\n" +
-      rows
-        .map((r) => Object.values(r).join("\t"))
-        .join("\n");
-    navigator.clipboard.writeText(text);
-    alert(`Copied ${title} table to clipboard ✅`);
-  };
-
-  const exportExcel = () => {
-    if (!data || !uid) return;
-    const wb = XLSX.utils.book_new();
-
-    const sections = {
-      "OLS Optical Link Summary": data.OLSLinks,
-      "Associated UIDs": data.AssociatedUIDs,
-      "GDCO Tickets": data.GDCOTickets,
-      "MGFX A-Side": data.MGFXA,
-      "MGFX Z-Side": data.MGFXZ,
-    };
-
-    for (const [title, rows] of Object.entries(sections)) {
-      if (!Array.isArray(rows) || !rows.length) continue;
-      const ws = XLSX.utils.json_to_sheet(rows);
-      XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
-    }
-
-    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([wbout], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    saveAs(blob, `UID_Report_${uid}.xlsx`);
-  };
-
-  const exportOneNote = () => {
-    if (!data || !uid) return;
-    const tables = document.querySelectorAll(".data-table");
-    let html = `
-      <html><head><meta charset="utf-8">
-      <title>UID Report ${uid}</title>
-      <style>
-        body {font-family:'Segoe UI';background:#1b1b1b;color:#fff;}
-        h1 {color:#50b3ff;}
-        table {border-collapse:collapse;margin-bottom:20px;width:auto;background:#181818;border-radius:6px;overflow:hidden;}
-        th {background:linear-gradient(90deg,#005aa7,#0078d4,#50b3ff);color:#fff;padding:6px 10px;text-align:left;}
-        td {padding:5px 10px;border-bottom:1px solid #333;}
-        tr:nth-child(even){background:#151515;}
-      </style>
-      </head><body><h1>UID Report ${uid}</h1>`;
-
-    tables.forEach((tbl: any) => (html += tbl.outerHTML));
-    html += "</body></html>";
-
-    const blob = new Blob([html], { type: "text/html" });
-    const fileName = `UID_Report_${uid}_OneNote.html`;
-    saveAs(blob, fileName);
-
-    // Try to automatically open OneNote
-    setTimeout(() => {
-      try {
-        window.location.href = `onenote:https://localhost/${fileName}`;
-      } catch (err) {
-        console.warn("OneNote auto-open failed", err);
-      }
-    }, 800);
-  };
-
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
       <div className="sidebar">
@@ -240,6 +321,12 @@ export default function App() {
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="portal-title">UID Lookup Portal</Text>
           <Stack horizontal tokens={{ childrenGap: 10 }}>
+            <IconButton
+              iconProps={{ iconName: "Copy" }}
+              title="Copy All Tables (Plain Text)"
+              className="copy-all-btn"
+              onClick={copyAllTables}
+            />
             <IconButton
               iconProps={{ iconName: "ExcelLogo" }}
               title="Export to Excel"
@@ -351,7 +438,7 @@ export default function App() {
                   "CO Diff",
                   "MO Diff",
                 ]}
-                rows={data.MGFXA.map(({ Side, ...keep }: any) => keep)}
+                rows={data.MGFXA?.map(({ Side, ...keep }: any) => keep)}
               />
               <Table
                 title="MGFX Z-Side"
@@ -364,7 +451,7 @@ export default function App() {
                   "CO Diff",
                   "MO Diff",
                 ]}
-                rows={data.MGFXZ.map(({ Side, ...keep }: any) => keep)}
+                rows={data.MGFXZ?.map(({ Side, ...keep }: any) => keep)}
               />
             </Stack>
           </>

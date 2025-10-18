@@ -14,6 +14,7 @@ import {
   MessageBar,
   MessageBarType,
   IconButton,
+  IColumn,
 } from "@fluentui/react";
 
 initializeIcons();
@@ -48,7 +49,7 @@ export default function App() {
   const naturalSort = (a: string, b: string) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 
-  const buildColumns = (objArray: any[]) =>
+  const buildColumns = (objArray: any[]): IColumn[] =>
     Object.keys(objArray[0] || {}).map((key) => ({
       key,
       name: key,
@@ -56,6 +57,7 @@ export default function App() {
       minWidth: 80,
       maxWidth: 220,
       isResizable: true,
+      isMultiline: false,
       onRender: (item: any) => {
         const val = item[key];
         if (
@@ -74,7 +76,7 @@ export default function App() {
             </a>
           );
         }
-        return <span style={{ color: "#d0d0d0" }}>{val}</span>;
+        return <span style={{ color: "#d0d0d0", whiteSpace: "nowrap" }}>{val}</span>;
       },
     }));
 
@@ -99,15 +101,11 @@ export default function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
 
-      // Sort OLS ascending by APort
+      // Sorting rules
       result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
-
-      // Sort UIDs descending
       result.AssociatedUIDs?.sort(
         (a: any, b: any) => parseInt(b.Uid) - parseInt(a.Uid)
       );
-
-      // Sort MGFX sides
       result.MGFXA?.sort((a: any, b: any) =>
         a.XOMT.localeCompare(b.XOMT, undefined, { numeric: true })
       );
@@ -132,42 +130,14 @@ export default function App() {
     const mgfxA = d.MGFXA?.length || 0;
     const mgfxZ = d.MGFXZ?.length || 0;
     const tickets = d.GDCOTickets?.length || 0;
-    const active = links ? "active optical paths" : "no OLS data";
-    const msg = `Found ${links} ${active}, ${uids} associated UIDs, ${mgfxA + mgfxZ
-      } MGFX fiber ends, and ${tickets} related GDCO tickets.`;
-    setSummary(msg);
-  };
-
-  const exportToOneNote = (tableData: any[], title: string) => {
-    const headers = Object.keys(tableData[0] || {});
-    const html = `
-      <div style="font-family:Segoe UI;background:#1b1b1b;color:#fff;padding:10px">
-        <h2 style="color:#fff;background:linear-gradient(90deg,#0078D4,#3AA0FF);padding:4px 10px;border-radius:4px">${title}</h2>
-        <table border="1" cellspacing="0" cellpadding="4" style="width:100%;border-collapse:collapse;border-color:#333">
-          <tr style="background:#222;color:#50b3ff">${headers
-            .map((h) => `<th>${h}</th>`)
-            .join("")}</tr>
-          ${tableData
-            .map(
-              (row, i) =>
-                `<tr style="background:${i % 2 === 0 ? "#181818" : "#202020"}">${headers
-                  .map((h) => `<td>${row[h] ?? ""}</td>`)
-                  .join("")}</tr>`
-            )
-            .join("")}
-        </table>
-      </div>`;
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${title}.html`;
-    a.click();
+    setSummary(
+      `Found ${links} active optical paths, ${uids} associated UIDs, ${mgfxA + mgfxZ
+      } MGFX fiber ends, and ${tickets} related GDCO tickets.`
+    );
   };
 
   const Section = ({ title, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
-
     const filtered = rows.map((r: any) => {
       const copy = { ...r };
       delete copy.Side;
@@ -178,7 +148,7 @@ export default function App() {
       <div
         style={{
           background: "#181818",
-          borderRadius: "10px",
+          borderRadius: 8,
           padding: "10px 14px",
           border: "1px solid #2b2b2b",
           maxWidth: "fit-content",
@@ -190,11 +160,9 @@ export default function App() {
             variant="large"
             styles={{
               root: {
-                color: "#fff",
-                background: "linear-gradient(90deg,#0078D4,#3AA0FF)",
-                padding: "4px 12px",
-                borderRadius: 6,
+                color: "#50b3ff",
                 fontWeight: 600,
+                marginBottom: 6,
               },
             }}
           >
@@ -203,7 +171,7 @@ export default function App() {
           <Stack horizontal tokens={{ childrenGap: 6 }}>
             <IconButton
               iconProps={{ iconName: "Copy" }}
-              title="Copy Table"
+              title="Copy JSON"
               onClick={() =>
                 navigator.clipboard.writeText(JSON.stringify(filtered, null, 2))
               }
@@ -220,20 +188,36 @@ export default function App() {
           items={filtered}
           columns={buildColumns(filtered)}
           layoutMode={DetailsListLayoutMode.fixedColumns}
+          compact={true}
           styles={{
-            root: { marginTop: 6, background: "#181818" },
-            headerWrapper: { background: "#181818" },
+            root: {
+              marginTop: 4,
+              background: "#181818",
+              maxWidth: "fit-content",
+              overflowX: "hidden",
+            },
+            headerWrapper: {
+              background: "linear-gradient(90deg,#0078D4,#3AA0FF)",
+              color: "#fff",
+              fontWeight: 600,
+            },
             contentWrapper: {
               selectors: {
                 ".ms-DetailsRow": {
                   backgroundColor: "#181818",
-                  minHeight: 26,
+                  minHeight: 24,
+                },
+                ".ms-DetailsRow:nth-child(even)": {
+                  backgroundColor: "#202020",
                 },
                 ".ms-DetailsRow:hover": {
                   backgroundColor: "#242424",
                   boxShadow: "0 0 6px rgba(80,179,255,0.4)",
                 },
-                ".ms-DetailsRow:nth-child(even)": { backgroundColor: "#202020" },
+                ".ms-DetailsHeader-cellTitle": {
+                  color: "#fff",
+                  fontWeight: 600,
+                },
               },
             },
           }}
@@ -257,6 +241,33 @@ export default function App() {
         />
       </div>
     );
+  };
+
+  const exportToOneNote = (tableData: any[], title: string) => {
+    const headers = Object.keys(tableData[0] || {});
+    const html = `
+      <div style="font-family:Segoe UI;background:#1b1b1b;color:#fff;padding:10px">
+        <h2 style="color:#fff;background:linear-gradient(90deg,#0078D4,#3AA0FF);padding:4px 10px;border-radius:4px">${title}</h2>
+        <table border="1" cellspacing="0" cellpadding="4" style="width:auto;border-collapse:collapse;border-color:#333">
+          <tr style="background:linear-gradient(90deg,#0078D4,#3AA0FF);color:#fff;font-weight:600">${headers
+            .map((h) => `<th>${h}</th>`)
+            .join("")}</tr>
+          ${tableData
+            .map(
+              (row, i) =>
+                `<tr style="background:${i % 2 === 0 ? "#181818" : "#202020"}">${headers
+                  .map((h) => `<td>${row[h] ?? ""}</td>`)
+                  .join("")}</tr>`
+            )
+            .join("")}
+        </table>
+      </div>`;
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${title}.html`;
+    a.click();
   };
 
   const OLSSection = ({ title, rows }: any) => {
@@ -333,7 +344,14 @@ export default function App() {
       {/* Main */}
       <Stack
         tokens={{ childrenGap: 18 }}
-        styles={{ root: { flexGrow: 1, padding: 30, overflowY: "auto" } }}
+        styles={{
+          root: {
+            flexGrow: 1,
+            padding: 30,
+            overflowY: "auto",
+            alignItems: "flex-start",
+          },
+        }}
       >
         {/* Title */}
         <Text
@@ -344,6 +362,8 @@ export default function App() {
               color: "#50b3ff",
               fontWeight: 700,
               textShadow: "0 0 10px rgba(80,179,255,0.6)",
+              marginBottom: 10,
+              width: "100%",
             },
           }}
         >
@@ -361,7 +381,7 @@ export default function App() {
                 fieldGroup: {
                   width: 300,
                   border: "1px solid #50b3ff",
-                  borderRadius: "8px",
+                  borderRadius: 8,
                   background: "#1c1c1c",
                 },
                 field: { color: "#fff" },
@@ -374,7 +394,7 @@ export default function App() {
               styles={{
                 root: {
                   background: "#0078D4",
-                  borderRadius: "8px",
+                  borderRadius: 8,
                   padding: "0 24px",
                 },
                 rootHovered: { background: "#106EBE" },
@@ -382,20 +402,18 @@ export default function App() {
             />
           </Stack>
           {loading && (
-            <div style={{ marginTop: 10 }}>
-              <Spinner
-                size={SpinnerSize.large}
-                label="Fetching data..."
-                styles={{ label: { color: "#50b3ff", fontSize: 14 } }}
-              />
-            </div>
+            <Spinner
+              size={SpinnerSize.large}
+              label="Fetching data..."
+              styles={{ label: { color: "#50b3ff", fontSize: 14 } }}
+            />
           )}
         </Stack>
 
         {/* Summary */}
         <div
           style={{
-            marginTop: 6,
+            marginTop: 8,
             textAlign: "center",
             color: "#50b3ff",
             fontWeight: 500,

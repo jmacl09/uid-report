@@ -35,39 +35,7 @@ export default function App() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSearch = async () => {
-    if (!uid.trim()) {
-      alert("Please enter a UID before searching.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-    setData(null);
-
-    try {
-      const response = await fetch(
-        `https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ&UID=${encodeURIComponent(
-          uid
-        )}`,
-        { method: "GET" }
-      );
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      const result = await response.json();
-      setData(result);
-    } catch (err: any) {
-      console.error(err);
-      setError("Error retrieving data from Logic App.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Helper to build Fluent UI DetailsList columns
+  // Helper to dynamically create Fluent UI columns
   const buildColumns = (objArray: any[]) =>
     Object.keys(objArray[0] || {}).map((key) => ({
       key,
@@ -86,6 +54,61 @@ export default function App() {
           item[key]
         ),
     }));
+
+  const handleSearch = async () => {
+    if (!uid.trim()) {
+      alert("Please enter a UID before searching.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setData(null);
+
+    const triggerUrl = `https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ&UID=${encodeURIComponent(
+      uid
+    )}`;
+
+    try {
+      const start = await fetch(triggerUrl, { method: "GET" });
+
+      // ✅ Handle async response (202 Accepted)
+      if (start.status === 202) {
+        const statusUrl = start.headers.get("location");
+        if (!statusUrl) throw new Error("No status URL returned by Logic App.");
+
+        let result = null;
+        for (let i = 0; i < 30; i++) {
+          // Poll up to 30× with 1s delay (≈30s max)
+          await new Promise((r) => setTimeout(r, 1000));
+          const poll = await fetch(statusUrl);
+          if (poll.status === 200) {
+            result = await poll.json();
+            break;
+          }
+        }
+
+        if (result) {
+          setData(result);
+        } else {
+          throw new Error("Timed out waiting for Logic App to complete.");
+        }
+      }
+      // ✅ Handle direct JSON (200 OK)
+      else if (start.ok) {
+        const result = await start.json();
+        setData(result);
+      } else {
+        const text = await start.text();
+        throw new Error(`HTTP ${start.status}: ${text}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Network or Logic App error occurred.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#f3f2f1" }}>
@@ -176,7 +199,7 @@ export default function App() {
 
         {data && (
           <>
-            {/* OLS Links Table */}
+            {/* OLS Links */}
             <Text variant="xLarge" styles={{ root: { marginTop: 40 } }}>
               OLS Optical Link Summary
             </Text>

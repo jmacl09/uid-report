@@ -120,7 +120,57 @@ export default function App() {
     alert(`Copied ${title} as structured table ✅`);
   };
 
-  // ✅ Table with scrollable fix
+  // ✅ Export to Excel
+  const exportExcel = () => {
+    if (!data || !uid) return;
+    const wb = XLSX.utils.book_new();
+
+    const sections = {
+      "OLS Optical Link Summary": data.OLSLinks,
+      "Associated UIDs": data.AssociatedUIDs,
+      "GDCO Tickets": data.GDCOTickets,
+      "MGFX A-Side": data.MGFXA,
+      "MGFX Z-Side": data.MGFXZ,
+    };
+
+    for (const [title, rows] of Object.entries(sections)) {
+      if (!Array.isArray(rows) || !rows.length) continue;
+      const ws = XLSX.utils.json_to_sheet(rows);
+      XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
+    }
+
+    const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([wbout], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    saveAs(blob, `UID_Report_${uid}.xlsx`);
+  };
+
+  // ✅ Export to OneNote (HTML)
+  const exportOneNote = () => {
+    if (!data || !uid) return;
+    const tables = document.querySelectorAll(".data-table");
+    let html = `
+      <html><head><meta charset="utf-8">
+      <title>UID Report ${uid}</title>
+      <style>
+        body {font-family:'Segoe UI';background:#fff;color:#000;}
+        h1 {color:#0078d4;}
+        table {border-collapse:collapse;margin-bottom:20px;width:100%;background:#f9f9f9;border-radius:6px;overflow:hidden;}
+        th {background:#0078d4;color:#fff;padding:6px 10px;text-align:left;}
+        td {padding:5px 10px;border-bottom:1px solid #ddd;}
+        tr:nth-child(even){background:#f2f2f2;}
+      </style>
+      </head><body><h1>UID Report ${uid}</h1>`;
+
+    tables.forEach((tbl: any) => (html += tbl.outerHTML));
+    html += "</body></html>";
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const fileName = `UID_Report_${uid}.html`;
+    saveAs(blob, fileName);
+  };
+
   const Table = ({ title, headers, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
 
@@ -137,7 +187,7 @@ export default function App() {
           <Stack horizontal tokens={{ childrenGap: 6 }}>
             <IconButton
               iconProps={{ iconName: "Copy" }}
-              title="Copy Table (Structured Text)"
+              title="Copy Table"
               onClick={() => copyTableText(title, rows, headers)}
             />
           </Stack>
@@ -185,7 +235,6 @@ export default function App() {
     );
   };
 
-  // ✅ WAN / Optical buttons section
   const ExpansionButtons = ({ side }: { side: "A" | "Z" }) => {
     const expansions = side === "A" ? data?.AExpansions : data?.ZExpansions;
     if (!expansions) return null;
@@ -224,6 +273,20 @@ export default function App() {
       <Stack className="main">
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="portal-title">UID Lookup Portal</Text>
+          <Stack horizontal tokens={{ childrenGap: 10 }}>
+            <IconButton
+              iconProps={{ iconName: "ExcelLogo" }}
+              title="Export to Excel"
+              className="excel-btn"
+              onClick={exportExcel}
+            />
+            <IconButton
+              iconProps={{ iconName: "OneNoteLogo" }}
+              title="Export to OneNote"
+              className="onenote-btn"
+              onClick={exportOneNote}
+            />
+          </Stack>
         </Stack>
 
         <Stack horizontalAlign="center" tokens={{ childrenGap: 10 }}>

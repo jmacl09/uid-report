@@ -92,17 +92,17 @@ export default function App() {
     }
   };
 
+  // ✅ Copy table (plain text only)
   const copyTableText = (title: string, rows: Record<string, any>[], headers: string[]) => {
-    const text =
-      `${title}\n` +
-      headers.join("\t") +
-      "\n" +
-      rows.map((r: Record<string, any>) => Object.values(r).join("\t")).join("\n") +
-      "\n\n";
-    navigator.clipboard.writeText(text);
-    alert(`Copied ${title} (plain text) ✅`);
+    let text = `${title}\n${headers.join("\t")}\n`;
+    rows.forEach((r: Record<string, any>) => {
+      text += Object.values(r).join("\t") + "\n";
+    });
+    navigator.clipboard.writeText(text.trim());
+    alert(`Copied ${title} as plain text ✅`);
   };
 
+  // ✅ Copy all tables (plain text only)
   const copyAllTables = () => {
     if (!data) return;
 
@@ -190,6 +190,7 @@ export default function App() {
     alert("Copied all tables (plain text) ✅");
   };
 
+  // ✅ Export to Excel
   const exportExcel = () => {
     if (!data || !uid) return;
     const wb = XLSX.utils.book_new();
@@ -215,6 +216,7 @@ export default function App() {
     saveAs(blob, `UID_Report_${uid}.xlsx`);
   };
 
+  // ✅ Export to OneNote (as HTML)
   const exportOneNote = () => {
     if (!data || !uid) return;
     const tables = document.querySelectorAll(".data-table");
@@ -234,15 +236,19 @@ export default function App() {
     tables.forEach((tbl: any) => (html += tbl.outerHTML));
     html += "</body></html>";
 
-    const blob = new Blob([html], { type: "multipart/related" });
-    const fileName = `UID_Report_${uid}_OneNote.mht`;
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const fileName = `UID_Report_${uid}.html`;
     saveAs(blob, fileName);
 
     setTimeout(() => {
-      window.location.href = `onenote:${fileName}`;
+      window.open(
+        `https://www.onenote.com/import?from=${encodeURIComponent(fileName)}`,
+        "_blank"
+      );
     }, 800);
   };
 
+  // ✅ Table rendering component
   const Table = ({ title, headers, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
 
@@ -302,6 +308,7 @@ export default function App() {
     );
   };
 
+  // ✅ UI Layout
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
       <div className="sidebar">

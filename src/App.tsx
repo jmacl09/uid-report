@@ -16,7 +16,7 @@ import {
 import { saveAs } from "file-saver";
 import * as XLSX from "xlsx";
 import "./App.css";
-import logo from "./assets/optical360-logo.png";
+import logo from "./assets/optical360-logo.png"; // 👈 Your Optical 360 logo
 
 initializeIcons();
 
@@ -71,12 +71,19 @@ export default function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
 
+      // Sort tables
       result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
       result.MGFXA?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
       result.MGFXZ?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
 
-      // 🔽 Sort Associated UIDs in descending order by UID
-      result.AssociatedUIDs?.sort((a: any, b: any) => b.UID.localeCompare(a.UID, undefined, { numeric: true }));
+      // ✅ Safe descending sort for AssociatedUIDs (handles UID/UId/uid)
+      if (Array.isArray(result.AssociatedUIDs)) {
+        result.AssociatedUIDs.sort((a: any, b: any) => {
+          const uidA = String(a?.UID || a?.Uid || a?.uid || "");
+          const uidB = String(b?.UID || b?.Uid || b?.uid || "");
+          return uidB.localeCompare(uidA, undefined, { numeric: true });
+        });
+      }
 
       setData(result);
       if (!history.includes(query)) setHistory([query, ...history]);
@@ -196,6 +203,7 @@ export default function App() {
 
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
+      {/* Sidebar */}
       <div className="sidebar">
         <img src={logo} alt="Optical 360 Logo" className="logo-img" />
         <Nav groups={navLinks} />
@@ -205,8 +213,8 @@ export default function App() {
         </Text>
       </div>
 
+      {/* Main content */}
       <Stack className="main">
-        {/* 🔹 Removed "UID Lookup Portal" title */}
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <div />
           <IconButton
@@ -217,6 +225,7 @@ export default function App() {
           />
         </Stack>
 
+        {/* Search Input */}
         <Stack horizontalAlign="center" tokens={{ childrenGap: 10 }}>
           <Stack horizontal tokens={{ childrenGap: 10 }}>
             <TextField
@@ -241,6 +250,7 @@ export default function App() {
 
         {data && (
           <>
+            {/* A/Z Side Buttons */}
             <div className="button-header-align-left">
               <div className="side-buttons">
                 <Text className="side-label">A Side:</Text>
@@ -274,6 +284,7 @@ export default function App() {
               </div>
             </div>
 
+            {/* Tables */}
             <Table
               title="Link Summary"
               headers={[
@@ -293,16 +304,16 @@ export default function App() {
               <Table
                 title="Associated UIDs"
                 headers={[
-                  "UID",
-                  "SRLG ID",
+                  "Uid",
+                  "SrlgId",
                   "Action",
                   "Type",
-                  "Device A",
-                  "Device Z",
-                  "Site A",
-                  "Site Z",
-                  "Lag A",
-                  "Lag Z",
+                  "DeviceA",
+                  "DeviceZ",
+                  "SiteA",
+                  "SiteZ",
+                  "LagA",
+                  "LagZ",
                 ]}
                 rows={data.AssociatedUIDs}
                 highlightUid={uid}
@@ -310,12 +321,12 @@ export default function App() {
               <Table
                 title="GDCO Tickets"
                 headers={[
-                  "Ticket ID",
-                  "Datacenter Code",
-                  "Title",
+                  "TicketId",
+                  "DatacenterCode",
+                  "CleanTitle",
                   "State",
-                  "Assigned To",
-                  "Ticket Link",
+                  "CleanAssignedTo",
+                  "TicketLink",
                 ]}
                 rows={data.GDCOTickets}
               />
@@ -326,12 +337,12 @@ export default function App() {
                 title="MGFX A-Side"
                 headers={[
                   "XOMT",
-                  "C0 Device",
-                  "C0 Port",
-                  "M0 Device",
-                  "M0 Port",
-                  "C0 Diff",
-                  "M0 Diff",
+                  "C0_Device",
+                  "C0_Port",
+                  "M0_Device",
+                  "M0_Port",
+                  "C0_DIFF",
+                  "M0_DIFF",
                 ]}
                 rows={data.MGFXA?.map(({ Side, ...keep }: any) => keep)}
               />
@@ -339,12 +350,12 @@ export default function App() {
                 title="MGFX Z-Side"
                 headers={[
                   "XOMT",
-                  "C0 Device",
-                  "C0 Port",
-                  "M0 Device",
-                  "M0 Port",
-                  "C0 Diff",
-                  "M0 Diff",
+                  "C0_Device",
+                  "C0_Port",
+                  "M0_Device",
+                  "M0_Port",
+                  "C0_DIFF",
+                  "M0_DIFF",
                 ]}
                 rows={data.MGFXZ?.map(({ Side, ...keep }: any) => keep)}
               />

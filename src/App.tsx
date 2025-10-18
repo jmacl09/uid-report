@@ -36,6 +36,7 @@ export default function App() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [showScroll, setShowScroll] = useState<boolean>(false);
+  const [summary, setSummary] = useState<string>("Awaiting UID lookup...");
 
   useEffect(() => {
     const onScroll = () => setShowScroll(window.scrollY > 300);
@@ -77,34 +78,50 @@ export default function App() {
     setLoading(true);
     setError(null);
     setData(null);
+    setSummary("Analyzing data...");
 
     const triggerUrl = `https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ&UID=${encodeURIComponent(
       uid
     )}`;
 
     try {
-      const start = await fetch(triggerUrl, { method: "GET" });
+      const res = await fetch(triggerUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const result = await res.json();
 
-      if (start.ok) {
-        const result = await start.json();
-        result.MGFXA?.sort((a: any, b: any) =>
-          a.XOMT.localeCompare(b.XOMT, undefined, { numeric: true })
-        );
-        result.MGFXZ?.sort((a: any, b: any) =>
-          a.XOMT.localeCompare(b.XOMT, undefined, { numeric: true })
-        );
-        setData(result);
-      } else {
-        throw new Error(`HTTP ${start.status}: ${await start.text()}`);
-      }
+      // Sort MGFX by XOMT
+      result.MGFXA?.sort((a: any, b: any) =>
+        a.XOMT.localeCompare(b.XOMT, undefined, { numeric: true })
+      );
+      result.MGFXZ?.sort((a: any, b: any) =>
+        a.XOMT.localeCompare(b.XOMT, undefined, { numeric: true })
+      );
+
+      setData(result);
+      setTimeout(() => makeSummary(result), 800);
     } catch (err: any) {
-      console.error(err);
       setError(err.message || "Network error occurred.");
+      setSummary("Error retrieving data.");
     } finally {
       setLoading(false);
     }
   };
 
+  // ---------- Smart Summary ----------
+  const makeSummary = (d: Record<string, any>) => {
+    if (!d) return;
+    const links = d.OLSLinks?.length || 0;
+    const uids = d.AssociatedUIDs?.length || 0;
+    const mgfxA = d.MGFXA?.length || 0;
+    const mgfxZ = d.MGFXZ?.length || 0;
+    const tickets = d.GDCOTickets?.length || 0;
+    const active = links ? "active optical paths" : "no OLS data";
+    const msg = `Found ${links} ${active}, ${uids} associated UIDs, ${mgfxA + mgfxZ
+      } MGFX fiber ends, and ${tickets} related GDCO tickets.`;
+    setSummary(msg);
+  };
+
+  // ---------- Export Helpers ----------
   const exportToOneNote = (tableData: any[], title: string) => {
     const headers = Object.keys(tableData[0] || {});
     const html = `
@@ -153,7 +170,7 @@ export default function App() {
             .join("")}</tr>
           ${s.rows
             .map(
-              (row, i) =>
+              (row: Record<string, any>, i: number) =>
                 `<tr style="background:${
                   i % 2 === 0 ? "#181818" : "#202020"
                 }">${headers.map((h) => `<td>${row[h] ?? ""}</td>`).join("")}</tr>`
@@ -166,6 +183,7 @@ export default function App() {
     alert("All tables copied as formatted HTML for OneNote ✅");
   };
 
+  // ---------- Section ----------
   const Section = ({ title, rows }: any) => {
     if (!rows?.length) return null;
     const filtered = rows.map((r: any) => {
@@ -177,13 +195,12 @@ export default function App() {
       <div
         style={{
           background: "#181818",
-          borderRadius: "12px",
-          padding: "12px",
-          boxShadow: "0 0 10px rgba(0,0,0,0.5)",
+          borderRadius: "10px",
+          padding: "10px 14px",
           border: "1px solid #2b2b2b",
         }}
       >
-        <Stack horizontal horizontalAlign="space-between">
+        <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text
             variant="large"
             styles={{
@@ -202,9 +219,7 @@ export default function App() {
               iconProps={{ iconName: "Copy" }}
               title="Copy Table"
               onClick={() =>
-                navigator.clipboard.writeText(
-                  JSON.stringify(filtered, null, 2)
-                )
+                navigator.clipboard.writeText(JSON.stringify(filtered, null, 2))
               }
             />
             <IconButton
@@ -220,13 +235,8 @@ export default function App() {
           columns={buildColumns(filtered)}
           layoutMode={DetailsListLayoutMode.justified}
           styles={{
-            root: {
-              marginTop: 6,
-              background: "#181818",
-            },
-            headerWrapper: {
-              background: "#222",
-            },
+            root: { marginTop: 6, background: "#181818" },
+            headerWrapper: { background: "#222" },
             contentWrapper: {
               selectors: {
                 ".ms-DetailsRow": {
@@ -237,9 +247,7 @@ export default function App() {
                   backgroundColor: "#242424",
                   boxShadow: "0 0 6px rgba(80,179,255,0.4)",
                 },
-                ".ms-DetailsRow:nth-child(even)": {
-                  backgroundColor: "#202020",
-                },
+                ".ms-DetailsRow:nth-child(even)": { backgroundColor: "#202020" },
               },
             },
           }}
@@ -248,22 +256,15 @@ export default function App() {
     );
   };
 
+  // ---------- Main Layout ----------
   return (
-    <div
-      style={{
-        display: "flex",
-        height: "100vh",
-        backgroundColor: "#111",
-        color: "#fff",
-      }}
-    >
+    <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
       {/* Sidebar */}
       <div
         style={{
-          width: "240px",
+          width: 240,
           backgroundColor: "#0a0a0a",
-          color: "white",
-          padding: "20px",
+          padding: 20,
           display: "flex",
           flexDirection: "column",
         }}
@@ -277,10 +278,6 @@ export default function App() {
         <Nav
           groups={navLinks}
           styles={{
-            root: {
-              width: 220,
-              background: "transparent",
-            },
             link: {
               color: "#ccc",
               selectors: { ":hover": { background: "#0078D4", color: "#fff" } },
@@ -306,16 +303,10 @@ export default function App() {
         </Text>
       </div>
 
-      {/* Main Content */}
+      {/* Main */}
       <Stack
         tokens={{ childrenGap: 18 }}
-        styles={{
-          root: {
-            flexGrow: 1,
-            padding: "30px",
-            overflowY: "auto",
-          },
-        }}
+        styles={{ root: { flexGrow: 1, padding: 30, overflowY: "auto" } }}
       >
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <div style={{ flex: 1 }} />
@@ -332,20 +323,19 @@ export default function App() {
           >
             UID Lookup Portal
           </Text>
-          <div style={{ width: 260, textAlign: "right" }}>
-            <div
-              style={{
-                background: "#181818",
-                borderRadius: 8,
-                padding: "8px 12px",
-                border: "1px solid #333",
-                color: "#ccc",
-                fontSize: 13,
-              }}
-            >
-              <b>AI Summary:</b>  
-              <div style={{ color: "#50b3ff" }}>Awaiting UID lookup...</div>
-            </div>
+          <div
+            style={{
+              width: 260,
+              background: "#181818",
+              borderRadius: 8,
+              padding: "8px 12px",
+              border: "1px solid #333",
+              color: "#ccc",
+              fontSize: 13,
+            }}
+          >
+            <b>AI Summary:</b>
+            <div style={{ color: "#50b3ff", marginTop: 4 }}>{summary}</div>
           </div>
         </Stack>
 
@@ -418,7 +408,7 @@ export default function App() {
         )}
       </Stack>
 
-      {/* Scroll to Top Button */}
+      {/* Scroll to Top */}
       {showScroll && (
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
@@ -440,6 +430,7 @@ export default function App() {
         </button>
       )}
 
+      {/* Copy Page Button */}
       <PrimaryButton
         text="Copy Page"
         onClick={copyPageHTML}

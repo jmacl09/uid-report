@@ -37,7 +37,6 @@ export default function App() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string>("Awaiting UID lookup...");
-  const [showAllOLS, setShowAllOLS] = useState<boolean>(false);
 
   const naturalSort = (a: string, b: string) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });

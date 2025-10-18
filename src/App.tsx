@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   initializeIcons,
   Stack,
@@ -37,14 +37,7 @@ export default function App() {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<string>("Awaiting UID lookup...");
-  const [showScroll, setShowScroll] = useState<boolean>(false);
   const [showAllOLS, setShowAllOLS] = useState<boolean>(false);
-
-  useEffect(() => {
-    const onScroll = () => setShowScroll(window.scrollY > 300);
-    window.addEventListener("scroll", onScroll);
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
 
   const naturalSort = (a: string, b: string) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });

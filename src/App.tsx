@@ -335,6 +335,9 @@ export default function App() {
               </div>
             </div>
 
+            {/* ✅ Added spacing between WAN buttons and Link Summary */}
+            <div style={{ marginTop: "20px" }} />
+
             {/* Tables */}
             <Table
               title="Link Summary"

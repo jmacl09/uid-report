@@ -137,7 +137,7 @@ body {
 .details-fit {
   width: fit-content;
   min-width: 300px;
-  margin-bottom: 16px !important; /* ✅ Added spacing below Details */
+  margin-bottom: 16px !important; /* spacing below Details */
 }
 .details-table {
   width: auto;
@@ -149,7 +149,7 @@ body {
   margin-top: 10px;
 }
 
-/* ✅ Ensure consistent spacing before WAN buttons */
+/* Ensure consistent spacing before WAN buttons */
 .table-container + .button-header-align-left {
   margin-top: 16px !important;
 }
@@ -222,4 +222,9 @@ body {
 }
 .sleek-btn.kmz:hover {
   background: #106ebe;
+}
+
+/* ✅ Add spacing after WAN buttons */
+.button-header-align-left {
+  margin-bottom: 20px !important;
 }

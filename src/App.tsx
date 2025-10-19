@@ -16,7 +16,7 @@ import {
 import { saveAs } from "file-saver";
 import * as XLSX from "xlsx";
 import "./App.css";
-import logo from "./assets/optical360-logo.png"; // 👈 Your Optical 360 logo
+import logo from "./assets/optical360-logo.png";
 
 initializeIcons();
 
@@ -71,16 +71,14 @@ export default function App() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
 
-      // Sort tables
       result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
       result.MGFXA?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
       result.MGFXZ?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
 
-      // ✅ Safe descending sort for AssociatedUIDs (handles UID/UId/uid)
       if (Array.isArray(result.AssociatedUIDs)) {
         result.AssociatedUIDs.sort((a: any, b: any) => {
-          const uidA = String(a?.UID || a?.Uid || a?.uid || "");
-          const uidB = String(b?.UID || b?.Uid || b?.uid || "");
+          const uidA = String(a?.UID || a?.Uid || "");
+          const uidB = String(b?.UID || b?.Uid || "");
           return uidB.localeCompare(uidA, undefined, { numeric: true });
         });
       }
@@ -111,7 +109,7 @@ export default function App() {
 
     for (const r of rows) {
       const vals = Object.values(r);
-      output += vals.map((v, i) => pad(v, colWidths[i])).join("") + "\n";
+      output += vals.map((v, i) => pad(String(v), colWidths[i])).join("") + "\n";
     }
 
     navigator.clipboard.writeText(output.trimEnd());
@@ -146,7 +144,7 @@ export default function App() {
     if ((title === "GDCO Tickets" || title === "Associated UIDs") && rows.length > 5) {
       scrollable.maxHeight = 230;
       scrollable.overflowY = "auto";
-      scrollable.overflowX = "hidden"; // 🚫 No horizontal scroll
+      scrollable.overflowX = "hidden";
     }
 
     return (
@@ -170,12 +168,10 @@ export default function App() {
             </thead>
             <tbody>
               {rows.map((row: any, i: number) => {
-                const keys = Object.keys(row);
                 const highlight = highlightUid && row.Uid?.toString() === highlightUid;
                 return (
                   <tr key={i} className={highlight ? "highlight-row" : ""}>
-                    {keys.map((key, j) => {
-                      const val = row[key];
+                    {Object.entries(row).map(([key, val], j) => {
                       if (
                         key.toLowerCase().includes("workflow") ||
                         key.toLowerCase().includes("diff") ||
@@ -183,13 +179,30 @@ export default function App() {
                       ) {
                         return (
                           <td key={j}>
-                            <button className="open-btn" onClick={() => window.open(val, "_blank")}>
+                            <button
+                              className="open-btn"
+                              onClick={() => window.open(String(val), "_blank")}
+                            >
                               Open
                             </button>
                           </td>
                         );
                       }
-                      return <td key={j}>{val}</td>;
+
+                      if (title === "Associated UIDs" && key.toLowerCase() === "uid") {
+                        return (
+                          <td key={j}>
+                            <button
+                              className="link-btn"
+                              onClick={() => handleSearch(String(val))}
+                            >
+                              {String(val)}
+                            </button>
+                          </td>
+                        );
+                      }
+
+                      return <td key={j}>{String(val)}</td>;
                     })}
                   </tr>
                 );
@@ -244,25 +257,51 @@ export default function App() {
           {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         </Stack>
 
-        <div className="table-spacing" />
-
         {error && <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>}
 
         {data && (
           <>
+            {/* SRLG + Docs Header */}
+            <div className="srlg-info">
+              <Text className="info-text">
+                <b>SRLG ID:</b> {data?.AExpansions?.SRLGID || "N/A"} &nbsp;|&nbsp;
+                <b>SRLG:</b> {data?.AExpansions?.SRLG || "N/A"} &nbsp;|&nbsp;
+                <b>DC Location:</b> {data?.AExpansions?.DCLocation || "N/A"}
+              </Text>
+              <div className="inline-buttons">
+                <button
+                  className="sleek-btn green"
+                  onClick={() => window.open(String(data?.AExpansions?.DocumentRepository), "_blank")}
+                >
+                  WAN Capacity Repository
+                </button>
+                <button
+                  className="sleek-btn green"
+                  onClick={() =>
+                    window.open(
+                      `https://fiberplanner.cloudg.is/?srlg=${String(data?.AExpansions?.SRLG)}`,
+                      "_blank"
+                    )
+                  }
+                >
+                  {String(data?.AExpansions?.DCLocation || "Open")} KMZ Route
+                </button>
+              </div>
+            </div>
+
             {/* A/Z Side Buttons */}
             <div className="button-header-align-left">
               <div className="side-buttons">
                 <Text className="side-label">A Side:</Text>
                 <button
                   className="sleek-btn wan"
-                  onClick={() => window.open(data?.AExpansions?.AUrl, "_blank")}
+                  onClick={() => window.open(String(data?.AExpansions?.AUrl), "_blank")}
                 >
                   WAN Checker
                 </button>
                 <button
                   className="sleek-btn optical"
-                  onClick={() => window.open(data?.AExpansions?.AOpticalUrl, "_blank")}
+                  onClick={() => window.open(String(data?.AExpansions?.AOpticalUrl), "_blank")}
                 >
                   Optical Validator
                 </button>
@@ -271,20 +310,20 @@ export default function App() {
                 </Text>
                 <button
                   className="sleek-btn wan"
-                  onClick={() => window.open(data?.ZExpansions?.ZUrl, "_blank")}
+                  onClick={() => window.open(String(data?.ZExpansions?.ZUrl), "_blank")}
                 >
                   WAN Checker
                 </button>
                 <button
                   className="sleek-btn optical"
-                  onClick={() => window.open(data?.ZExpansions?.ZOpticalUrl, "_blank")}
+                  onClick={() => window.open(String(data?.ZExpansions?.ZOpticalUrl), "_blank")}
                 >
                   Optical Validator
                 </button>
               </div>
             </div>
 
-            {/* Tables */}
+            {/* Link Summary */}
             <Table
               title="Link Summary"
               headers={[
@@ -293,6 +332,7 @@ export default function App() {
                 "Z Device",
                 "Z Port",
                 "A Optical Device",
+                "A Optical Port",
                 "Z Optical Device",
                 "Z Optical Port",
                 "Workflow",
@@ -320,14 +360,7 @@ export default function App() {
               />
               <Table
                 title="GDCO Tickets"
-                headers={[
-                  "Ticket Id",
-                  "DC Code",
-                  "Title",
-                  "State",
-                  "Assigned To",
-                  "Link",
-                ]}
+                headers={["Ticket Id", "DC Code", "Title", "State", "Assigned To", "Link"]}
                 rows={data.GDCOTickets}
               />
             </Stack>
@@ -335,28 +368,12 @@ export default function App() {
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Table
                 title="MGFX A-Side"
-                headers={[
-                  "XOMT",
-                  "C0 Device",
-                  "C0 Port",
-                  "M0 Device",
-                  "M0 Port",
-                  "C0 DIFF",
-                  "M0 DIFF",
-                ]}
+                headers={["XOMT", "C0 Device", "C0 Port", "M0 Device", "M0 Port", "C0 DIFF", "M0 DIFF"]}
                 rows={data.MGFXA?.map(({ Side, ...keep }: any) => keep)}
               />
               <Table
                 title="MGFX Z-Side"
-                headers={[
-                  "XOMT",
-                  "C0 Device",
-                  "C0 Port",
-                  "M0 Device",
-                  "M0 Port",
-                  "C0 DIFF",
-                  "M0 DIFF",
-                ]}
+                headers={["XOMT", "C0 Device", "C0 Port", "M0 Device", "M0 Port", "C0 DIFF", "M0 DIFF"]}
                 rows={data.MGFXZ?.map(({ Side, ...keep }: any) => keep)}
               />
             </Stack>

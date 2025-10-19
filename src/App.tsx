@@ -12,8 +12,6 @@ import {
   MessageBar,
   MessageBarType,
   IconButton,
-  Dropdown,
-  IDropdownOption,
 } from "@fluentui/react";
 import { saveAs } from "file-saver";
 import * as XLSX from "xlsx";
@@ -151,13 +149,13 @@ export default function App() {
     saveAs(blob, `UID_Report_${uid}.xlsx`);
   };
 
-  const Table = ({ title, headers, rows, highlightUid }: any) => {
+  const Table = ({ title, headers, rows, highlightUid, noScroll }: any) => {
     if (!rows?.length) return null;
-    const scrollable: React.CSSProperties = {};
-    if ((title === "GDCO Tickets" || title === "Associated UIDs") && rows.length > 5) {
-      scrollable.maxHeight = 230;
-      scrollable.overflowY = "auto";
-    }
+    const scrollable: React.CSSProperties = noScroll
+      ? {}
+      : (title === "GDCO Tickets" || title === "Associated UIDs") && rows.length > 5
+      ? { maxHeight: 230, overflowY: "auto" }
+      : {};
 
     return (
       <div className="table-container" style={scrollable}>
@@ -201,7 +199,6 @@ export default function App() {
                         );
                       }
 
-                      // ✅ Fixed: Clicking Associated UID now loads correct UID
                       if (title === "Associated UIDs" && key.toLowerCase() === "uid") {
                         return (
                           <td key={j}>
@@ -243,7 +240,7 @@ export default function App() {
         </Text>
       </div>
 
-      {/* Main content */}
+      {/* Main Content */}
       <Stack className="main">
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <div />
@@ -273,26 +270,32 @@ export default function App() {
             />
           </Stack>
 
-          {/* UID History Dropdown */}
+          {/* Show last searched UID */}
           {history.length > 0 && (
-            <Dropdown
-              placeholder="Recent UIDs"
-              options={history.map((h) => ({ key: h, text: h } as IDropdownOption))}
-              onChange={(_e, o) => handleSearch(String(o?.key))}
-              className="uid-history-dropdown"
-            />
+            <Text
+              style={{
+                marginTop: "4px",
+                fontSize: "12px",
+                color: "#888",
+              }}
+            >
+              Last searched UID: {history[0]}
+            </Text>
           )}
 
           {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         </Stack>
 
+        <div className="table-spacing" />
+
         {error && <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>}
 
         {data && (
           <>
-            {/* Details Section */}
+            {/* Details (No Scroll) */}
             <Table
               title="Details"
+              noScroll
               headers={["SRLG ID", "SRLG", "Repository", "KMZ Route"]}
               rows={[
                 {
@@ -313,12 +316,14 @@ export default function App() {
                       className="sleek-btn green"
                       onClick={() =>
                         window.open(
-                          `https://fiberplanner.cloudg.is/?srlg=${String(data?.AExpansions?.SRLG)}`,
+                          `https://fiberplanner.cloudg.is/?srlg=${encodeURIComponent(
+                            data?.AExpansions?.SRLGID || ""
+                          )}`,
                           "_blank"
                         )
                       }
                     >
-                      {String(data?.AExpansions?.SRLGID || "Open")} KMZ Route
+                      {`${data?.AExpansions?.SRLGID || "Open"} KMZ Route`}
                     </button>
                   ),
                 },

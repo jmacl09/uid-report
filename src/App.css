@@ -9,8 +9,7 @@ body {
 /* Sidebar */
 .sidebar {
   width: 240px;
-  background: #0a0a0a !important;
-  color: #ddd;
+  background: #0a0a0a;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -67,12 +66,6 @@ body {
 }
 .search-btn:hover {
   background: #106ebe !important;
-}
-
-/* UID History Dropdown */
-.uid-history-dropdown {
-  width: 200px;
-  margin-top: -4px;
 }
 
 /* Excel button (top right) */
@@ -137,7 +130,6 @@ body {
   border-bottom: 1px solid #2b2b2b;
   padding: 5px 12px;
   white-space: nowrap;
-  vertical-align: middle;
 }
 
 .data-table tr:nth-child(even) {
@@ -168,27 +160,12 @@ body {
   background-color: #0b6a0b;
 }
 
-/* Clickable UID (no underline) */
-.link-btn-noline {
-  color: #50b3ff;
-  background: none;
-  border: none;
-  cursor: pointer;
-  font-weight: 600;
-  text-decoration: none;
-  transition: 0.15s ease-in-out;
-}
-.link-btn-noline:hover {
-  color: #79c0ff;
-  text-shadow: 0 0 5px #50b3ff;
-}
-
 /* Header Buttons (A/Z Side) */
 .button-header-align-left {
   display: flex;
   justify-content: flex-start;
   align-items: center;
-  margin: 10px 0 15px 0;
+  margin: 25px 0 15px 0; /* Added gap from search bar */
 }
 
 .side-buttons {
@@ -213,7 +190,6 @@ body {
   transition: all 0.15s ease-in-out;
 }
 
-/* Button Variants */
 .sleek-btn.wan {
   background: #0078d4;
 }
@@ -270,7 +246,7 @@ html {
   scrollbar-gutter: stable;
 }
 
-/* Fluent UI overrides */
+/* Adjust layout spacing and consistency */
 .ms-TextField-fieldGroup {
   background-color: #1a1a1a;
 }
@@ -278,25 +254,22 @@ html {
   font-weight: 600;
 }
 
-/* Details Section (Styled like other tables) */
-.table-container .data-table td button.sleek-btn.green {
-  margin: 2px 0;
+/* Clickable UID without underline */
+.link-btn-noline {
+  color: #50b3ff;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: none;
+  transition: 0.15s ease-in-out;
+}
+.link-btn-noline:hover {
+  color: #79c0ff;
+  text-shadow: 0 0 5px #50b3ff;
 }
 
-/* Dropdown Styling Consistency */
-.ms-Dropdown-title {
-  background-color: #1c1c1c !important;
-  border: 1px solid #50b3ff !important;
-  color: #fff !important;
-}
-.ms-Dropdown-caretDown {
-  color: #50b3ff !important;
-}
-.ms-Dropdown-item {
-  background-color: #181818 !important;
-  color: #ddd !important;
-}
-.ms-Dropdown-item:hover {
-  background-color: #252525 !important;
-  color: #fff !important;
+/* Details Table Buttons */
+.table-container .data-table td button.sleek-btn.green {
+  margin: 2px 0;
 }

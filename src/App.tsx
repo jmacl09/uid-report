@@ -59,6 +59,7 @@ export default function App() {
       return;
     }
 
+    setUid(query); // ✅ ensure the input field updates when clicking a linked UID
     setLoading(true);
     setError(null);
     setData(null);
@@ -184,7 +185,7 @@ export default function App() {
                         <td key={j}>
                           <span
                             className="uid-click"
-                            onClick={() => handleSearch(val)}
+                            onClick={() => handleSearch(val)} // ✅ fixed: triggers correct UID search
                             title={`Search UID ${val}`}
                           >
                             {val}
@@ -296,6 +297,9 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {/* Added spacing before WAN Buttons ✅ */}
+            <div style={{ marginTop: "12px" }} />
 
             {/* WAN Buttons */}
             <div className="button-header-align-left">

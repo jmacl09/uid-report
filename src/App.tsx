@@ -34,28 +34,15 @@ const navLinks = [
 
 export default function App() {
   const [uid, setUid] = useState<string>("");
-  const [history, setHistory] = useState<string[]>([]);
+  const [lastUid, setLastUid] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("uidHistory") || "[]");
-    setHistory(saved);
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("uidHistory", JSON.stringify(history.slice(0, 10)));
-  }, [history]);
-
-  const naturalSort = (a: string, b: string) =>
-    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
-
   const handleSearch = async (searchUid?: string) => {
     const query = searchUid || uid.trim();
     if (!query) return setInputError("Please enter a UID before searching.");
-
     if (!/^\d{11}$/.test(query)) {
       setInputError("UID must contain exactly 11 digits (numbers only).");
       return;
@@ -74,50 +61,13 @@ export default function App() {
       const res = await fetch(triggerUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
-
-      result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
-      result.MGFXA?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
-      result.MGFXZ?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
-
-      if (Array.isArray(result.AssociatedUIDs)) {
-        result.AssociatedUIDs.sort((a: any, b: any) => {
-          const uidA = String(a?.UID || a?.Uid || "");
-          const uidB = String(b?.UID || b?.Uid || "");
-          return uidB.localeCompare(uidA, undefined, { numeric: true });
-        });
-      }
-
       setData(result);
-      if (!history.includes(query)) setHistory([query, ...history].slice(0, 10));
+      setLastUid(query);
     } catch (err: any) {
       setError(err.message || "Network error occurred.");
     } finally {
       setLoading(false);
     }
-  };
-
-  const pad = (text: string, width: number) => {
-    text = text == null ? "" : String(text);
-    return text.padEnd(width, " ");
-  };
-
-  const copyTableText = (title: string, rows: Record<string, any>[], headers: string[]) => {
-    if (!rows?.length) return;
-    const colWidths = headers.map((h, i) =>
-      Math.max(h.length, ...rows.map((r) => String(Object.values(r)[i] ?? "").length)) + 2
-    );
-
-    let output = `${title}\n`;
-    output += headers.map((h, i) => pad(h, colWidths[i])).join("") + "\n";
-    output += "-".repeat(colWidths.reduce((a, b) => a + b, 0)) + "\n";
-
-    for (const r of rows) {
-      const vals = Object.values(r);
-      output += vals.map((v, i) => pad(String(v), colWidths[i])).join("") + "\n";
-    }
-
-    navigator.clipboard.writeText(output.trimEnd());
-    alert(`Copied ${title} as structured table ✅`);
   };
 
   const exportExcel = () => {
@@ -149,16 +99,27 @@ export default function App() {
     saveAs(blob, `UID_Report_${uid}.xlsx`);
   };
 
+  const copyTableText = (title: string, rows: Record<string, any>[], headers: string[]) => {
+    if (!rows?.length) return;
+    const colWidths = headers.map(
+      (h, i) => Math.max(h.length, ...rows.map((r) => String(Object.values(r)[i] ?? "").length)) + 2
+    );
+    const pad = (text: string, width: number) => (text ?? "").toString().padEnd(width, " ");
+    let output = `${title}\n${headers.map((h, i) => pad(h, colWidths[i])).join("")}\n`;
+    output += "-".repeat(colWidths.reduce((a, b) => a + b, 0)) + "\n";
+    for (const r of rows)
+      output += Object.values(r)
+        .map((v, i) => pad(v, colWidths[i]))
+        .join("") + "\n";
+    navigator.clipboard.writeText(output.trimEnd());
+    alert(`Copied ${title} as structured table ✅`);
+  };
+
   const Table = ({ title, headers, rows, highlightUid, noScroll }: any) => {
     if (!rows?.length) return null;
-    const scrollable: React.CSSProperties = noScroll
-      ? {}
-      : (title === "GDCO Tickets" || title === "Associated UIDs") && rows.length > 5
-      ? { maxHeight: 230, overflowY: "auto" }
-      : {};
-
+    const wrapperStyle = noScroll ? { overflow: "hidden" } : {};
     return (
-      <div className="table-container" style={scrollable}>
+      <div className="table-container" style={wrapperStyle}>
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="section-title">{title}</Text>
           <IconButton
@@ -167,63 +128,56 @@ export default function App() {
             onClick={() => copyTableText(title, rows, headers)}
           />
         </Stack>
-        <div className="table-scroll-wrapper">
-          <table className="data-table">
-            <thead>
-              <tr>
-                {headers.map((h: string, i: number) => (
-                  <th key={i}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row: any, i: number) => {
-                const highlight = highlightUid && row.Uid?.toString() === highlightUid;
-                return (
-                  <tr key={i} className={highlight ? "highlight-row" : ""}>
-                    {Object.entries(row).map(([key, val], j) => {
-                      if (
-                        key.toLowerCase().includes("workflow") ||
-                        key.toLowerCase().includes("diff") ||
-                        key.toLowerCase().includes("ticketlink")
-                      ) {
-                        return (
-                          <td key={j}>
-                            <button
-                              className="open-btn"
-                              onClick={() => window.open(String(val), "_blank")}
-                            >
-                              Open
-                            </button>
-                          </td>
-                        );
-                      }
-
-                      if (title === "Associated UIDs" && key.toLowerCase() === "uid") {
-                        return (
-                          <td key={j}>
-                            <button
-                              className="link-btn-noline"
-                              onClick={() => {
-                                const newUid = String(val);
-                                setUid(newUid);
-                                setTimeout(() => handleSearch(newUid), 50);
-                              }}
-                            >
-                              {String(val)}
-                            </button>
-                          </td>
-                        );
-                      }
-
-                      return <td key={j}>{String(val)}</td>;
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <table className="data-table" style={{ width: "100%" }}>
+          <thead>
+            <tr>
+              {headers.map((h: string, i: number) => (
+                <th key={i}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row: any, i: number) => {
+              const highlight = highlightUid && row.Uid?.toString() === highlightUid;
+              return (
+                <tr key={i} className={highlight ? "highlight-row" : ""}>
+                  {Object.entries(row).map(([key, val], j) => {
+                    if (typeof val === "object" && val !== null) val = "";
+                    if (key.toLowerCase().includes("workflow")) {
+                      return (
+                        <td key={j}>
+                          <button
+                            className="open-btn"
+                            onClick={() => window.open(String(val), "_blank")}
+                          >
+                            Open
+                          </button>
+                        </td>
+                      );
+                    }
+                    if (title === "Associated UIDs" && key.toLowerCase() === "uid") {
+                      return (
+                        <td key={j}>
+                          <button
+                            className="link-btn-noline"
+                            onClick={() => {
+                              const newUid = String(val);
+                              setUid(newUid);
+                              handleSearch(newUid);
+                            }}
+                          >
+                            {String(val)}
+                          </button>
+                        </td>
+                      );
+                    }
+                    return <td key={j}>{String(val)}</td>;
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     );
   };
@@ -233,7 +187,24 @@ export default function App() {
       {/* Sidebar */}
       <div className="sidebar">
         <img src={logo} alt="Optical 360 Logo" className="logo-img" />
-        <Nav groups={navLinks} />
+        <Nav
+          groups={navLinks}
+          styles={{
+            root: { background: "transparent" },
+            link: {
+              color: "#ddd",
+              fontSize: 14,
+              borderRadius: 6,
+              margin: "2px 0",
+              selectors: {
+                ":hover": {
+                  backgroundColor: "#1b1b1b",
+                  color: "#50b3ff",
+                },
+              },
+            },
+          }}
+        />
         <Separator />
         <Text className="footer">
           Built by <b>Josh Maclean</b> | Microsoft
@@ -270,16 +241,13 @@ export default function App() {
             />
           </Stack>
 
-          {/* Show last searched UID */}
-          {history.length > 0 && (
+          {/* Clickable last searched UID */}
+          {lastUid && (
             <Text
-              style={{
-                marginTop: "4px",
-                fontSize: "12px",
-                color: "#888",
-              }}
+              className="last-uid-link"
+              onClick={() => handleSearch(lastUid)}
             >
-              Last searched UID: {history[0]}
+              Last searched UID: {lastUid}
             </Text>
           )}
 
@@ -292,7 +260,7 @@ export default function App() {
 
         {data && (
           <>
-            {/* Details (No Scroll) */}
+            {/* Details (No scroll, fixed width) */}
             <Table
               title="Details"
               noScroll
@@ -323,7 +291,9 @@ export default function App() {
                         )
                       }
                     >
-                      {`${data?.AExpansions?.SRLGID || "Open"} KMZ Route`}
+                      {data?.AExpansions?.SRLGID
+                        ? `${data?.AExpansions?.SRLGID} KMZ Route`
+                        : "Open KMZ Route"}
                     </button>
                   ),
                 },
@@ -342,10 +312,13 @@ export default function App() {
                 </button>
                 <button
                   className="sleek-btn optical"
-                  onClick={() => window.open(String(data?.AExpansions?.AOpticalUrl), "_blank")}
+                  onClick={() =>
+                    window.open(String(data?.AExpansions?.AOpticalUrl), "_blank")
+                  }
                 >
                   Optical Validator
                 </button>
+
                 <Text className="side-label" style={{ marginLeft: "40px" }}>
                   Z Side:
                 </Text>
@@ -357,7 +330,9 @@ export default function App() {
                 </button>
                 <button
                   className="sleek-btn optical"
-                  onClick={() => window.open(String(data?.ZExpansions?.ZOpticalUrl), "_blank")}
+                  onClick={() =>
+                    window.open(String(data?.ZExpansions?.ZOpticalUrl), "_blank")
+                  }
                 >
                   Optical Validator
                 </button>
@@ -381,6 +356,7 @@ export default function App() {
               rows={data.OLSLinks}
             />
 
+            {/* Associated UIDs + GDCO Tickets */}
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Table
                 title="Associated UIDs"
@@ -406,6 +382,7 @@ export default function App() {
               />
             </Stack>
 
+            {/* MGFX A/Z Sides */}
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Table
                 title="MGFX A-Side"

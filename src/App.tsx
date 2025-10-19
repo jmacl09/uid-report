@@ -336,7 +336,7 @@ export default function App() {
             </div>
 
             {/* ✅ Added spacing between WAN buttons and Link Summary */}
-            <div style={{ marginTop: "8px" }} />
+            <div style={{ marginTop: "4px" }} />
 
             {/* Tables */}
             <Table

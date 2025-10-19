@@ -142,14 +142,8 @@ export default function App() {
 
   const Table = ({ title, headers, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
-    const scrollable: React.CSSProperties = {};
-    if ((title === "GDCO Tickets" || title === "Associated UIDs") && rows.length > 5) {
-      scrollable.maxHeight = 230;
-      scrollable.overflowY = "auto";
-    }
-
     return (
-      <div className="table-container" style={scrollable}>
+      <div className="table-container">
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="section-title">{title}</Text>
           <IconButton
@@ -207,17 +201,15 @@ export default function App() {
 
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
-      {/* Sidebar */}
       <div className="sidebar dark-nav">
         <img src={logo} alt="Optical 360 Logo" className="logo-img" />
-        <Nav groups={navLinks} />
+        <Nav groups={navLinks} styles={{ root: { color: "#ddd" } }} />
         <Separator />
         <Text className="footer">
           Built by <b>Josh Maclean</b> | Microsoft
         </Text>
       </div>
 
-      {/* Main content */}
       <Stack className="main">
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <div />
@@ -229,7 +221,6 @@ export default function App() {
           />
         </Stack>
 
-        {/* Search */}
         <Stack horizontalAlign="center" tokens={{ childrenGap: 10 }}>
           <Stack horizontal tokens={{ childrenGap: 10 }}>
             <TextField
@@ -257,12 +248,13 @@ export default function App() {
         </Stack>
 
         <div className="table-spacing" />
+
         {error && <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>}
 
         {data && (
           <>
-            {/* Details box */}
-            <div className="table-container details-box">
+            {/* Details section */}
+            <div className="table-container">
               <Text className="section-title">Details</Text>
               <div className="details-content">
                 <Text>
@@ -293,7 +285,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* A/Z Buttons */}
+            {/* WAN Buttons */}
             <div className="button-header-align-left">
               <div className="side-buttons">
                 <Text className="side-label">A Side:</Text>

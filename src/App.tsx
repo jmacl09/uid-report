@@ -203,7 +203,7 @@ export default function App() {
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
       <div className="sidebar dark-nav">
         <img src={logo} alt="Optical 360 Logo" className="logo-img" />
-        <Nav groups={navLinks} styles={{ root: { color: "#ddd" } }} />
+        <Nav groups={navLinks} />
         <Separator />
         <Text className="footer">
           Built by <b>Josh Maclean</b> | Microsoft
@@ -248,40 +248,47 @@ export default function App() {
         </Stack>
 
         <div className="table-spacing" />
-
         {error && <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>}
 
         {data && (
           <>
             {/* Details section */}
             <div className="table-container">
-              <Text className="section-title">Details</Text>
-              <div className="details-content">
-                <Text>
-                  <b>SRLGID:</b> {data?.AExpansions?.SRLGID}
-                </Text>
-                <Text>
-                  <b>SRLG:</b> {data?.AExpansions?.SRLG}
-                </Text>
-                <div className="details-buttons">
-                  <button
-                    className="sleek-btn repo"
-                    onClick={() => window.open(data?.AExpansions?.DocumentRepository, "_blank")}
-                  >
-                    WAN Capacity Repository
-                  </button>
-                  <button
-                    className="sleek-btn kmz"
-                    onClick={() =>
-                      window.open(
-                        `https://fiberplanner.cloudg.is/?srlg=${data?.AExpansions?.SRLGID}`,
-                        "_blank"
-                      )
-                    }
-                  >
-                    KMZ Route
-                  </button>
-                </div>
+              <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
+                <Text className="section-title">Details</Text>
+              </Stack>
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>SRLGID</th>
+                    <th>SRLG</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>{data?.AExpansions?.SRLGID}</td>
+                    <td>{data?.AExpansions?.SRLG}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <div className="details-buttons">
+                <button
+                  className="sleek-btn repo"
+                  onClick={() => window.open(data?.AExpansions?.DocumentRepository, "_blank")}
+                >
+                  WAN Capacity Repository
+                </button>
+                <button
+                  className="sleek-btn kmz"
+                  onClick={() =>
+                    window.open(
+                      `https://fiberplanner.cloudg.is/?srlg=${data?.AExpansions?.SRLGID}`,
+                      "_blank"
+                    )
+                  }
+                >
+                  {data?.AExpansions?.DCLocation || "Open"} KMZ Route
+                </button>
               </div>
             </div>
 
@@ -358,6 +365,35 @@ export default function App() {
                 title="GDCO Tickets"
                 headers={["Ticket Id", "DC Code", "Title", "State", "Assigned To", "Link"]}
                 rows={data.GDCOTickets}
+              />
+            </Stack>
+
+            <Stack horizontal tokens={{ childrenGap: 20 }}>
+              <Table
+                title="MGFX A-Side"
+                headers={[
+                  "XOMT",
+                  "C0 Device",
+                  "C0 Port",
+                  "M0 Device",
+                  "M0 Port",
+                  "C0 DIFF",
+                  "M0 DIFF",
+                ]}
+                rows={data.MGFXA?.map(({ Side, ...keep }: any) => keep)}
+              />
+              <Table
+                title="MGFX Z-Side"
+                headers={[
+                  "XOMT",
+                  "C0 Device",
+                  "C0 Port",
+                  "M0 Device",
+                  "M0 Port",
+                  "C0 DIFF",
+                  "M0 DIFF",
+                ]}
+                rows={data.MGFXZ?.map(({ Side, ...keep }: any) => keep)}
               />
             </Stack>
           </>

@@ -12,6 +12,8 @@ import {
   MessageBar,
   MessageBarType,
   IconButton,
+  Dropdown,
+  IDropdownOption,
 } from "@fluentui/react";
 import { saveAs } from "file-saver";
 import * as XLSX from "xlsx";
@@ -38,6 +40,7 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [inputError, setInputError] = useState<string | null>(null);
 
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem("uidHistory") || "[]");
@@ -52,12 +55,15 @@ export default function App() {
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 
   const handleSearch = async (searchUid?: string) => {
-    const query = searchUid || uid;
-    if (!query.trim()) {
-      alert("Please enter a UID before searching.");
+    const query = searchUid || uid.trim();
+    if (!query) return setInputError("Please enter a UID before searching.");
+
+    if (!/^\d{11}$/.test(query)) {
+      setInputError("UID must contain exactly 11 digits (numbers only).");
       return;
     }
 
+    setInputError(null);
     setLoading(true);
     setError(null);
     setData(null);
@@ -84,7 +90,7 @@ export default function App() {
       }
 
       setData(result);
-      if (!history.includes(query)) setHistory([query, ...history]);
+      if (!history.includes(query)) setHistory([query, ...history].slice(0, 10));
     } catch (err: any) {
       setError(err.message || "Network error occurred.");
     } finally {
@@ -120,6 +126,13 @@ export default function App() {
     if (!data || !uid) return;
     const wb = XLSX.utils.book_new();
     const sections = {
+      Details: [
+        {
+          SRLGID: data?.AExpansions?.SRLGID,
+          SRLG: data?.AExpansions?.SRLG,
+          DocumentRepository: data?.AExpansions?.DocumentRepository,
+        },
+      ],
       "Link Summary": data.OLSLinks,
       "Associated UIDs": data.AssociatedUIDs,
       "GDCO Tickets": data.GDCOTickets,
@@ -144,7 +157,6 @@ export default function App() {
     if ((title === "GDCO Tickets" || title === "Associated UIDs") && rows.length > 5) {
       scrollable.maxHeight = 230;
       scrollable.overflowY = "auto";
-      scrollable.overflowX = "hidden";
     }
 
     return (
@@ -189,12 +201,17 @@ export default function App() {
                         );
                       }
 
+                      // ✅ Fixed: Clicking Associated UID now loads correct UID
                       if (title === "Associated UIDs" && key.toLowerCase() === "uid") {
                         return (
                           <td key={j}>
                             <button
-                              className="link-btn"
-                              onClick={() => handleSearch(String(val))}
+                              className="link-btn-noline"
+                              onClick={() => {
+                                const newUid = String(val);
+                                setUid(newUid);
+                                setTimeout(() => handleSearch(newUid), 50);
+                              }}
                             >
                               {String(val)}
                             </button>
@@ -242,10 +259,11 @@ export default function App() {
         <Stack horizontalAlign="center" tokens={{ childrenGap: 10 }}>
           <Stack horizontal tokens={{ childrenGap: 10 }}>
             <TextField
-              placeholder="Enter UID (e.g., 20190610163)"
+              placeholder="Enter UID (11 digits)"
               value={uid}
               onChange={(_e, v) => setUid(v ?? "")}
               className="input-field"
+              errorMessage={inputError || undefined}
             />
             <PrimaryButton
               text={loading ? "Loading..." : "Search"}
@@ -254,6 +272,17 @@ export default function App() {
               className="search-btn"
             />
           </Stack>
+
+          {/* UID History Dropdown */}
+          {history.length > 0 && (
+            <Dropdown
+              placeholder="Recent UIDs"
+              options={history.map((h) => ({ key: h, text: h } as IDropdownOption))}
+              onChange={(_e, o) => handleSearch(String(o?.key))}
+              className="uid-history-dropdown"
+            />
+          )}
+
           {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         </Stack>
 
@@ -261,33 +290,40 @@ export default function App() {
 
         {data && (
           <>
-            {/* SRLG + Docs Header */}
-            <div className="srlg-info">
-              <Text className="info-text">
-                <b>SRLG ID:</b> {data?.AExpansions?.SRLGID || "N/A"} &nbsp;|&nbsp;
-                <b>SRLG:</b> {data?.AExpansions?.SRLG || "N/A"} &nbsp;|&nbsp;
-                <b>DC Location:</b> {data?.AExpansions?.DCLocation || "N/A"}
-              </Text>
-              <div className="inline-buttons">
-                <button
-                  className="sleek-btn green"
-                  onClick={() => window.open(String(data?.AExpansions?.DocumentRepository), "_blank")}
-                >
-                  WAN Capacity Repository
-                </button>
-                <button
-                  className="sleek-btn green"
-                  onClick={() =>
-                    window.open(
-                      `https://fiberplanner.cloudg.is/?srlg=${String(data?.AExpansions?.SRLG)}`,
-                      "_blank"
-                    )
-                  }
-                >
-                  {String(data?.AExpansions?.DCLocation || "Open")} KMZ Route
-                </button>
-              </div>
-            </div>
+            {/* Details Section */}
+            <Table
+              title="Details"
+              headers={["SRLG ID", "SRLG", "Repository", "KMZ Route"]}
+              rows={[
+                {
+                  "SRLG ID": data?.AExpansions?.SRLGID || "N/A",
+                  SRLG: data?.AExpansions?.SRLG || "N/A",
+                  Repository: (
+                    <button
+                      className="sleek-btn green"
+                      onClick={() =>
+                        window.open(String(data?.AExpansions?.DocumentRepository), "_blank")
+                      }
+                    >
+                      WAN Capacity Repository
+                    </button>
+                  ),
+                  "KMZ Route": (
+                    <button
+                      className="sleek-btn green"
+                      onClick={() =>
+                        window.open(
+                          `https://fiberplanner.cloudg.is/?srlg=${String(data?.AExpansions?.SRLG)}`,
+                          "_blank"
+                        )
+                      }
+                    >
+                      {String(data?.AExpansions?.SRLGID || "Open")} KMZ Route
+                    </button>
+                  ),
+                },
+              ]}
+            />
 
             {/* A/Z Side Buttons */}
             <div className="button-header-align-left">

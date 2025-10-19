@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   initializeIcons,
   Stack,
@@ -34,21 +34,30 @@ const navLinks = [
 
 export default function App() {
   const [uid, setUid] = useState<string>("");
-  const [lastUid, setLastUid] = useState<string | null>(null);
+  const [history, setHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [inputError, setInputError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem("uidHistory") || "[]");
+    setHistory(saved);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("uidHistory", JSON.stringify(history.slice(0, 10)));
+  }, [history]);
+
+  const naturalSort = (a: string, b: string) =>
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 
   const handleSearch = async (searchUid?: string) => {
-    const query = searchUid || uid.trim();
-    if (!query) return setInputError("Please enter a UID before searching.");
-    if (!/^\d{11}$/.test(query)) {
-      setInputError("UID must contain exactly 11 digits (numbers only).");
+    const query = searchUid || uid;
+    if (!query.trim()) {
+      alert("Please enter a UID before searching.");
       return;
     }
 
-    setInputError(null);
     setLoading(true);
     setError(null);
     setData(null);
@@ -61,8 +70,21 @@ export default function App() {
       const res = await fetch(triggerUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
+
+      result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
+      result.MGFXA?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
+      result.MGFXZ?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
+
+      if (Array.isArray(result.AssociatedUIDs)) {
+        result.AssociatedUIDs.sort((a: any, b: any) => {
+          const uidA = String(a?.UID || a?.Uid || a?.uid || "");
+          const uidB = String(b?.UID || b?.Uid || b?.uid || "");
+          return uidB.localeCompare(uidA, undefined, { numeric: true });
+        });
+      }
+
       setData(result);
-      setLastUid(query);
+      if (!history.includes(query)) setHistory([query, ...history]);
     } catch (err: any) {
       setError(err.message || "Network error occurred.");
     } finally {
@@ -70,17 +92,34 @@ export default function App() {
     }
   };
 
+  const pad = (text: string, width: number) => {
+    text = text == null ? "" : String(text);
+    return text.padEnd(width, " ");
+  };
+
+  const copyTableText = (title: string, rows: Record<string, any>[], headers: string[]) => {
+    if (!rows?.length) return;
+    const colWidths = headers.map((h, i) =>
+      Math.max(h.length, ...rows.map((r) => String(Object.values(r)[i] ?? "").length)) + 2
+    );
+
+    let output = `${title}\n`;
+    output += headers.map((h, i) => pad(h, colWidths[i])).join("") + "\n";
+    output += "-".repeat(colWidths.reduce((a, b) => a + b, 0)) + "\n";
+
+    for (const r of rows) {
+      const vals = Object.values(r);
+      output += vals.map((v, i) => pad(v, colWidths[i])).join("") + "\n";
+    }
+
+    navigator.clipboard.writeText(output.trimEnd());
+    alert(`Copied ${title} as structured table ✅`);
+  };
+
   const exportExcel = () => {
     if (!data || !uid) return;
     const wb = XLSX.utils.book_new();
     const sections = {
-      Details: [
-        {
-          SRLGID: data?.AExpansions?.SRLGID,
-          SRLG: data?.AExpansions?.SRLG,
-          DocumentRepository: data?.AExpansions?.DocumentRepository,
-        },
-      ],
       "Link Summary": data.OLSLinks,
       "Associated UIDs": data.AssociatedUIDs,
       "GDCO Tickets": data.GDCOTickets,
@@ -99,27 +138,17 @@ export default function App() {
     saveAs(blob, `UID_Report_${uid}.xlsx`);
   };
 
-  const copyTableText = (title: string, rows: Record<string, any>[], headers: string[]) => {
-    if (!rows?.length) return;
-    const colWidths = headers.map(
-      (h, i) => Math.max(h.length, ...rows.map((r) => String(Object.values(r)[i] ?? "").length)) + 2
-    );
-    const pad = (text: string, width: number) => (text ?? "").toString().padEnd(width, " ");
-    let output = `${title}\n${headers.map((h, i) => pad(h, colWidths[i])).join("")}\n`;
-    output += "-".repeat(colWidths.reduce((a, b) => a + b, 0)) + "\n";
-    for (const r of rows)
-      output += Object.values(r)
-        .map((v, i) => pad(v, colWidths[i]))
-        .join("") + "\n";
-    navigator.clipboard.writeText(output.trimEnd());
-    alert(`Copied ${title} as structured table ✅`);
-  };
-
-  const Table = ({ title, headers, rows, highlightUid, noScroll }: any) => {
+  const Table = ({ title, headers, rows, highlightUid }: any) => {
     if (!rows?.length) return null;
-    const wrapperStyle = noScroll ? { overflow: "hidden" } : {};
+    const scrollable: React.CSSProperties = {};
+    if ((title === "GDCO Tickets" || title === "Associated UIDs") && rows.length > 5) {
+      scrollable.maxHeight = 230;
+      scrollable.overflowY = "auto";
+      scrollable.overflowX = "hidden";
+    }
+
     return (
-      <div className="table-container" style={wrapperStyle}>
+      <div className="table-container" style={scrollable}>
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="section-title">{title}</Text>
           <IconButton
@@ -128,90 +157,73 @@ export default function App() {
             onClick={() => copyTableText(title, rows, headers)}
           />
         </Stack>
-        <table className="data-table" style={{ width: "100%" }}>
-          <thead>
-            <tr>
-              {headers.map((h: string, i: number) => (
-                <th key={i}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row: any, i: number) => {
-              const highlight = highlightUid && row.Uid?.toString() === highlightUid;
-              return (
-                <tr key={i} className={highlight ? "highlight-row" : ""}>
-                  {Object.entries(row).map(([key, val], j) => {
-                    if (typeof val === "object" && val !== null) val = "";
-                    if (key.toLowerCase().includes("workflow")) {
-                      return (
-                        <td key={j}>
-                          <button
-                            className="open-btn"
-                            onClick={() => window.open(String(val), "_blank")}
-                          >
-                            Open
-                          </button>
-                        </td>
-                      );
-                    }
-                    if (title === "Associated UIDs" && key.toLowerCase() === "uid") {
-                      return (
-                        <td key={j}>
-                          <button
-                            className="link-btn-noline"
-                            onClick={() => {
-                              const newUid = String(val);
-                              setUid(newUid);
-                              handleSearch(newUid);
-                            }}
-                          >
-                            {String(val)}
-                          </button>
-                        </td>
-                      );
-                    }
-                    return <td key={j}>{String(val)}</td>;
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="table-scroll-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                {headers.map((h: string, i: number) => (
+                  <th key={i}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row: any, i: number) => {
+                const keys = Object.keys(row);
+                const highlight = highlightUid && row.Uid?.toString() === highlightUid;
+                return (
+                  <tr key={i} className={highlight ? "highlight-row" : ""}>
+                    {keys.map((key, j) => {
+                      const val = row[key];
+                      if (
+                        key.toLowerCase().includes("workflow") ||
+                        key.toLowerCase().includes("diff") ||
+                        key.toLowerCase().includes("ticketlink")
+                      ) {
+                        return (
+                          <td key={j}>
+                            <button className="open-btn" onClick={() => window.open(val, "_blank")}>
+                              Open
+                            </button>
+                          </td>
+                        );
+                      }
+
+                      if (title === "Associated UIDs" && key.toLowerCase() === "uid" && val) {
+                        return (
+                          <td key={j}>
+                            <button
+                              className="uid-link-btn"
+                              onClick={() => handleSearch(val.toString())}
+                            >
+                              {val}
+                            </button>
+                          </td>
+                        );
+                      }
+
+                      return <td key={j}>{val}</td>;
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   };
 
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
-      {/* Sidebar */}
       <div className="sidebar">
         <img src={logo} alt="Optical 360 Logo" className="logo-img" />
-        <Nav
-          groups={navLinks}
-          styles={{
-            root: { background: "transparent" },
-            link: {
-              color: "#ddd",
-              fontSize: 14,
-              borderRadius: 6,
-              margin: "2px 0",
-              selectors: {
-                ":hover": {
-                  backgroundColor: "#1b1b1b",
-                  color: "#50b3ff",
-                },
-              },
-            },
-          }}
-        />
+        <Nav groups={navLinks} />
         <Separator />
         <Text className="footer">
           Built by <b>Josh Maclean</b> | Microsoft
         </Text>
       </div>
 
-      {/* Main Content */}
       <Stack className="main">
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <div />
@@ -223,15 +235,13 @@ export default function App() {
           />
         </Stack>
 
-        {/* Search Input */}
         <Stack horizontalAlign="center" tokens={{ childrenGap: 10 }}>
           <Stack horizontal tokens={{ childrenGap: 10 }}>
             <TextField
-              placeholder="Enter UID (11 digits)"
+              placeholder="Enter UID (e.g., 20190610163)"
               value={uid}
               onChange={(_e, v) => setUid(v ?? "")}
               className="input-field"
-              errorMessage={inputError || undefined}
             />
             <PrimaryButton
               text={loading ? "Loading..." : "Search"}
@@ -240,106 +250,79 @@ export default function App() {
               className="search-btn"
             />
           </Stack>
-
-          {/* Clickable last searched UID */}
-          {lastUid && (
-            <Text
-              className="last-uid-link"
-              onClick={() => handleSearch(lastUid)}
-            >
-              Last searched UID: {lastUid}
-            </Text>
-          )}
-
           {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         </Stack>
 
         <div className="table-spacing" />
-
         {error && <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>}
 
         {data && (
           <>
-            {/* Details (No scroll, fixed width) */}
-            <Table
-              title="Details"
-              noScroll
-              headers={["SRLG ID", "SRLG", "Repository", "KMZ Route"]}
-              rows={[
-                {
-                  "SRLG ID": data?.AExpansions?.SRLGID || "N/A",
-                  SRLG: data?.AExpansions?.SRLG || "N/A",
-                  Repository: (
-                    <button
-                      className="sleek-btn green"
-                      onClick={() =>
-                        window.open(String(data?.AExpansions?.DocumentRepository), "_blank")
-                      }
-                    >
-                      WAN Capacity Repository
-                    </button>
-                  ),
-                  "KMZ Route": (
-                    <button
-                      className="sleek-btn green"
-                      onClick={() =>
-                        window.open(
-                          `https://fiberplanner.cloudg.is/?srlg=${encodeURIComponent(
-                            data?.AExpansions?.SRLGID || ""
-                          )}`,
-                          "_blank"
-                        )
-                      }
-                    >
-                      {data?.AExpansions?.SRLGID
-                        ? `${data?.AExpansions?.SRLGID} KMZ Route`
-                        : "Open KMZ Route"}
-                    </button>
-                  ),
-                },
-              ]}
-            />
-
-            {/* A/Z Side Buttons */}
+            {/* A/Z Side Buttons + SRLG info */}
             <div className="button-header-align-left">
               <div className="side-buttons">
                 <Text className="side-label">A Side:</Text>
                 <button
                   className="sleek-btn wan"
-                  onClick={() => window.open(String(data?.AExpansions?.AUrl), "_blank")}
+                  onClick={() => window.open(data?.AExpansions?.AUrl, "_blank")}
                 >
                   WAN Checker
                 </button>
                 <button
                   className="sleek-btn optical"
-                  onClick={() =>
-                    window.open(String(data?.AExpansions?.AOpticalUrl), "_blank")
-                  }
+                  onClick={() => window.open(data?.AExpansions?.AOpticalUrl, "_blank")}
                 >
                   Optical Validator
                 </button>
-
                 <Text className="side-label" style={{ marginLeft: "40px" }}>
                   Z Side:
                 </Text>
                 <button
                   className="sleek-btn wan"
-                  onClick={() => window.open(String(data?.ZExpansions?.ZUrl), "_blank")}
+                  onClick={() => window.open(data?.ZExpansions?.ZUrl, "_blank")}
                 >
                   WAN Checker
                 </button>
                 <button
                   className="sleek-btn optical"
-                  onClick={() =>
-                    window.open(String(data?.ZExpansions?.ZOpticalUrl), "_blank")
-                  }
+                  onClick={() => window.open(data?.ZExpansions?.ZOpticalUrl, "_blank")}
                 >
                   Optical Validator
                 </button>
+
+                {/* SRLG & DC Info Section */}
+                <div className="info-section">
+                  <Text className="info-text">
+                    <b>SRLGID:</b> {data?.AExpansions?.SRLGID}
+                  </Text>
+                  <Text className="info-text">
+                    <b>SRLG:</b> {data?.AExpansions?.SRLG}
+                  </Text>
+                  <Text className="info-text">
+                    <b>Location:</b> {data?.AExpansions?.DCLocation}
+                  </Text>
+                  <button
+                    className="sleek-btn repo"
+                    onClick={() => window.open(data?.AExpansions?.DocumentRepository, "_blank")}
+                  >
+                    WAN Capacity Repository
+                  </button>
+                  <button
+                    className="sleek-btn kmz"
+                    onClick={() =>
+                      window.open(
+                        `https://fiberplanner.cloudg.is/?srlg=${data?.AExpansions?.SRLGID}`,
+                        "_blank"
+                      )
+                    }
+                  >
+                    {data?.AExpansions?.DCLocation} KMZ Route
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Link Summary */}
+            {/* Tables */}
             <Table
               title="Link Summary"
               headers={[
@@ -356,7 +339,6 @@ export default function App() {
               rows={data.OLSLinks}
             />
 
-            {/* Associated UIDs + GDCO Tickets */}
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Table
                 title="Associated UIDs"
@@ -382,16 +364,31 @@ export default function App() {
               />
             </Stack>
 
-            {/* MGFX A/Z Sides */}
             <Stack horizontal tokens={{ childrenGap: 20 }}>
               <Table
                 title="MGFX A-Side"
-                headers={["XOMT", "C0 Device", "C0 Port", "M0 Device", "M0 Port", "C0 DIFF", "M0 DIFF"]}
+                headers={[
+                  "XOMT",
+                  "C0 Device",
+                  "C0 Port",
+                  "M0 Device",
+                  "M0 Port",
+                  "C0 DIFF",
+                  "M0 DIFF",
+                ]}
                 rows={data.MGFXA?.map(({ Side, ...keep }: any) => keep)}
               />
               <Table
                 title="MGFX Z-Side"
-                headers={["XOMT", "C0 Device", "C0 Port", "M0 Device", "M0 Port", "C0 DIFF", "M0 DIFF"]}
+                headers={[
+                  "XOMT",
+                  "C0 Device",
+                  "C0 Port",
+                  "M0 Device",
+                  "M0 Port",
+                  "C0 DIFF",
+                  "M0 DIFF",
+                ]}
                 rows={data.MGFXZ?.map(({ Side, ...keep }: any) => keep)}
               />
             </Stack>

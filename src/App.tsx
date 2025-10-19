@@ -182,9 +182,13 @@ export default function App() {
                     if (title === "Associated UIDs" && key.toLowerCase() === "uid") {
                       return (
                         <td key={j}>
-                          <button className="uid-link-btn" onClick={() => handleSearch(val)}>
+                          <span
+                            className="uid-click"
+                            onClick={() => handleSearch(val)}
+                            title={`Search UID ${val}`}
+                          >
                             {val}
-                          </button>
+                          </span>
                         </td>
                       );
                     }
@@ -239,25 +243,26 @@ export default function App() {
           {lastSearched && (
             <Text className="last-searched">
               Last searched:{" "}
-              <button className="uid-link-btn" onClick={() => handleSearch(lastSearched)}>
+              <span className="uid-click" onClick={() => handleSearch(lastSearched)}>
                 {lastSearched}
-              </button>
+              </span>
             </Text>
           )}
           {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         </Stack>
 
-        <div className="table-spacing" />
+        <div className="last-searched-gap" />
+
         {error && <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>}
 
         {data && (
           <>
-            {/* Details section */}
-            <div className="table-container">
+            {/* Details Section */}
+            <div className="table-container details-fit">
               <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
                 <Text className="section-title">Details</Text>
               </Stack>
-              <table className="data-table">
+              <table className="data-table details-table">
                 <thead>
                   <tr>
                     <th>SRLGID</th>
@@ -282,7 +287,7 @@ export default function App() {
                   className="sleek-btn kmz"
                   onClick={() =>
                     window.open(
-                      `https://fiberplanner.cloudg.is/?srlg=${data?.AExpansions?.SRLGID}`,
+                      `https://fiberplanner.cloudg.is/?srlg=${data?.AExpansions?.SrlgId}`,
                       "_blank"
                     )
                   }

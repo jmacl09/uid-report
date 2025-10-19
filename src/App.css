@@ -137,6 +137,7 @@ body {
 .details-fit {
   width: fit-content;
   min-width: 300px;
+  margin-bottom: 16px !important; /* ✅ Added spacing below Details */
 }
 .details-table {
   width: auto;
@@ -146,6 +147,11 @@ body {
   flex-direction: column;
   gap: 8px;
   margin-top: 10px;
+}
+
+/* ✅ Ensure consistent spacing before WAN buttons */
+.table-container + .button-header-align-left {
+  margin-top: 16px !important;
 }
 
 /* Buttons */

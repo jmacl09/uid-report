@@ -34,6 +34,7 @@ const navLinks = [
 
 export default function App() {
   const [uid, setUid] = useState<string>("");
+  const [lastSearched, setLastSearched] = useState<string>("");
   const [history, setHistory] = useState<string[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<any>(null);
@@ -84,6 +85,7 @@ export default function App() {
       }
 
       setData(result);
+      setLastSearched(query);
       if (!history.includes(query)) setHistory([query, ...history]);
     } catch (err: any) {
       setError(err.message || "Network error occurred.");
@@ -144,7 +146,6 @@ export default function App() {
     if ((title === "GDCO Tickets" || title === "Associated UIDs") && rows.length > 5) {
       scrollable.maxHeight = 230;
       scrollable.overflowY = "auto";
-      scrollable.overflowX = "hidden";
     }
 
     return (
@@ -157,65 +158,57 @@ export default function App() {
             onClick={() => copyTableText(title, rows, headers)}
           />
         </Stack>
-        <div className="table-scroll-wrapper">
-          <table className="data-table">
-            <thead>
-              <tr>
-                {headers.map((h: string, i: number) => (
-                  <th key={i}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row: any, i: number) => {
-                const keys = Object.keys(row);
-                const highlight = highlightUid && row.Uid?.toString() === highlightUid;
-                return (
-                  <tr key={i} className={highlight ? "highlight-row" : ""}>
-                    {keys.map((key, j) => {
-                      const val = row[key];
-                      if (
-                        key.toLowerCase().includes("workflow") ||
-                        key.toLowerCase().includes("diff") ||
-                        key.toLowerCase().includes("ticketlink")
-                      ) {
-                        return (
-                          <td key={j}>
-                            <button className="open-btn" onClick={() => window.open(val, "_blank")}>
-                              Open
-                            </button>
-                          </td>
-                        );
-                      }
-
-                      if (title === "Associated UIDs" && key.toLowerCase() === "uid" && val) {
-                        return (
-                          <td key={j}>
-                            <button
-                              className="uid-link-btn"
-                              onClick={() => handleSearch(val.toString())}
-                            >
-                              {val}
-                            </button>
-                          </td>
-                        );
-                      }
-
-                      return <td key={j}>{val}</td>;
-                    })}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <table className="data-table">
+          <thead>
+            <tr>
+              {headers.map((h: string, i: number) => (
+                <th key={i}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row: any, i: number) => {
+              const highlight = highlightUid && row.Uid?.toString() === highlightUid;
+              return (
+                <tr key={i} className={highlight ? "highlight-row" : ""}>
+                  {Object.entries(row).map(([key, val]: [string, any], j) => {
+                    if (
+                      key.toLowerCase().includes("workflow") ||
+                      key.toLowerCase().includes("diff") ||
+                      key.toLowerCase().includes("ticketlink")
+                    ) {
+                      return (
+                        <td key={j}>
+                          <button className="open-btn" onClick={() => window.open(val, "_blank")}>
+                            Open
+                          </button>
+                        </td>
+                      );
+                    }
+                    if (title === "Associated UIDs" && key.toLowerCase() === "uid") {
+                      return (
+                        <td key={j}>
+                          <button className="uid-link-btn" onClick={() => handleSearch(val)}>
+                            {val}
+                          </button>
+                        </td>
+                      );
+                    }
+                    return <td key={j}>{val}</td>;
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     );
   };
 
   return (
     <div style={{ display: "flex", height: "100vh", backgroundColor: "#111" }}>
-      <div className="sidebar">
+      {/* Sidebar */}
+      <div className="sidebar dark-nav">
         <img src={logo} alt="Optical 360 Logo" className="logo-img" />
         <Nav groups={navLinks} />
         <Separator />
@@ -224,6 +217,7 @@ export default function App() {
         </Text>
       </div>
 
+      {/* Main content */}
       <Stack className="main">
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <div />
@@ -235,6 +229,7 @@ export default function App() {
           />
         </Stack>
 
+        {/* Search */}
         <Stack horizontalAlign="center" tokens={{ childrenGap: 10 }}>
           <Stack horizontal tokens={{ childrenGap: 10 }}>
             <TextField
@@ -250,6 +245,14 @@ export default function App() {
               className="search-btn"
             />
           </Stack>
+          {lastSearched && (
+            <Text className="last-searched">
+              Last searched:{" "}
+              <button className="uid-link-btn" onClick={() => handleSearch(lastSearched)}>
+                {lastSearched}
+              </button>
+            </Text>
+          )}
           {loading && <Spinner size={SpinnerSize.large} label="Fetching data..." />}
         </Stack>
 
@@ -258,7 +261,39 @@ export default function App() {
 
         {data && (
           <>
-            {/* A/Z Side Buttons + SRLG info */}
+            {/* Details box */}
+            <div className="table-container details-box">
+              <Text className="section-title">Details</Text>
+              <div className="details-content">
+                <Text>
+                  <b>SRLGID:</b> {data?.AExpansions?.SRLGID}
+                </Text>
+                <Text>
+                  <b>SRLG:</b> {data?.AExpansions?.SRLG}
+                </Text>
+                <div className="details-buttons">
+                  <button
+                    className="sleek-btn repo"
+                    onClick={() => window.open(data?.AExpansions?.DocumentRepository, "_blank")}
+                  >
+                    WAN Capacity Repository
+                  </button>
+                  <button
+                    className="sleek-btn kmz"
+                    onClick={() =>
+                      window.open(
+                        `https://fiberplanner.cloudg.is/?srlg=${data?.AExpansions?.SRLGID}`,
+                        "_blank"
+                      )
+                    }
+                  >
+                    KMZ Route
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* A/Z Buttons */}
             <div className="button-header-align-left">
               <div className="side-buttons">
                 <Text className="side-label">A Side:</Text>
@@ -289,36 +324,6 @@ export default function App() {
                 >
                   Optical Validator
                 </button>
-
-                {/* SRLG & DC Info Section */}
-                <div className="info-section">
-                  <Text className="info-text">
-                    <b>SRLGID:</b> {data?.AExpansions?.SRLGID}
-                  </Text>
-                  <Text className="info-text">
-                    <b>SRLG:</b> {data?.AExpansions?.SRLG}
-                  </Text>
-                  <Text className="info-text">
-                    <b>Location:</b> {data?.AExpansions?.DCLocation}
-                  </Text>
-                  <button
-                    className="sleek-btn repo"
-                    onClick={() => window.open(data?.AExpansions?.DocumentRepository, "_blank")}
-                  >
-                    WAN Capacity Repository
-                  </button>
-                  <button
-                    className="sleek-btn kmz"
-                    onClick={() =>
-                      window.open(
-                        `https://fiberplanner.cloudg.is/?srlg=${data?.AExpansions?.SRLGID}`,
-                        "_blank"
-                      )
-                    }
-                  >
-                    {data?.AExpansions?.DCLocation} KMZ Route
-                  </button>
-                </div>
               </div>
             </div>
 
@@ -361,35 +366,6 @@ export default function App() {
                 title="GDCO Tickets"
                 headers={["Ticket Id", "DC Code", "Title", "State", "Assigned To", "Link"]}
                 rows={data.GDCOTickets}
-              />
-            </Stack>
-
-            <Stack horizontal tokens={{ childrenGap: 20 }}>
-              <Table
-                title="MGFX A-Side"
-                headers={[
-                  "XOMT",
-                  "C0 Device",
-                  "C0 Port",
-                  "M0 Device",
-                  "M0 Port",
-                  "C0 DIFF",
-                  "M0 DIFF",
-                ]}
-                rows={data.MGFXA?.map(({ Side, ...keep }: any) => keep)}
-              />
-              <Table
-                title="MGFX Z-Side"
-                headers={[
-                  "XOMT",
-                  "C0 Device",
-                  "C0 Port",
-                  "M0 Device",
-                  "M0 Port",
-                  "C0 DIFF",
-                  "M0 DIFF",
-                ]}
-                rows={data.MGFXZ?.map(({ Side, ...keep }: any) => keep)}
               />
             </Stack>
           </>

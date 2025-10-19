@@ -299,7 +299,7 @@ export default function App() {
             </div>
 
             {/* Added spacing before WAN Buttons ✅ */}
-            <div style={{ marginTop: "12px" }} />
+            <div style={{ marginTop: "6px" }} />
 
             {/* WAN Buttons */}
             <div className="button-header-align-left">

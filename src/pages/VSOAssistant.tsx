@@ -93,11 +93,22 @@ const VSOAssistant: React.FC = () => {
 
   // Try to detect signed-in user's email from App Service/Static Web Apps auth
   useEffect(() => {
+    // Read persisted login email (if any) so CC preview is available immediately
+    try {
+      const stored = localStorage.getItem("loggedInEmail");
+      if (stored && stored.length > 3) setUserEmail(stored);
+    } catch (e) {}
+
     const fetchUserEmail = async () => {
       try {
         const res = await fetch("/.auth/me", { credentials: "include" });
         if (!res.ok) return;
         const data = await res.json();
+        // Debugging: print the full /.auth/me response so we can see available claims
+        try {
+          // eslint-disable-next-line no-console
+          console.debug("/.auth/me response:", data);
+        } catch (e) {}
         // Handle both App Service ([identities]) and Static Web Apps ({clientPrincipal}) shapes
         const identities = Array.isArray(data)
           ? data
@@ -115,6 +126,9 @@ const VSOAssistant: React.FC = () => {
             "";
           if (email) {
             setUserEmail(email);
+            try {
+              localStorage.setItem("loggedInEmail", email);
+            } catch (e) {}
             return;
           }
         }
@@ -453,6 +467,7 @@ const VSOAssistant: React.FC = () => {
     try {
       const payload = {
         to: EMAIL_TO,
+          cc: userEmail ? [userEmail] : [],
         subject,
         body: emailBody,
         metadata: {

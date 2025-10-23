@@ -129,12 +129,15 @@ function App() {
         for (const id of identities) {
           const claims = id?.user_claims || [];
           const getClaim = (t: string) => claims.find((c: any) => c?.typ === t)?.val || '';
-          const email =
+          const emailFromClaims =
             getClaim('http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress') ||
             getClaim('emails') ||
             getClaim('preferred_username') ||
             getClaim('upn') ||
             '';
+          // Fallback to clientPrincipal.userDetails (Static Web Apps often put the email there)
+          const fallback = data?.clientPrincipal?.userDetails || '';
+          const email = emailFromClaims || fallback;
           if (email) {
             try { localStorage.setItem('loggedInEmail', email); } catch (e) {}
             // notify other components
@@ -145,6 +148,16 @@ function App() {
       } catch (e) {}
     };
     fetchAuth();
+    // Re-check auth when the window regains focus or becomes visible (handles login via popup/tab)
+    const tryRefresh = () => fetchAuth();
+    window.addEventListener('focus', tryRefresh);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') tryRefresh();
+    });
+    return () => {
+      window.removeEventListener('focus', tryRefresh);
+      document.removeEventListener('visibilitychange', () => {});
+    };
   }, []);
   return (
     <Router>

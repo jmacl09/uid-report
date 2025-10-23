@@ -326,6 +326,35 @@ body {
   font-size: 12px;
 }
 
+/* User status (top-right) */
+.user-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+}
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #1a1a1a, #0f0f0f);
+  border: 1px solid rgba(80,140,200,0.12);
+  color: #dfefff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px; /* give room for SVG */
+  box-shadow: 0 4px 14px rgba(0,120,212,0.08);
+}
+.user-email {
+  color: #dfefff;
+  font-size: 13px;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* === MAIN LAYOUT === */
 .main {
   flex-grow: 1;

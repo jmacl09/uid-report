@@ -7,6 +7,33 @@ import VSOAssistant from "./pages/VSOAssistant";
 import logo from "./assets/optical360-logo.png";
 import "./Theme.css";
 
+// Small UI piece: show logged-in Entra email/avatar in the top-right so users can confirm who is signed in.
+const UserStatus: React.FC = () => {
+  const [email, setEmail] = React.useState<string>("");
+  React.useEffect(() => {
+    try {
+      const e = localStorage.getItem("loggedInEmail") || "";
+      setEmail(e);
+    } catch (err) {
+      setEmail("");
+    }
+  }, []);
+  return (
+    <div className="user-status">
+      <div className="user-avatar" title={email || 'Not signed in'}>
+        {/* Microsoft square logo simplified as inline SVG */}
+        <svg width="20" height="20" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+          <rect x="1" y="1" width="10.5" height="10.5" fill="#f35325" rx="1" />
+          <rect x="12.5" y="1" width="10.5" height="10.5" fill="#81bc06" rx="1" />
+          <rect x="1" y="12.5" width="10.5" height="10.5" fill="#05a6f0" rx="1" />
+          <rect x="12.5" y="12.5" width="10.5" height="10.5" fill="#ffb900" rx="1" />
+        </svg>
+      </div>
+      <div className="user-email">{email || <span style={{ color: '#888' }}>Not signed in</span>}</div>
+    </div>
+  );
+};
+
 const navLinks = [
   {
     links: [
@@ -95,6 +122,11 @@ function App() {
             boxSizing: "border-box",
           }}
         >
+          <div style={{ position: 'relative' }}>
+            <div style={{ position: 'absolute', right: 28, top: 12 }}>
+              <UserStatus />
+            </div>
+          </div>
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/uid" element={<UIDLookup />} />

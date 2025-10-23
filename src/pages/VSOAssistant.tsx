@@ -40,6 +40,12 @@ interface LogicAppResponse {
   RackElevationUrl?: string;
   DataCenter?: string;
 }
+interface MaintenanceWindow {
+  startDate: Date | null;
+  startTime: string;
+  endDate: Date | null;
+  endTime: string;
+}
 
 const VSOAssistant: React.FC = () => {
   const [facilityCodeA, setFacilityCodeA] = useState<string>("");
@@ -82,6 +88,49 @@ const VSOAssistant: React.FC = () => {
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [startTime, setStartTime] = useState<string>("00:00");
   const [endTime, setEndTime] = useState<string>("00:00");
+  const [additionalWindows, setAdditionalWindows] = useState<MaintenanceWindow[]>([]);
+  const [userEmail, setUserEmail] = useState<string>("");
+
+  // Try to detect signed-in user's email from App Service/Static Web Apps auth
+  useEffect(() => {
+    const fetchUserEmail = async () => {
+      try {
+        const res = await fetch("/.auth/me", { credentials: "include" });
+        if (!res.ok) return;
+        const data = await res.json();
+        // Handle both App Service ([identities]) and Static Web Apps ({clientPrincipal}) shapes
+        const identities = Array.isArray(data)
+          ? data
+          : data?.clientPrincipal
+          ? [{ user_claims: data.clientPrincipal?.claims || [] }]
+          : [];
+        for (const id of identities) {
+          const claims = id?.user_claims || [];
+          const getClaim = (t: string) => claims.find((c: any) => c?.typ === t)?.val || "";
+          const email =
+            getClaim("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress") ||
+            getClaim("emails") || // SWA sometimes
+            getClaim("preferred_username") ||
+            getClaim("upn") ||
+            "";
+          if (email) {
+            setUserEmail(email);
+            return;
+          }
+        }
+      } catch {}
+    };
+    fetchUserEmail();
+  }, []);
+
+  const addWindow = () =>
+    setAdditionalWindows((w) => [
+      ...w,
+      { startDate: null, startTime: "00:00", endDate: null, endTime: "00:00" },
+    ]);
+
+  const removeWindow = (index: number) =>
+    setAdditionalWindows((w) => w.filter((_, i) => i !== index));
   const [sendLoading, setSendLoading] = useState<boolean>(false);
   const [sendSuccess, setSendSuccess] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -350,25 +399,39 @@ const VSOAssistant: React.FC = () => {
   const emailBody = useMemo(() => {
     const impactStr = impactExpected ? "Yes/True" : "No/False";
     // Exact preview format requested by user
-    const parts = [
+    const parts: string[] = [
       `To: ${EMAIL_TO}`,
       `From: VSOAssistant@microsoft.com`,
-      `CC: *The users alias, ill add this later*`,
+      `CC: ${userEmail || "*The users alias, ill add this later*"}`,
       `Subject: ${subject}`,
       ``,
       `----------------------------------------`,
       `CircuitIds: ${spansComma}`,
       `StartDatetime: ${startUtc}`,
       `EndDatetime: ${endUtc}`,
+    ];
+
+    if (additionalWindows.length > 0) {
+      additionalWindows.forEach((w, idx) => {
+        const n = idx + 2; // first window is #1
+        const s = formatUtcString(w.startDate, w.startTime);
+        const e = formatUtcString(w.endDate, w.endTime);
+        parts.push(`StartDatetime ${n}: ${s}`);
+        parts.push(`EndDatetime ${n}: ${e}`);
+      });
+    }
+
+    parts.push(
       `NotificationType: ${notificationType}`,
       `MaintenanceReason: ${maintenanceReason}`,
       `Location: ${location}`,
       `ISP: ${isp}`,
       `ISPTicket: ${ispTicket}`,
       `ImpactExpected: ${impactStr}`,
-    ].map((p) => p || "");
-    return parts.join("\n");
-  }, [EMAIL_TO, subject, spansComma, startUtc, endUtc, notificationType, location, maintenanceReason, isp, ispTicket, impactExpected]);
+    );
+
+    return parts.map((p) => p || "").join("\n");
+  }, [EMAIL_TO, subject, spansComma, startUtc, endUtc, notificationType, location, maintenanceReason, isp, ispTicket, impactExpected, additionalWindows, userEmail]);
 
   const canSend = useMemo(() => {
     return (
@@ -667,16 +730,7 @@ const VSOAssistant: React.FC = () => {
               <div className="section-title" style={{ margin: 0 }}>Compose Maintenance Email</div>
             </div>
 
-            <div className="policy-info" style={{ lineHeight: 1.4 }}>
-              <div style={{ fontWeight: 700, marginBottom: 6 }}>Policy Requirements</div>
-              <div style={{ color: '#dfefff' }}>
-                <span style={{ fontWeight: 700, color: '#ffd966' }}>Send ≥ 7 days in advance.</span>{' '}
-                If under 7 days, mark as <span style={{ fontWeight: 700, color: '#ff6b6b' }}>EMERGENCY</span> and state the reason.
-              </div>
-              <div style={{ color: '#dfefff', marginTop: 6 }}>
-                Times spanning multiple days: <span style={{ fontWeight: 700 }}>comma-separate start and end</span>. Use comma-separated lists for Circuit IDs and time entries (no spaces).
-              </div>
-            </div>
+            {/* policy-info removed per user request */}
 
             {sendSuccess && (
               <MessageBar messageBarType={MessageBarType.success} isMultiline={false}>
@@ -694,29 +748,11 @@ const VSOAssistant: React.FC = () => {
               onDismiss={() => { setShowEmergencyDialog(false); setStartWarning(null); setPendingEmergency(false); }}
               dialogContentProps={{
                 type: DialogType.normal,
-                // leave title empty so we can render a custom header that colors 'Emergency'
-                title: '',
-                subText: '',
+                title: 'Confirm Emergency Maintenance',
+                subText: startWarning || '',
               }}
-              modalProps={{
-                isBlocking: true,
-                styles: { main: { maxWidth: 900, width: '92vw', minWidth: 480 } },
-              }}
+              modalProps={{ isBlocking: true }}
             >
-              {/* Custom header: 'Confirm ' + red 'Emergency' + ' Maintenance' */}
-              <div style={{ padding: '18px 24px 8px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div className="ms-Dialog-title" style={{ fontWeight: 700, fontSize: 18 }}>
-                  <span>Confirm </span>
-                  <span className="emergency-title-word">Emergency</span>
-                  <span> Maintenance</span>
-                </div>
-              </div>
-
-              {/* Custom dialog body so we can show the subtext and avoid internal scrollbars */}
-              <div className="emergency-dialog-body" style={{ padding: '0 24px 8px 24px' }}>
-                <div className="ms-Dialog-subText emergency-subtext">{startWarning || ''}</div>
-              </div>
-
               <DialogFooter>
                 <PrimaryButton
                   text="Confirm & Mark Emergency"
@@ -780,6 +816,9 @@ const VSOAssistant: React.FC = () => {
                             setStartWarning(
                               "You have selected a date less than 7 days in advance. If this is required please press confirm to continue and the email will be updated with the Emergency Tag."
                             );
+                            setStartWarning(
+                              "You have selected a date less than 7 days in advance. If this is required please press confirm to continue and the email will be updated with the Emergency Tag."
+                            );
                             setPendingEmergency(true);
                             setShowEmergencyDialog(true);
                           } else {
@@ -820,13 +859,87 @@ const VSOAssistant: React.FC = () => {
                         styles={timeDropdownStyles}
                       />
                     </div>
-                  </div>
                 </div>
+              </div>
 
-                <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-                  <div style={{ flex: 1 }}>
-                    <TextField label="Location" value={location} onChange={(_, v) => setLocation(v || "")} styles={textFieldStyles} />
+              {/* Additional maintenance windows (+ / -) */}
+              <div style={{ marginTop: 8 }}>
+                <button className="sleek-btn optical" onClick={addWindow}>+ Add Window</button>
+                {additionalWindows.map((w, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'flex-start' }}>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <div>
+                        <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date (UTC)</Text>
+                        <DatePicker
+                          placeholder="Select start date"
+                          value={w.startDate || undefined}
+                          onSelectDate={(d) => {
+                            setAdditionalWindows((arr) => {
+                              const next = [...arr];
+                              next[i] = { ...next[i], startDate: d || null };
+                              return next;
+                            });
+                          }}
+                          styles={datePickerStyles}
+                        />
+                      </div>
+                      <div>
+                        <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time (UTC)</Text>
+                        <Dropdown
+                          options={timeOptions}
+                          selectedKey={w.startTime}
+                          onChange={(_, opt) => opt && setAdditionalWindows((arr) => {
+                            const next = [...arr];
+                            next[i] = { ...next[i], startTime: opt.key.toString() };
+                            return next;
+                          })}
+                          styles={timeDropdownStyles}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <div>
+                        <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date (UTC)</Text>
+                        <DatePicker
+                          placeholder="Select end date"
+                          value={w.endDate || undefined}
+                          onSelectDate={(d) => {
+                            setAdditionalWindows((arr) => {
+                              const next = [...arr];
+                              next[i] = { ...next[i], endDate: d || null };
+                              return next;
+                            });
+                          }}
+                          styles={datePickerStyles}
+                        />
+                      </div>
+                      <div>
+                        <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time (UTC)</Text>
+                        <Dropdown
+                          options={timeOptions}
+                          selectedKey={w.endTime}
+                          onChange={(_, opt) => opt && setAdditionalWindows((arr) => {
+                            const next = [...arr];
+                            next[i] = { ...next[i], endTime: opt.key.toString() };
+                            return next;
+                          })}
+                          styles={timeDropdownStyles}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                      <button className="sleek-btn optical" onClick={() => removeWindow(i)}>- Remove</button>
+                    </div>
                   </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <TextField label="Location" value={location} onChange={(_, v) => setLocation(v || "")} styles={textFieldStyles} />
+                </div>
                   <div style={{ width: 140 }}>
                     <TextField label="Latitude" value={lat} onChange={(_, v) => setLat((v || '').trim())} styles={textFieldStyles} />
                   </div>

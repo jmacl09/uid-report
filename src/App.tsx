@@ -17,6 +17,14 @@ const UserStatus: React.FC = () => {
     } catch (err) {
       setEmail("");
     }
+    const handler = (ev: any) => {
+      try {
+        const detail = ev?.detail || localStorage.getItem('loggedInEmail') || '';
+        setEmail(detail);
+      } catch (e) {}
+    };
+    window.addEventListener('loggedInEmailChanged', handler as EventListener);
+    return () => window.removeEventListener('loggedInEmailChanged', handler as EventListener);
   }, []);
   return (
     <div className="user-status">
@@ -105,6 +113,39 @@ const SidebarNav: React.FC = () => {
 };
 
 function App() {
+  // On app mount, try to fetch /.auth/me and persist the logged-in email for the whole app.
+  React.useEffect(() => {
+    const fetchAuth = async () => {
+      try {
+        const res = await fetch('/.auth/me', { credentials: 'include' });
+        if (!res.ok) return;
+        const data = await res.json();
+        // Attempt same claim resolution as in VSOAssistant
+        const identities = Array.isArray(data)
+          ? data
+          : data?.clientPrincipal
+          ? [{ user_claims: data.clientPrincipal?.claims || [] }]
+          : [];
+        for (const id of identities) {
+          const claims = id?.user_claims || [];
+          const getClaim = (t: string) => claims.find((c: any) => c?.typ === t)?.val || '';
+          const email =
+            getClaim('http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress') ||
+            getClaim('emails') ||
+            getClaim('preferred_username') ||
+            getClaim('upn') ||
+            '';
+          if (email) {
+            try { localStorage.setItem('loggedInEmail', email); } catch (e) {}
+            // notify other components
+            try { window.dispatchEvent(new CustomEvent('loggedInEmailChanged', { detail: email })); } catch (e) {}
+            return;
+          }
+        }
+      } catch (e) {}
+    };
+    fetchAuth();
+  }, []);
   return (
     <Router>
       <div style={{ display: "flex", height: "100vh", backgroundColor: "#0a0a0a" }}>

@@ -75,18 +75,16 @@ const VSOAssistant: React.FC = () => {
   const [ispTicket, setIspTicket] = useState<string>("");
   const [maintenanceReason, setMaintenanceReason] = useState<string>("");
   const [impactExpected, setImpactExpected] = useState<boolean>(true);
-  type WindowItem = { startDate: Date | null; startTime: string; endDate: Date | null; endTime: string };
-  const [windows, setWindows] = useState<WindowItem[]>([
-    { startDate: null, startTime: "00:00", endDate: null, endTime: "00:00" },
-  ]);
-  const [windowCount, setWindowCount] = useState<number>(1);
+  const [startDate, setStartDate] = useState<Date | null>(null);
   const [startWarning, setStartWarning] = useState<string | null>(null);
   const [pendingEmergency, setPendingEmergency] = useState<boolean>(false);
   const [showEmergencyDialog, setShowEmergencyDialog] = useState<boolean>(false);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [startTime, setStartTime] = useState<string>("00:00");
+  const [endTime, setEndTime] = useState<string>("00:00");
   const [sendLoading, setSendLoading] = useState<boolean>(false);
   const [sendSuccess, setSendSuccess] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string>("");
 
   // === Diversity options ===
   const diversityOptions: IDropdownOption[] = [
@@ -284,7 +282,7 @@ const VSOAssistant: React.FC = () => {
   // Time dropdown styles (reuse dropdownStyles with smaller width as needed)
   const timeDropdownStyles = {
     ...dropdownStyles,
-    root: { width: 140 },
+    root: { width: 120 },
   } as const;
 
   // Dark DatePicker styles to avoid white-on-white
@@ -335,17 +333,8 @@ const VSOAssistant: React.FC = () => {
     return diff < days * 24 * 60 * 60 * 1000;
   };
 
-  const startUtcList = useMemo(
-    () => windows.slice(0, windowCount).map((w) => formatUtcString(w.startDate, w.startTime)).filter((s) => !!s),
-    [windows, windowCount]
-  );
-  const endUtcList = useMemo(
-    () => windows.slice(0, windowCount).map((w) => formatUtcString(w.endDate, w.endTime)).filter((s) => !!s),
-    [windows, windowCount]
-  );
-
-  // Render only the selected number of windows (default one)
-  const visibleWindows = useMemo(() => windows.slice(0, windowCount), [windows, windowCount]);
+  const startUtc = useMemo(() => formatUtcString(startDate, startTime), [startDate, startTime]);
+  const endUtc = useMemo(() => formatUtcString(endDate, endTime), [endDate, endTime]);
 
   // Prefill subject when entering compose
   useEffect(() => {
@@ -356,28 +345,6 @@ const VSOAssistant: React.FC = () => {
     }
   }, [composeOpen]);
 
-  // Detect signed-in user's email via platform auth (Azure Static Web Apps / App Service Easy Auth)
-  useEffect(() => {
-    const loadUser = async () => {
-      try {
-        const resp = await fetch('/.auth/me', { credentials: 'include' });
-        if (!resp.ok) return;
-        const data = await resp.json();
-        const principal = (data && (data.clientPrincipal || data?.clientPrincipal)) as any;
-        if (principal?.userDetails) {
-          setUserEmail(principal.userDetails);
-          return;
-        }
-        if (Array.isArray(data) && data.length > 0) {
-          const claims = data[0]?.user_claims || data[0]?.claims || [];
-          const emailClaim = claims.find((c: any) => ((c.typ || c.type || '').toLowerCase().includes('email')));
-          if (emailClaim?.val || emailClaim?.value) setUserEmail(emailClaim.val || emailClaim.value);
-        }
-      } catch {}
-    };
-    loadUser();
-  }, []);
-
   const latLongCombined = useMemo(() => (lat && lng ? `${lat},${lng}` : ""), [lat, lng]);
 
   const emailBody = useMemo(() => {
@@ -386,13 +353,14 @@ const VSOAssistant: React.FC = () => {
     // Exact preview format requested by user
     const parts = [
       `To: ${EMAIL_TO}`,
-      ...(userEmail ? [`CC: ${userEmail}`] : []),
+      `From: VSOAssistant@microsoft.com`,
+      `CC: *The users alias, ill add this later*`,
       `Subject: ${subject}`,
       ``,
       `----------------------------------------`,
       `CircuitIds: ${spansComma}`,
-      `StartDatetime: ${startUtcList.join(',')}`,
-      `EndDatetime: ${endUtcList.join(',')}`,
+      `StartDatetime: ${startUtc}`,
+      `EndDatetime: ${endUtc}`,
       `NotificationType: ${notificationType}`,
       `MaintenanceReason: ${maintenanceReason}`,
       `Location: ${location}`,
@@ -401,20 +369,20 @@ const VSOAssistant: React.FC = () => {
       `ImpactExpected: ${impactStr}`,
     ].map((p) => p || "");
     return parts.join("\n");
-  }, [EMAIL_TO, userEmail, subject, spansComma, startUtcList, endUtcList, notificationType, location, maintenanceReason, latLongCombined, isp, ispTicket, impactExpected, rackDC, facilityCodeA]);
+  }, [EMAIL_TO, subject, spansComma, startUtc, endUtc, notificationType, location, maintenanceReason, latLongCombined, isp, ispTicket, impactExpected, rackDC, facilityCodeA]);
 
   const canSend = useMemo(() => {
     return (
       selectedSpans.length > 0 &&
       !!subject &&
-      startUtcList.length > 0 &&
-      endUtcList.length > 0 &&
+      !!startUtc &&
+      !!endUtc &&
       !!location &&
       !!isp &&
       !!notificationType &&
       !!maintenanceReason
     );
-  }, [selectedSpans.length, subject, startUtcList.length, endUtcList.length, location, isp, notificationType, maintenanceReason]);
+  }, [selectedSpans.length, subject, startUtc, endUtc, location, isp, notificationType, maintenanceReason]);
 
   const handleSend = async () => {
     setSendError(null);
@@ -423,7 +391,6 @@ const VSOAssistant: React.FC = () => {
     try {
       const payload = {
         to: EMAIL_TO,
-        cc: userEmail || undefined,
         subject,
         body: emailBody,
         metadata: {
@@ -434,11 +401,10 @@ const VSOAssistant: React.FC = () => {
           isp,
           ispTicket,
           impactExpected,
-          startUtc: startUtcList.join(','),
-          endUtc: endUtcList.join(','),
+          startUtc,
+          endUtc,
           spans: selectedSpans,
           region: rackDC || facilityCodeA,
-          cc: userEmail || undefined,
         },
       };
       const resp = await fetch(EMAIL_LOGIC_APP_URL, {
@@ -702,7 +668,16 @@ const VSOAssistant: React.FC = () => {
               <div className="section-title" style={{ margin: 0 }}>Compose Maintenance Email</div>
             </div>
 
-            {/* policy-info removed per user request */}
+            <div className="policy-info" style={{ lineHeight: 1.4 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Policy Requirements</div>
+              <div style={{ color: '#dfefff' }}>
+                <span style={{ fontWeight: 700, color: '#ffd966' }}>Send ≥ 7 days in advance.</span>{' '}
+                If under 7 days, mark as <span style={{ fontWeight: 700, color: '#ff6b6b' }}>EMERGENCY</span> and state the reason.
+              </div>
+              <div style={{ color: '#dfefff', marginTop: 6 }}>
+                Times spanning multiple days: <span style={{ fontWeight: 700 }}>comma-separate start and end</span>. Use comma-separated lists for Circuit IDs and time entries (no spaces).
+              </div>
+            </div>
 
             {sendSuccess && (
               <MessageBar messageBarType={MessageBarType.success} isMultiline={false}>
@@ -720,22 +695,29 @@ const VSOAssistant: React.FC = () => {
               onDismiss={() => { setShowEmergencyDialog(false); setStartWarning(null); setPendingEmergency(false); }}
               dialogContentProps={{
                 type: DialogType.normal,
-                title: 'Confirm Emergency Maintenance',
-                subText: startWarning || '',
+                // leave title empty so we can render a custom header that colors 'Emergency'
+                title: '',
+                subText: '',
               }}
-              styles={{
-                main: {
-                  border: '2px solid #50b3ff',
-                  boxShadow: '0 0 16px rgba(80,179,255,0.45), 0 8px 28px rgba(0,0,0,0.55)',
-                  background: '#0f141b',
-                  borderRadius: 12,
-                  width: 520,
-                  maxWidth: 520,
-                  minWidth: 420,
-                },
+              modalProps={{
+                isBlocking: true,
+                styles: { main: { maxWidth: 900, width: '92vw', minWidth: 480 } },
               }}
-              modalProps={{ isBlocking: true }}
             >
+              {/* Custom header: 'Confirm ' + red 'Emergency' + ' Maintenance' */}
+              <div style={{ padding: '18px 24px 8px 24px', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div className="ms-Dialog-title" style={{ fontWeight: 700, fontSize: 18 }}>
+                  <span>Confirm </span>
+                  <span className="emergency-title-word">Emergency</span>
+                  <span> Maintenance</span>
+                </div>
+              </div>
+
+              {/* Custom dialog body so we can show the subtext and avoid internal scrollbars */}
+              <div className="emergency-dialog-body" style={{ padding: '0 24px 8px 24px' }}>
+                <div className="ms-Dialog-subText emergency-subtext">{startWarning || ''}</div>
+              </div>
+
               <DialogFooter>
                 <PrimaryButton
                   text="Confirm & Mark Emergency"
@@ -785,81 +767,60 @@ const VSOAssistant: React.FC = () => {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
-                  {visibleWindows.map((w, idx) => (
-                    <div key={idx} style={{ display: 'flex', gap: 22, alignItems: 'flex-end', flexWrap: 'nowrap' }}>
-                      <div style={{ width: 230 }}>
-                        <Text styles={{ root: { color: '#ccc', fontSize: 12, fontWeight: 600 } }}>Start Date (UTC)</Text>
-                        <DatePicker
-                          placeholder="Select start date"
-                          value={w.startDate || undefined}
-                          onSelectDate={(d) => {
-                            const selected = d || null;
-                            setWindows((prev) => {
-                              const copy = [...prev];
-                              copy[idx] = { ...copy[idx], startDate: selected };
-                              return copy;
-                            });
-                            if (isWithinDays(selected, 7)) {
-                              setStartWarning('You have selected a date less than 7 days in advance. If this is required please press confirm to continue and the email will be updated with the Emergency Tag.');
-                              setPendingEmergency(true);
-                              setShowEmergencyDialog(true);
-                            } else {
-                              setStartWarning(null);
-                              setPendingEmergency(false);
-                            }
-                          }}
-                          styles={datePickerStyles}
-                        />
-                      </div>
-                      <div style={{ width: 140 }}>
-                        <Text styles={{ root: { color: '#ccc', fontSize: 12, fontWeight: 600 } }}>Start Time (UTC)</Text>
-                        <Dropdown
-                          options={timeOptions}
-                          selectedKey={w.startTime}
-                          onChange={(_, opt) => opt && setWindows((prev) => { const copy = [...prev]; copy[idx] = { ...copy[idx], startTime: opt.key.toString() }; return copy; })}
-                          styles={timeDropdownStyles}
-                        />
-                      </div>
-                      <div style={{ width: 230 }}>
-                        <Text styles={{ root: { color: '#ccc', fontSize: 12, fontWeight: 600 } }}>End Date (UTC)</Text>
-                        <DatePicker
-                          placeholder="Select end date"
-                          value={w.endDate || undefined}
-                          onSelectDate={(d) => setWindows((prev) => { const copy = [...prev]; copy[idx] = { ...copy[idx], endDate: (d || null) }; return copy; })}
-                          styles={datePickerStyles}
-                        />
-                      </div>
-                      <div style={{ width: 140 }}>
-                        <Text styles={{ root: { color: '#ccc', fontSize: 12, fontWeight: 600 } }}>End Time (UTC)</Text>
-                        <Dropdown
-                          options={timeOptions}
-                          selectedKey={w.endTime}
-                          onChange={(_, opt) => opt && setWindows((prev) => { const copy = [...prev]; copy[idx] = { ...copy[idx], endTime: opt.key.toString() }; return copy; })}
-                          styles={timeDropdownStyles}
-                        />
-                      </div>
+                <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <div>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date (UTC)</Text>
+                      <DatePicker
+                        placeholder="Select start date"
+                        value={startDate || undefined}
+                        onSelectDate={(d) => {
+                          const selected = d || null;
+                          setStartDate(selected);
+                          if (isWithinDays(selected, 7)) {
+                            setStartWarning(
+                              "You have selected a date less than 7 days in advance. If this is required please press confirm to continue and the email will be updated with the Emergency Tag."
+                            );
+                            setPendingEmergency(true);
+                            setShowEmergencyDialog(true);
+                          } else {
+                            setStartWarning(null);
+                            setPendingEmergency(false);
+                          }
+                        }}
+                        styles={datePickerStyles}
+                      />
                     </div>
-                  ))}
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      className="sleek-btn optical"
-                      aria-label="Add time window"
-                      title="Add time window"
-                      onClick={() => { const next = windowCount + 1; setWindowCount(next); setWindows(prev => (prev.length < next ? [...prev, { startDate: null, startTime: '00:00', endDate: null, endTime: '00:00' }] : prev)); }}
-                    >
-                      +
-                    </button>
-                    {windowCount > 1 && (
-                      <button
-                        className="sleek-btn optical"
-                        aria-label="Remove last time window"
-                        title="Remove last time window"
-                        onClick={() => { if (windowCount > 1) { const next = windowCount - 1; setWindowCount(next); setWindows(prev => (prev.length > next ? prev.slice(0, next) : prev)); } }}
-                      >
-                        -
-                      </button>
-                    )}
+                    <div>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time (UTC)</Text>
+                      <Dropdown
+                        options={timeOptions}
+                        selectedKey={startTime}
+                        onChange={(_, opt) => opt && setStartTime(opt.key.toString())}
+                        styles={timeDropdownStyles}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                    <div>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date (UTC)</Text>
+                      <DatePicker
+                        placeholder="Select end date"
+                        value={endDate || undefined}
+                        onSelectDate={(d) => setEndDate(d || null)}
+                        styles={datePickerStyles}
+                      />
+                    </div>
+                    <div>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time (UTC)</Text>
+                      <Dropdown
+                        options={timeOptions}
+                        selectedKey={endTime}
+                        onChange={(_, opt) => opt && setEndTime(opt.key.toString())}
+                        styles={timeDropdownStyles}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -876,7 +837,7 @@ const VSOAssistant: React.FC = () => {
                 </div>
 
                 <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'flex-end' }}>
-                  <div style={{ width: 220 }}>
+                  <div style={{ flex: 1 }}>
                     <TextField label="ISP" value={isp} onChange={(_, v) => setIsp(v || "")} styles={textFieldStyles} />
                   </div>
                   <div style={{ width: 260 }}>

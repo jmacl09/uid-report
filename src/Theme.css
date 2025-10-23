@@ -1,0 +1,1272 @@
+/* === GLOBAL === */
+body {
+  font-family: "Segoe UI", sans-serif;
+  background-color: #0b0b0b;
+  color: #ddd;
+  margin: 0;
+  overflow-x: hidden;
+}
+
+/* === MAIN CONTAINER === */
+.vso-form-container {
+  background: radial-gradient(circle at top, #0d0d0d 0%, #000 100%);
+  border-radius: 14px;
+  padding: 40px 60px 50px;
+  box-shadow: 0 0 25px rgba(0, 140, 255, 0.25), inset 0 0 8px rgba(255, 255, 255, 0.05);
+  text-align: left;
+  margin: 50px auto;
+  position: relative;
+  overflow: hidden;
+}
+
+/* === BANNER TITLE === */
+.banner-title {
+  text-align: center;
+  color: #e8f2fb;
+  background: linear-gradient(180deg, #0d2230 0%, #0b1b28 100%);
+  padding: 14px 12px 12px;
+  border-radius: 10px;
+  margin: 0 auto 22px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(80, 160, 220, 0.18);
+  width: 100%;
+  max-width: 780px;
+  box-sizing: border-box;
+  position: relative;
+  overflow: hidden;
+}
+
+.banner-title .title-text {
+  display: block;
+  font-size: 26px;
+  font-weight: 750;
+  letter-spacing: 0.4px;
+  background: linear-gradient(90deg, #bfe8ff, #50b3ff, #a8d7ff);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 10px rgba(80, 179, 255, 0.6), 0 0 22px rgba(0, 120, 212, 0.45);
+  animation: titleGlowShift 8s linear infinite, neonPulse 4s ease-in-out infinite;
+}
+
+/* Underline glow accent */
+.banner-title .title-text::after {
+  content: "";
+  display: block;
+  width: 160px;
+  height: 2px;
+  margin: 8px auto 0;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(80,179,255,0.9) 0%, rgba(80,179,255,0.35) 40%, transparent 70%);
+  box-shadow: 0 0 10px rgba(80,179,255,0.6), 0 0 18px rgba(0,120,212,0.45);
+  animation: underlinePulse 3.5s ease-in-out infinite;
+}
+
+/* Subtle animated sheen across the banner */
+.banner-title::after {
+  content: "";
+  position: absolute;
+  top: -40%;
+  left: -60%;
+  width: 40%;
+  height: 180%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
+  filter: blur(3px);
+  transform: rotate(20deg) translateX(0%);
+  animation: sheenSweep 7s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Inner glow rim for extra depth */
+.banner-title::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 22px rgba(0, 120, 212, 0.25), 0 0 20px rgba(0, 120, 212, 0.15);
+  pointer-events: none;
+}
+
+.banner-title:hover {
+  box-shadow: 0 0 16px rgba(0, 120, 212, 0.5), 0 0 26px rgba(0, 120, 212, 0.35);
+}
+
+.banner-title .title-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #a6b7c6;
+  opacity: 0.9;
+  letter-spacing: 0.2px;
+}
+
+/* === FIELD SPACING FIX (unified gaps) === */
+.vso-form-container .ms-TextField,
+.vso-form-container .ms-Dropdown,
+.vso-form-container .ms-ComboBox {
+  margin-top: 10px;
+  margin-bottom: 20px; /* consistent separation between controls */
+}
+
+/* Fix cut-off input issue */
+.ms-TextField-fieldGroup,
+.ms-Dropdown-title {
+  border: 1px solid #333 !important;
+  border-radius: 8px !important;
+  height: 44px !important;
+  align-items: center !important;
+  display: flex !important;
+}
+
+/* Prevent extra focus/hover outlines that look like double borders */
+.ms-TextField-fieldGroup,
+.ms-Dropdown-title {
+  box-shadow: none !important;
+}
+.ms-TextField-fieldGroup::after,
+.ms-Dropdown-title::after {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.ms-TextField-field {
+  padding-top: 2px !important;
+  padding-bottom: 2px !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+/* === BUTTONS === */
+.submit-btn {
+  background: linear-gradient(90deg, #0078d4, #00aaff);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 26px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.submit-btn:hover {
+  background: linear-gradient(90deg, #00aaff, #0078d4);
+  transform: translateY(-1px);
+}
+
+.help-btn {
+  background: #ff4444;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 26px;
+  font-weight: 600;
+  font-size: 14px;
+  margin-left: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+}
+
+.help-btn:hover {
+  background: #ff6666;
+  transform: translateY(-1px);
+}
+
+/* === DISCLAIMER AND FOOTER === */
+.disclaimer {
+  color: #999;
+  font-size: 12px;
+  margin-top: 16px;
+}
+
+.developer {
+  color: #aaa;
+  font-size: 12px;
+  margin-top: 6px;
+  line-height: 1.5;
+}
+
+.developer a {
+  color: #4da6ff;
+  text-decoration: none;
+}
+
+.developer a:hover {
+  text-decoration: underline;
+}
+
+/* === GLOW === */
+.glow {
+  box-shadow: 0 0 30px rgba(0, 153, 255, 0.25);
+}
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+  .vso-form-container {
+    padding: 30px 24px;
+  }
+
+  .banner-title {
+    padding: 10px 10px 10px;
+  }
+  .banner-title .title-text {
+    font-size: 20px;
+  }
+  .banner-title .title-sub {
+    font-size: 12px;
+  }
+}
+
+/* === Title Animations === */
+@keyframes titleGlowShift {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+@keyframes neonPulse {
+  0%, 100% {
+    text-shadow: 0 0 10px rgba(80,179,255,0.55), 0 0 22px rgba(0,120,212,0.45);
+  }
+  50% {
+    text-shadow: 0 0 16px rgba(80,179,255,0.9), 0 0 30px rgba(0,120,212,0.75);
+  }
+}
+
+@keyframes underlinePulse {
+  0%, 100% {
+    transform: scaleX(0.95);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+}
+
+@keyframes sheenSweep {
+  0% {
+    transform: rotate(20deg) translateX(0%);
+    opacity: 0;
+  }
+  10% { opacity: 0.4; }
+  50% {
+    transform: rotate(20deg) translateX(260%);
+    opacity: 0.9;
+  }
+  60% { opacity: 0; }
+  100% {
+    transform: rotate(20deg) translateX(260%);
+    opacity: 0;
+  }
+}
+
+/* === SIDEBAR === */
+.sidebar {
+  width: 240px;
+  background: #0a0a0a;
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  box-sizing: border-box;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.6);
+  position: fixed;
+  left: 0;
+  top: 0;
+}
+
+.dark-nav .ms-Nav-linkText {
+  color: #ccc !important;
+  font-weight: 500;
+}
+
+.dark-nav .ms-Nav-link {
+  background: transparent !important;
+  color: #ccc !important;
+  border-radius: 6px;
+  padding: 6px 10px;
+  transition: all 0.25s ease-in-out;
+}
+
+.dark-nav .ms-Nav-link:hover {
+  background: #0078d4 !important;
+  color: #fff !important;
+  box-shadow: 0 0 10px rgba(0, 120, 212, 0.7);
+}
+
+/* ✅ Active link glow */
+.dark-nav .ms-Nav-compositeLink.is-selected .ms-Nav-link {
+  background-color: #0078d4 !important;
+  color: #fff !important;
+  box-shadow: 0 0 14px rgba(0, 120, 212, 0.8);
+}
+
+/* === LOGO === */
+.logo-img {
+  width: 160px;
+  margin: 0 auto 24px;
+  display: block;
+  filter: drop-shadow(0 0 10px #50b3ff);
+  transition: all 0.25s ease-in-out;
+}
+.logo-img:hover {
+  transform: scale(1.05);
+  filter: drop-shadow(0 0 18px #50b3ff);
+}
+
+/* === FOOTER === */
+.footer {
+  color: #999 !important;
+  margin-top: auto;
+  text-align: center;
+  border-top: 1px solid #222;
+  padding-top: 8px;
+  font-size: 12px;
+}
+
+/* === MAIN LAYOUT === */
+.main {
+  flex-grow: 1;
+  padding: 40px 30px 30px 260px;
+  overflow-y: auto;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+/* === SEARCH AREA === */
+.input-field .ms-TextField-fieldGroup {
+  width: 220px;
+  border: 1px solid #50b3ff;
+  border-radius: 8px;
+  background: #141414;
+}
+.input-field input {
+  color: #fff;
+}
+
+.search-btn {
+  background: #0078d4 !important;
+  border-radius: 8px;
+  transition: all 0.15s ease-in-out;
+}
+.search-btn:hover {
+  background: #106ebe !important;
+  box-shadow: 0 0 10px #0078d4;
+}
+
+/* === TABLES === */
+.table-container {
+  background: #181818;
+  border-radius: 10px;
+  padding: 10px 12px;
+  border: 1px solid #2b2b2b;
+  margin-bottom: 18px;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
+  width: 100%;
+  overflow-x: auto; /* allow horizontal scroll if needed */
+  flex: 1 1 0; /* make sibling tables align flush in flex rows */
+  min-width: 0; /* allow flex children to shrink without overflow */
+  box-sizing: border-box;
+}
+
+.section-title {
+  color: #50b3ff;
+  font-weight: 700;
+  border-left: 4px solid #50b3ff;
+  padding-left: 8px;
+  margin-bottom: 6px;
+  text-shadow: 0 0 6px rgba(80, 179, 255, 0.6);
+}
+
+.data-table {
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 13px;
+  width: 100%;
+}
+.data-table thead tr {
+  background: linear-gradient(90deg, #0078d4, #005a9e);
+}
+.data-table th {
+  color: white;
+  font-weight: 600;
+  padding: 7px 12px;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s ease-in-out;
+}
+.data-table th:hover {
+  background: #0a64ad;
+}
+.data-table td {
+  border-bottom: 1px solid #2b2b2b;
+  padding: 6px 12px;
+  color: #eee;
+  white-space: nowrap; /* prevent wrapping */
+}
+.data-table tr:nth-child(even) {
+  background: #151515;
+}
+.data-table tr:hover td {
+  background: #232323;
+}
+.highlight-row {
+  background: #003b3b !important;
+  box-shadow: inset 0 0 10px rgba(0, 130, 114, 0.8);
+}
+
+/* Compact Table Style */
+.data-table.compact th,
+.data-table.compact td {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+/* === STATUS LABELS === */
+.status-label {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+  text-align: center;
+  min-width: 90px;
+}
+.status-label.good {
+  background: #002b00;
+  color: #00ff66;
+  border: 1px solid #00cc55;
+  box-shadow: 0 0 6px rgba(0, 255, 102, 0.3);
+}
+.status-label.warning {
+  background: #4d3300;
+  color: #ffbb33;
+  border: 1px solid #cc9900;
+  box-shadow: 0 0 6px rgba(255, 187, 51, 0.3);
+}
+.status-label.accent {
+  background: #00264d;
+  color: #66aaff;
+  border: 1px solid #0055cc;
+  box-shadow: 0 0 6px rgba(102, 170, 255, 0.3);
+}
+
+/* Red pill for Diversity mappings */
+.status-label.danger {
+  background: #2b0000;
+  color: #ff6666;
+  border: 1px solid #cc3333;
+  box-shadow: 0 0 6px rgba(255, 102, 102, 0.3);
+}
+
+/* === BUTTONS === */
+.open-btn {
+  background-color: #107c10;
+  border: none;
+  color: #fff;
+  padding: 3px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s ease;
+}
+.open-btn:hover {
+  background-color: #0b6a0b;
+  box-shadow: 0 0 8px #00cc33;
+}
+.uid-click {
+  color: #50b3ff;
+  cursor: pointer;
+  font-weight: 500;
+  transition: 0.2s ease;
+  text-decoration: none;
+}
+.uid-click:hover {
+  color: #79c0ff;
+  text-shadow: 0 0 6px #50b3ff;
+  text-decoration: none;
+}
+
+/* === SIDE BUTTONS === */
+.side-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.sleek-btn {
+  padding: 4px 11px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  border: none;
+  color: #fff;
+  transition: all 0.15s ease-in-out;
+}
+.sleek-btn.wan {
+  background: #0078d4;
+}
+.sleek-btn.wan:hover {
+  background: #106ebe;
+  box-shadow: 0 0 8px #0078d4;
+}
+.sleek-btn.optical {
+  background: #2b2b2b;
+  border: 1px solid #444;
+  color: #fff;
+  font-size: 12px;
+  border-radius: 6px;
+  padding: 4px 10px;
+  transition: all 0.2s ease-in-out;
+}
+.sleek-btn.optical:hover {
+  background: #0078d4;
+  box-shadow: 0 0 10px #0078d4;
+}
+
+/* Labels before WAN/Optical buttons */
+.side-label {
+  color: #fff !important;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* Add vertical spacing around WAN/Optical buttons row */
+.button-header-align-left {
+  margin: 10px 0 12px;
+}
+
+/* UID Lookup Details buttons */
+.details-buttons {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.sleek-btn.repo,
+.sleek-btn.kmz {
+  background: linear-gradient(90deg, #335c9a, #274b7a);
+  border: 1px solid rgba(80, 140, 200, 0.35);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+.sleek-btn.repo:hover,
+.sleek-btn.kmz:hover {
+  background: linear-gradient(90deg, #3b67ab, #2f5689);
+  box-shadow: 0 0 10px rgba(0, 120, 212, 0.35);
+}
+
+/* SRLG row alignment */
+.srlg-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  white-space: nowrap;
+}
+.srlg-actions {
+  display: flex;
+  gap: 14px;
+  flex-shrink: 0;
+}
+.srlg-action { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.srlg-action-title {
+  background: linear-gradient(90deg, #0078d4, #005a9e);
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.srlg-text {
+  color: #eee;
+}
+
+/* === FIBER VSO ASSISTANT === */
+.vso-form-container.glow {
+  background: radial-gradient(circle at 25% 20%, #1a1a1a, #0f0f0f);
+  border: 1px solid #2b2b2b;
+  border-radius: 14px;
+  width: 500px;
+  margin: 70px auto;
+  padding: 34px 38px 32px;
+  box-shadow: 0 0 25px rgba(0, 120, 212, 0.25), 0 0 10px rgba(0, 120, 212, 0.3);
+  overflow: hidden;
+  animation: pulseGlow 6s ease-in-out infinite;
+  transition: all 0.3s ease-in-out;
+}
+
+/* limit dropdown callout inside the form to prevent double scrolls */
+.ms-Dropdown-callout {
+  max-height: 240px !important;
+  overflow-y: auto !important;
+  background-color: #181818 !important;
+  border: 1px solid #333 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 0 16px rgba(0, 120, 212, 0.3) !important;
+}
+
+/* make sure only internal content scrolls */
+.vso-form-container.glow .ms-Dropdown-container {
+  overflow: visible !important;
+}
+
+@keyframes pulseGlow {
+  0% {
+    box-shadow: 0 0 25px rgba(0, 120, 212, 0.25), 0 0 10px rgba(0, 120, 212, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 40px rgba(0, 120, 212, 0.4), 0 0 16px rgba(0, 120, 212, 0.5);
+  }
+  100% {
+    box-shadow: 0 0 25px rgba(0, 120, 212, 0.25), 0 0 10px rgba(0, 120, 212, 0.3);
+  }
+}
+
+/* === BANNER TITLE (legacy styles, disabled) === */
+.banner-title-legacy {
+  text-align: center;
+  font-size: 28px;
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 16px 0;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #0078d4 0%, #00aaff 50%, #0078d4 100%);
+  margin-bottom: 28px;
+  text-shadow: 0 0 18px rgba(0, 191, 255, 0.8), 0 0 28px rgba(0, 120, 212, 0.6);
+  box-shadow: 0 0 25px rgba(0, 120, 212, 0.4);
+  animation: bannerPulse 5s ease-in-out infinite;
+}
+
+@keyframes bannerPulse {
+  0%, 100% {
+    text-shadow: 0 0 18px rgba(0, 191, 255, 0.8), 0 0 28px rgba(0, 120, 212, 0.6);
+  }
+  50% {
+    text-shadow: 0 0 26px rgba(0, 191, 255, 1), 0 0 40px rgba(0, 120, 212, 0.9);
+  }
+}
+
+/* === INPUTS, LABELS, DROPDOWNS === */
+.vso-form-container label {
+  display: block;
+  font-size: 15px;
+  color: #ccc;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.vso-form-container select,
+.vso-form-container .ms-Dropdown-title {
+  width: 100%;
+  background-color: #141414 !important;
+  color: #fff !important;
+  border: 1px solid #333 !important;
+  border-radius: 8px !important;
+  padding: 10px 12px !important;
+  font-size: 14px !important;
+  margin-bottom: 20px;
+  box-sizing: border-box;
+  height: 42px !important;
+  display: flex;
+  align-items: center;
+  transition: all 0.25s ease-in-out;
+}
+
+/* Typeable input inside the Data Center dropdown and text inputs */
+.vso-form-container input {
+  width: 100%;
+  background: transparent !important;
+  color: #fff !important;
+  border: none !important; /* avoid double-border inside field groups */
+  padding: 0 12px !important;
+  height: 42px !important;
+  box-sizing: border-box;
+}
+
+/* Match placeholder styling used as reference (e.g., AM111) */
+.vso-form-container input::placeholder {
+  color: #a6b7c6;
+  opacity: 0.8;
+  font-style: normal;
+}
+
+/* Make Fluent UI Dropdown placeholders match input placeholders */
+.vso-form-container .ms-Dropdown-title.is-placeholder {
+  color: #a6b7c6 !important;
+  opacity: 0.8;
+  font-style: normal;
+  font-weight: 400;
+}
+
+.ms-Dropdown-title {
+  display: flex !important;
+  align-items: center !important;
+  color: #fff !important;
+  background: #141414 !important;
+}
+
+/* Reposition Dropdown caret to avoid covering text */
+.vso-form-container .ms-Dropdown { position: relative !important; }
+.vso-form-container .ms-Dropdown-title { padding-right: 36px !important; }
+.vso-form-container .ms-Dropdown-caretDownWrapper {
+  position: absolute !important;
+  right: 8px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  height: 28px !important;
+  width: 28px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  pointer-events: auto !important;
+}
+
+/* Optional: add 'hide-caret' class on container to remove arrows entirely */
+.vso-form-container.hide-caret .ms-ComboBox .ms-ComboBox-CaretDown-button,
+.vso-form-container.hide-caret .ms-Dropdown-caretDownWrapper {
+  display: none !important;
+}
+
+/* Ensure Dropdown placeholder matches TextField/ComboBox placeholder exactly */
+.vso-form-container .ms-Dropdown-title.is-placeholder {
+  color: #a6b7c6 !important;
+  opacity: 0.8;
+  font-style: normal;
+  font-weight: 400;
+}
+
+/* Scroll inside dropdown only (not whole page) */
+.ms-Dropdown-items {
+  max-height: 220px !important;
+  overflow-y: auto !important;
+}
+
+.ms-Dropdown-option {
+  background: transparent !important;
+  color: #fff !important;
+  font-size: 13px !important;
+  transition: background 0.15s;
+}
+.ms-Dropdown-option:hover {
+  background-color: #0078d4 !important;
+  color: #fff !important;
+}
+.ms-Dropdown-option.is-selected {
+  background-color: #003b6f !important;
+  color: #fff !important;
+}
+
+/* === COMBOBOX (Data Center) === */
+.vso-form-container .ms-ComboBox {
+  width: 100% !important;
+  background-color: #141414 !important;
+  border: 1px solid #333 !important;
+  border-radius: 8px !important;
+  height: 44px !important;
+  display: flex !important;
+  align-items: center !important;
+  position: relative !important; /* allow absolute-positioned caret */
+}
+.vso-form-container .ms-ComboBox input.ms-ComboBox-Input {
+  background: transparent !important;
+  color: #fff !important;
+  border: none !important;
+  height: 100% !important;
+  /* add right padding so text never sits under caret */
+  padding: 0 36px 0 12px !important;
+}
+/* Show the caret so users can open the list */
+.vso-form-container .ms-ComboBox .ms-ComboBox-CaretDown-button {
+  /* pin caret to far right and keep clickable */
+  position: absolute !important;
+  right: 6px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  height: 28px !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #fff !important;
+  background: transparent !important;
+  border-left: none !important; /* remove inner separator line */
+  box-shadow: none !important;
+}
+
+/* === DATEPICKER (dark) === */
+.vso-form-container .ms-DatePicker .ms-TextField-fieldGroup {
+  background-color: #141414 !important;
+  border: 1px solid #333 !important;
+  border-radius: 8px !important;
+  height: 42px !important;
+}
+.vso-form-container .ms-DatePicker .ms-TextField-field {
+  color: #fff !important;
+}
+.vso-form-container .ms-DatePicker .ms-Callout-main,
+.vso-form-container .ms-DatePicker .ms-DatePicker-callout {
+  background: #181818 !important;
+  border: 1px solid #333 !important;
+}
+
+/* Ensure DatePicker day cells and header match dark theme */
+.vso-form-container .ms-DatePicker-dayButton,
+.vso-form-container .ms-DatePicker .ms-DayPicker-weekday,
+.vso-form-container .ms-DatePicker .ms-DayPicker-monthNav {
+  background: transparent !important;
+  color: #fff !important;
+}
+
+/* Reason multiline field should sit above other inputs and expand correctly */
+.vso-form-container .reason-field .ms-TextField-fieldGroup {
+  z-index: 2 !important; /* ensure it's above siblings if layout overlap occurs */
+  position: relative !important;
+  min-height: 140px !important;
+  height: auto !important; /* override the global fixed height */
+  align-items: flex-start !important; /* ensure content starts at the top */
+}
+.vso-form-container .reason-field .ms-TextField-field {
+  color: #fff !important;
+  background: transparent !important;
+  padding-top: 8px !important; /* give the caret some top padding */
+}
+
+/* Ensure multiline text wraps and scrolls inside the reason box */
+.vso-form-container .reason-field .ms-TextField-field {
+  white-space: pre-wrap !important;
+  overflow-wrap: break-word !important;
+  word-break: break-word !important;
+  max-height: 420px; /* reasonable maximum before internal scroll */
+  overflow-y: auto !important;
+}
+
+.vso-form-container .reason-wrapper .reason-counter {
+  color: #a6b7c6;
+  background: rgba(0,0,0,0.2);
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+/* === Compose container tweaks === */
+.compose-container {
+  border: 1px solid #2b2b2b;
+  background: radial-gradient(circle at 30% 20%, #151515, #0f0f0f);
+}
+.compose-container .ms-MessageBar {
+  margin-bottom: 10px;
+}
+.compose-container .ms-IconButton {
+  color: #dfefff;
+}
+.compose-container .ms-IconButton:hover {
+  color: #79c0ff;
+}
+
+/* === Dialog Polish (Emergency Prompt) === */
+/* Add breathing room for the dialog title and remove any scrollbars/arrows */
+.ms-Dialog-title {
+  margin-top: 12px !important;
+  margin-bottom: 8px !important;
+}
+/* Ensure prompt never shows scrollbars/arrows */
+.ms-Dialog .ms-Dialog-inner,
+.ms-Dialog .ms-Dialog-content,
+.ms-Dialog .ms-Dialog-scrollableContent {
+  overflow: hidden !important;
+  max-height: none !important;
+}
+/* Hide any platform scrollbars/buttons inside dialog across engines */
+.ms-Dialog * { scrollbar-width: none !important; }
+.ms-Dialog *::-webkit-scrollbar { width: 0 !important; height: 0 !important; }
+.ms-Dialog *::-webkit-scrollbar-button { display: none !important; width: 0 !important; height: 0 !important; }
+/* removed custom emergency-modal overrides to restore clarity */
+
+/* Compose grid for tidy alignment */
+.compose-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+.compose-grid .span-2 {
+  grid-column: span 2;
+}
+
+/* Softer policy info banner */
+.policy-info {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 160, 200, 0.25);
+  background: linear-gradient(180deg, #0e1620 0%, #0b1219 100%);
+  color: #c9d7e1;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.35), inset 0 0 8px rgba(0, 0, 0, 0.2);
+}
+.policy-info b { color: #dfefff; }
+
+/* Remove default pseudo-element borders that can appear as a faint line */
+.vso-form-container .ms-ComboBox::before,
+.vso-form-container .ms-ComboBox::after {
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Dark callout + options for ComboBox */
+.vso-form-container .ms-ComboBox-Callout .ms-Callout-main,
+.vso-form-container .ms-ComboBox-optionsContainerWrapper,
+.combo-dark-callout .ms-Callout-main,
+.combo-dark-callout .ms-ComboBox-optionsContainerWrapper {
+  background: #181818 !important;
+  border: 1px solid #333 !important;
+  box-shadow: 0 6px 16px rgba(0,0,0,0.6) !important;
+}
+.vso-form-container .ms-ComboBox-optionsContainer,
+.combo-dark-callout .ms-ComboBox-optionsContainer {
+  max-height: 240px !important;
+  overflow-y: auto !important;
+}
+.vso-form-container .ms-ComboBox-option,
+.combo-dark-callout .ms-ComboBox-option {
+  background: transparent !important;
+  color: #fff !important;
+  padding: 8px 12px !important;
+  cursor: pointer;
+}
+.vso-form-container .ms-ComboBox-option:hover,
+.vso-form-container .ms-ComboBox-option.is-selected,
+.vso-form-container .ms-ComboBox-option.is-checked,
+.combo-dark-callout .ms-ComboBox-option:hover,
+.combo-dark-callout .ms-ComboBox-option.is-selected,
+.combo-dark-callout .ms-ComboBox-option.is-checked {
+  background: #003b6f !important;
+  color: #fff !important;
+}
+
+/* Callout beak color to match dark theme */
+.combo-dark-callout .ms-Callout-beak,
+.combo-dark-callout .ms-Callout-beakCurtain {
+  background: #181818 !important;
+  border-color: #333 !important;
+}
+
+/* === BUTTONS === */
+.vso-form-container button {
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 9px 22px;
+  transition: all 0.25s ease-in-out;
+}
+.vso-form-container .submit-btn {
+  background-color: #0078d4;
+  color: #fff;
+  box-shadow: 0 0 8px rgba(0, 120, 212, 0.4);
+}
+.vso-form-container .submit-btn:hover {
+  background-color: #0b66c3;
+  box-shadow: 0 0 14px rgba(0, 120, 212, 0.6);
+}
+.vso-form-container .help-btn {
+  background-color: #b22222;
+  color: white;
+  box-shadow: 0 0 8px rgba(178, 34, 34, 0.4);
+}
+.vso-form-container .help-btn:hover {
+  background-color: #d63030;
+  box-shadow: 0 0 14px rgba(214, 48, 48, 0.6);
+}
+
+/* === CONTINUE BUTTON === */
+.ms-Button--primary.is-disabled {
+  background-color: #333 !important;
+  color: #777 !important;
+  box-shadow: none !important;
+}
+
+/* === NOTICE BANNERS (VSO Assistant) === */
+.notice-banner {
+  margin-top: 18px; /* add a touch more space under buttons */
+  padding: 12px 14px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(200, 210, 230, 0.25);
+  background: linear-gradient(180deg, #0f1a24 0%, #0b141c 100%);
+  color: #d6e9ff;
+  box-shadow: 0 0 14px rgba(0, 120, 212, 0.25), inset 0 0 10px rgba(0, 0, 0, 0.35);
+}
+.notice-banner.warning {
+  border-color: rgba(245, 205, 120, 0.4); /* softer amber */
+  box-shadow: 0 0 12px rgba(245, 205, 120, 0.18), inset 0 0 10px rgba(0, 0, 0, 0.35);
+}
+.notice-banner .banner-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 14px;
+  flex: 0 0 24px;
+  color: #0a0a0a;
+  background: radial-gradient(circle at 30% 30%, #f3d891, #e6b85c); /* softer yellow */
+  box-shadow: 0 0 10px rgba(230, 184, 92, 0.4);
+}
+.notice-banner .banner-text {
+  line-height: 1.5;
+  color: #dfefff;
+}
+
+/* === RACK ELEVATION BUTTON === */
+.rack-btn {
+  display: inline-block;
+  background: linear-gradient(90deg, #0078d4, #005a9e);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.25s ease-in-out;
+  box-shadow: 0 0 10px rgba(0, 120, 212, 0.4);
+}
+.rack-btn.slim {
+  padding: 4px 18px;
+  font-size: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #335c9a, #274b7a);
+  box-shadow: 0 0 6px rgba(0, 120, 212, 0.25);
+  border: 1px solid rgba(80, 140, 200, 0.25);
+}
+.rack-btn.slim:hover {
+  background: linear-gradient(90deg, #3b67ab, #2f5689);
+  box-shadow: 0 0 10px rgba(0, 120, 212, 0.35);
+}
+.rack-btn:hover {
+  background: #0b66c3;
+  box-shadow: 0 0 18px rgba(0, 120, 212, 0.6);
+  transform: scale(1.05);
+}
+
+/* === FOOTER === */
+.vso-form-container hr {
+  border: none;
+  border-top: 1px solid #2a2a2a;
+  margin: 18px 0 12px;
+}
+.vso-form-container .disclaimer {
+  font-size: 11px;
+  color: #aaa;
+  line-height: 1.4;
+  text-align: left;
+}
+.vso-form-container .developer {
+  font-size: 11px;
+  color: #999;
+  margin-top: 6px;
+}
+.vso-form-container .developer a {
+  color: #50b3ff;
+  text-decoration: none;
+}
+.vso-form-container .developer a:hover {
+  text-decoration: underline;
+  text-shadow: 0 0 6px #50b3ff;
+}
+
+/* === DIALOG (dark theme overrides) === */
+.ms-Dialog {
+  color: #dfefff;
+}
+.ms-Dialog .ms-Dialog-main {
+  /* darker, slightly translucent background so the dialog contrasts with the page */
+  background: linear-gradient(180deg, rgba(6,8,10,0.95), rgba(4,6,8,0.92)) !important;
+  border: 2px solid rgba(0,170,255,0.28) !important; /* defined neon-blue border */
+  box-shadow: 0 0 18px rgba(0,170,255,0.22), 0 14px 40px rgba(0,0,0,0.65) !important; /* soft neon + depth */
+  border-radius: 10px !important;
+}
+
+/* Force a comfortable default width for the emergency prompt and ensure it's responsive and centered */
+.ms-Dialog .ms-Dialog-main {
+  /* use block layout so width constraints are predictable and won't create inline overflow */
+  display: block !important;
+  width: auto !important;
+  max-width: 720px !important;          /* slightly larger dialog so subtext comfortably fits two lines */
+  min-width: 420px !important;          /* avoid overly small dialogs */
+  margin: 0 auto !important;            /* center the dialog */
+  box-sizing: border-box !important;
+  padding: 0 !important;                /* content areas handle padding */
+  overflow: hidden !important;          /* hide any overflow to eliminate scrollbars */
+  position: relative !important;        /* needed for the neon pseudo-element positioning */
+  z-index: 9999 !important;             /* ensure dialog sits above page glow */
+}
+.ms-Dialog .ms-Dialog-title {
+  color: #50b3ff !important;
+  font-weight: 700 !important;
+  text-align: center !important; /* center the title */
+  display: block !important;
+  width: 100% !important;
+}
+.ms-Dialog .ms-Dialog-subText {
+  color: #a6b7c6 !important;
+}
+.ms-Dialog .ms-Dialog-actions {
+  border-top: 1px solid #1f1f1f !important;
+  background: transparent !important;
+  padding: 12px 16px !important;
+  display: flex !important;
+  gap: 12px !important;
+  justify-content: center !important;
+  flex-wrap: wrap !important; /* allow buttons to wrap instead of forcing width */
+}
+.ms-Dialog .ms-Button {
+  border-radius: 8px !important;
+  min-width: 0 !important; /* prevent buttons from expanding dialog width */
+}
+.ms-Dialog .ms-Button--primary {
+  background: linear-gradient(90deg, #0078d4, #00aaff) !important;
+  color: #fff !important;
+  box-shadow: 0 6px 16px rgba(0,120,212,0.25) !important;
+}
+.ms-Dialog .ms-Button--primary:hover {
+  filter: brightness(1.05) !important;
+}
+.ms-Dialog .ms-Button--default {
+  background: transparent !important;
+  border: 1px solid #333 !important;
+  color: #dfefff !important;
+}
+
+/* Emergency dialog tweaks: red label, single-line title, and no internal scrollbars */
+.ms-Dialog .emergency-name {
+  color: #ff4d4d !important; /* vivid red to indicate emergency */
+  background: rgba(255,77,77,0.06);
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(255,77,77,0.12);
+  box-shadow: 0 4px 12px rgba(255,77,77,0.06);
+  font-size: 14px;
+  letter-spacing: 0.6px;
+}
+
+/* Prevent the dialog content from showing scrollbars — present as a solid prompt */
+.ms-Dialog .ms-Dialog-main,
+.ms-Dialog .ms-Dialog-inner,
+.ms-Dialog .ms-Dialog-content {
+  /* Force the dialog to never show scrollbars; we will clamp long text instead */
+  overflow-x: hidden !important; /* hide horizontal scroll specifically */
+  overflow-y: hidden !important; /* hide vertical scrollbars for the prompt */
+  box-sizing: border-box !important;
+  width: 100% !important; /* make sure inner areas match container width */
+}
+
+/* Safeguard: prevent any descendant from introducing horizontal scroll */
+.ms-Dialog, .ms-Dialog * {
+  overflow-x: hidden !important;
+}
+
+/* Force the dialog title to a single line; ellipsis if it overflows */
+.ms-Dialog .ms-Dialog-title {
+  /* allow wrapping for the title if needed but keep it centered */
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+/* Title word styling: make only the 'Emergency' word red */
+.ms-Dialog .emergency-title-word {
+  color: #ff4d4d !important; /* red, but keep the same font and size as the title */
+  margin: 0 !important; /* remove extra spacing so inline spacing is normal */
+  font-weight: 700;
+  background: transparent !important; /* keep it clean/professional */
+  padding: 0 !important;
+  display: inline !important;
+}
+
+/* Slightly reduce title/body padding for compact appearance */
+.ms-Dialog .ms-Dialog-title { padding: 6px 8px !important; }
+.ms-Dialog .ms-Dialog-subText { padding: 0 8px 10px 8px !important; }
+.ms-Dialog .ms-Dialog-actions { padding: 8px 12px !important; }
+
+/* Make the emergency subtext wrap nicely and not be cut off */
+.ms-Dialog .emergency-subtext {
+  color: #a6b7c6 !important;
+  /* Give the subtext enough width so two lines display naturally */
+  max-width: 620px !important;
+  /* Force the text to visually occupy at most two lines, then show ellipsis. */
+  display: -webkit-box !important;
+  line-clamp: 2 !important;
+  -webkit-line-clamp: 2 !important; /* limit to two lines */
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important; /* hide overflow — no scrollbars */
+  text-overflow: ellipsis !important;
+  white-space: normal !important;
+  word-wrap: break-word !important;
+  line-height: 1.35 !important;
+  margin-top: 20px !important; /* larger gap between title and subtext (requested) */
+}
+
+/* ========================= EMERGENCY DIALOG HIGHLIGHT ========================= */
+/* Stronger, defined border with neon outer glow and darker/translucent inner background
+   - 2.5px solid bright border
+   - outer glow via box-shadow and pseudo-element for crisp edge
+   - slightly translucent inner background to increase contrast with page */
+.ms-Dialog.emergency .ms-Dialog-main,
+.ms-Dialog .ms-Dialog-main.emergency {
+}
+
+/* Crisp neon halo via pseudo-element so glow doesn't blur into the dialog background */
+.ms-Dialog.emergency .ms-Dialog-main::before,
+.ms-Dialog .ms-Dialog-main.emergency::before {
+}
+
+/* Overlay base (no blur) so dialogs remain crisp */
+.ms-Overlay,
+.ms-Overlay--lightDismiss {
+}
+
+/* Remove any legacy blur/dimming on non-emergency dialogs to avoid softened text */
+.ms-Dialog:not(.emergency) {
+}
+
+/* When the emergency dialog is present, ensure action buttons remain clear */
+.ms-Dialog.emergency .ms-Dialog-actions .ms-Button--primary {
+}
+
+
+/* subtle blue glow around the dialog */
+.ms-Dialog .ms-Dialog-main {
+}
+
+/* Make the dialog glow using the project's pulse animation for consistency */
+.ms-Dialog .ms-Dialog-main.glow-pulse {
+}
+
+/* Crisp neon border via pseudo-element so glow doesn't blur into background */
+.ms-Dialog .ms-Dialog-main.glow-pulse::before {
+}
+
+/* Ensure dialog content sits above the pseudo border */
+.ms-Dialog .ms-Dialog-main.glow-pulse > * {
+}
+
+/* Hide scrollbars and scrollbar buttons inside the dialog (WebKit, Firefox, and IE/Edge) */
+.ms-Dialog, .ms-Dialog * {
+}
+.ms-Dialog::-webkit-scrollbar, .ms-Dialog *::-webkit-scrollbar {
+}
+.ms-Dialog::-webkit-scrollbar-button, .ms-Dialog *::-webkit-scrollbar-button {
+}

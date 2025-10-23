@@ -343,12 +343,11 @@ const VSOAssistant: React.FC = () => {
       const region = rackDC || facilityCodeA || "Region";
       setSubject(`[${region}] Maintenance scheduled in <${region}> Contractor:  Lead Engineer:`);
     }
-  }, [composeOpen]);
+  }, [composeOpen, subject, rackDC, facilityCodeA]);
 
   const latLongCombined = useMemo(() => (lat && lng ? `${lat},${lng}` : ""), [lat, lng]);
 
   const emailBody = useMemo(() => {
-    const region = rackDC || facilityCodeA || "Region";
     const impactStr = impactExpected ? "Yes/True" : "No/False";
     // Exact preview format requested by user
     const parts = [
@@ -369,7 +368,7 @@ const VSOAssistant: React.FC = () => {
       `ImpactExpected: ${impactStr}`,
     ].map((p) => p || "");
     return parts.join("\n");
-  }, [EMAIL_TO, subject, spansComma, startUtc, endUtc, notificationType, location, maintenanceReason, latLongCombined, isp, ispTicket, impactExpected, rackDC, facilityCodeA]);
+  }, [EMAIL_TO, subject, spansComma, startUtc, endUtc, notificationType, location, maintenanceReason, isp, ispTicket, impactExpected]);
 
   const canSend = useMemo(() => {
     return (

@@ -6,7 +6,6 @@ import {
   Text,
   TextField,
   PrimaryButton,
-  Separator,
   Spinner,
   SpinnerSize,
   MessageBar,

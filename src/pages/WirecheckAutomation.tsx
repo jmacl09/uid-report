@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { PrimaryButton, Dialog, DialogType, DialogFooter, DefaultButton, MessageBar, MessageBarType } from '@fluentui/react';
 import '../Theme.css';
-import wirecheckImg from '../assets/wirecheck.png';
 
 const WirecheckAutomation: React.FC = () => {
   const [description, _setDescription] = useState<string>(() => {
@@ -89,11 +88,10 @@ const WirecheckAutomation: React.FC = () => {
         <div style={{ padding: 20, textAlign: 'center' }}>
           {/* much larger image for easier viewing - wrapped so it can scroll horizontally */}
           <div style={{ overflowX: 'hidden', paddingBottom: 8 }}>
-            <img
-              src={wirecheckImg}
-              alt="Wirecheck Automation"
-              style={{ width: '100%', height: 'auto', display: 'block', margin: '12px auto' }}
-            />
+            {/* image removed - placeholder area kept for layout */}
+            <div style={{ width: '100%', height: 240, margin: '12px auto', background: '#f3f3f3', borderRadius: 6, border: '1px dashed #ddd', color: '#666', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span>Wirecheck image removed (asset not tracked)</span>
+            </div>
           </div>
 
           <div style={{ marginTop: 18, textAlign: 'left', lineHeight: 1.5 }}>

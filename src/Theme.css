@@ -332,6 +332,7 @@ body {
   align-items: center;
   gap: 8px;
   background: transparent;
+  pointer-events: none; /* avoid blocking UI under it (UID Lookup top-right) */
 }
 .user-avatar {
   width: 36px;
@@ -353,6 +354,130 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* UID compact search styling (details page) */
+.uid-compact-bar {
+  margin: 8px 0 14px;
+  display: flex;
+  justify-content: center;
+}
+.uid-compact-bar .compact-card {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(16,18,20,0.92), rgba(10,10,12,0.96));
+  border: 1px solid rgba(80,140,200,0.06);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.6), inset 0 0 8px rgba(255,255,255,0.01);
+  min-width: 420px;
+  max-width: 880px;
+  width: 90%;
+}
+.uid-compact-bar .compact-card .input-field {
+  flex: 1 1 auto;
+  margin: 0;
+}
+.uid-compact-bar .compact-card .ms-TextField-fieldGroup {
+  width: 100% !important;
+  min-width: 220px;
+  height: 42px !important;
+  border-radius: 8px !important;
+  border: 1px solid #2b2b2b !important;
+  background: #0f0f0f !important;
+}
+.uid-compact-bar .compact-card .search-btn,
+.uid-compact-bar .compact-card .sleek-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  min-width: 100px;
+}
+@media (max-width: 640px) {
+  .uid-compact-bar .compact-card { flex-direction: column; gap: 8px; padding: 8px; width: 96%; }
+  .uid-compact-bar .compact-card .search-btn { width: 100%; }
+}
+
+/* Compose date/time row helpers */
+.compose-datetime-row {
+  display: grid;
+  /* group Start Date + Start Time, then End Date + End Time, then actions */
+  grid-template-columns: minmax(260px, 1fr) 120px minmax(260px, 1fr) 120px auto;
+  column-gap: 12px;
+  row-gap: 12px;
+  align-items: end;
+  width: 100%;
+  margin-top: 12px;
+}
+.compose-datetime-row .dt-field,
+.compose-datetime-row .dt-time {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.compose-datetime-row .dt-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: flex-end;
+  justify-content: flex-end;
+}
+
+@media (max-width: 960px) {
+  .compose-datetime-row {
+    grid-template-columns: minmax(220px, 1fr) minmax(160px, 1fr);
+  }
+  .compose-datetime-row .dt-actions {
+    justify-content: flex-start;
+  }
+}
+
+/* Make Add/Remove window buttons stand out on dark background */
+.tiny-icon-btn {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 999px; /* circular */
+  background: transparent;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.08);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+.tiny-icon-btn:hover {
+  transform: translateY(-2px);
+  background: rgba(255,255,255,0.02);
+}
+.tiny-icon-btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(80,160,255,0.12);
+}
+.add-window-btn.tiny-icon-btn {
+  border-color: rgba(80,180,255,0.18);
+}
+.remove-window-btn.tiny-icon-btn {
+  border-color: rgba(255,110,110,0.14);
+}
+
+/* make the plus/minus glyph slightly larger and vertically centered */
+.tiny-icon-btn .glyph {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+/* Hide Fluent UI default inline error messages so we control when they show */
+.vso-form-container .ms-TextField-errorMessage,
+.vso-form-container .ms-Dropdown-errorMessage,
+.vso-form-container .ms-DatePicker .ms-TextField .ms-TextField-errorMessage {
+  display: none !important;
+}
+
+@media (max-width: 640px) {
+  .compose-datetime-row .dt-time { width: 120px; flex: 0 0 120px; }
 }
 
 /* === MAIN LAYOUT === */
@@ -395,7 +520,9 @@ body {
   box-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
   width: 100%;
   overflow-x: auto; /* allow horizontal scroll if needed */
-  flex: 1 1 0; /* make sibling tables align flush in flex rows */
+  /* prevent table containers from stretching vertically in flex parents */
+  flex: 0 1 auto; /* allow shrinking/growing horizontally but keep natural height */
+  align-self: flex-start; /* avoid being stretched to match sibling heights */
   min-width: 0; /* allow flex children to shrink without overflow */
   box-sizing: border-box;
 }
@@ -414,6 +541,12 @@ body {
   margin-top: 6px;
   font-size: 13px;
   width: 100%;
+}
+
+/* Specific tweak: Details and Link Summary often have very few rows — keep them compact */
+.table-container.details-fit,
+.table-container .details-table {
+  margin-bottom: 8px; /* reduce extra gap for compact sections */
 }
 .data-table thead tr {
   background: linear-gradient(90deg, #0078d4, #005a9e);

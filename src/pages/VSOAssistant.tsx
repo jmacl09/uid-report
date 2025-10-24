@@ -71,7 +71,7 @@ const VSOAssistant: React.FC = () => {
   // === Stage 2: Compose Email state ===
   const [composeOpen, setComposeOpen] = useState<boolean>(false);
   const EMAIL_TO = "opticaldri@microsoft.com"; // fixed
-  const EMAIL_LOGIC_APP_URL = "https://example.logic.azure.com/workflows/your-send-endpoint"; // TODO: replace
+  const EMAIL_LOGIC_APP_URL = "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net:443/api/VSO/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=6ViXNM-TmW5F7Qd9_e4fz3IhRNqmNzKwovWvcmuNJto";
   const [subject, setSubject] = useState<string>("");
   const [notificationType, setNotificationType] = useState<string>("New Maintenance Scheduled");
   const [location, setLocation] = useState<string>("");
@@ -90,6 +90,11 @@ const VSOAssistant: React.FC = () => {
   const [endTime, setEndTime] = useState<string>("00:00");
   const [additionalWindows, setAdditionalWindows] = useState<MaintenanceWindow[]>([]);
   const [userEmail, setUserEmail] = useState<string>("");
+  const [cc, setCc] = useState<string>("");
+
+  // simple validation state
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [showValidation, setShowValidation] = useState<boolean>(false);
 
   // Try to detect signed-in user's email from App Service/Static Web Apps auth
   useEffect(() => {
@@ -148,6 +153,7 @@ const VSOAssistant: React.FC = () => {
   const [sendLoading, setSendLoading] = useState<boolean>(false);
   const [sendSuccess, setSendSuccess] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [showSendSuccessDialog, setShowSendSuccessDialog] = useState<boolean>(false);
 
   // === Diversity options ===
   const diversityOptions: IDropdownOption[] = [
@@ -342,10 +348,10 @@ const VSOAssistant: React.FC = () => {
     field: { color: "#fff" },
   };
 
-  // Time dropdown styles (reuse dropdownStyles with smaller width as needed)
+  // Time dropdown styles (reuse dropdownStyles but allow container width to control it)
   const timeDropdownStyles = {
     ...dropdownStyles,
-    root: { width: 120 },
+    root: { width: '100%' },
   } as const;
 
   // Dark DatePicker styles to avoid white-on-white
@@ -410,30 +416,60 @@ const VSOAssistant: React.FC = () => {
 
   const latLongCombined = useMemo(() => (lat && lng ? `${lat},${lng}` : ""), [lat, lng]);
 
+  // Prefill CC from detected user email when compose opens or userEmail changes
+  useEffect(() => {
+    if (composeOpen && !cc && userEmail) {
+      setCc(userEmail);
+    }
+  }, [composeOpen, userEmail, cc]);
+
+  // Helpers to determine emergency tag state across windows and update subject
+  const anyWindowWithin7Days = (primary: Date | null, windows: MaintenanceWindow[]) => {
+    if (isWithinDays(primary, 7)) return true;
+    for (const w of windows) {
+      if (isWithinDays(w.startDate, 7)) return true;
+    }
+    return false;
+  };
+
+  const addEmergencyTag = () => {
+    if (!/\[EMERGENCY\]/i.test(subject || "")) {
+      setSubject(((subject || "") + " [EMERGENCY]").trim());
+    }
+  };
+
+  const removeEmergencyTag = () => {
+    if (/\[EMERGENCY\]/i.test(subject || "")) {
+      setSubject(((subject || "") as string).replace(/\s*\[EMERGENCY\]\s*/i, "").trim());
+    }
+  };
+
   const emailBody = useMemo(() => {
     const impactStr = impactExpected ? "Yes/True" : "No/False";
-    // Exact preview format requested by user
+
+    // Build comma-separated start/end lists: primary first, then any additional windows
+    const startList: string[] = [];
+    const endList: string[] = [];
+    if (startUtc) startList.push(startUtc);
+    if (endUtc) endList.push(endUtc);
+    additionalWindows.forEach((w) => {
+      const s = formatUtcString(w.startDate, w.startTime);
+      const e = formatUtcString(w.endDate, w.endTime);
+      if (s) startList.push(s);
+      if (e) endList.push(e);
+    });
+
     const parts: string[] = [
       `To: ${EMAIL_TO}`,
-      `From: VSOAssistant@microsoft.com`,
-      `CC: ${userEmail || "*The users alias, ill add this later*"}`,
+  `From: Fibervsoassistant@microsoft.com`,
+      `CC: ${cc || ""}`,
       `Subject: ${subject}`,
       ``,
       `----------------------------------------`,
       `CircuitIds: ${spansComma}`,
-      `StartDatetime: ${startUtc}`,
-      `EndDatetime: ${endUtc}`,
+      `StartDatetime: ${startList.join(', ')}`,
+      `EndDatetime: ${endList.join(', ')}`,
     ];
-
-    if (additionalWindows.length > 0) {
-      additionalWindows.forEach((w, idx) => {
-        const n = idx + 2; // first window is #1
-        const s = formatUtcString(w.startDate, w.startTime);
-        const e = formatUtcString(w.endDate, w.endTime);
-        parts.push(`StartDatetime ${n}: ${s}`);
-        parts.push(`EndDatetime ${n}: ${e}`);
-      });
-    }
 
     parts.push(
       `NotificationType: ${notificationType}`,
@@ -445,52 +481,117 @@ const VSOAssistant: React.FC = () => {
     );
 
     return parts.map((p) => p || "").join("\n");
-  }, [EMAIL_TO, subject, spansComma, startUtc, endUtc, notificationType, location, maintenanceReason, isp, ispTicket, impactExpected, additionalWindows, userEmail]);
+  }, [EMAIL_TO, subject, spansComma, startUtc, endUtc, notificationType, location, maintenanceReason, isp, ispTicket, impactExpected, additionalWindows, cc]);
 
   const canSend = useMemo(() => {
     return (
       selectedSpans.length > 0 &&
       !!subject &&
-      !!startUtc &&
-      !!endUtc &&
+      !!startDate && !!startTime &&
+      !!endDate && !!endTime &&
       !!location &&
       !!isp &&
-      !!notificationType &&
-      !!maintenanceReason
+      !!ispTicket &&
+      (impactExpected === true || impactExpected === false) &&
+      !!maintenanceReason &&
+      !!(cc && cc.trim())
     );
-  }, [selectedSpans.length, subject, startUtc, endUtc, location, isp, notificationType, maintenanceReason]);
+  }, [selectedSpans.length, subject, startDate, startTime, endDate, endTime, location, isp, ispTicket, impactExpected, maintenanceReason, cc]);
+
+  const validateCompose = (): boolean => {
+    const errors: Record<string, string> = {};
+    if (!startDate) errors.startDate = "Required";
+    if (!startTime) errors.startTime = "Required";
+    if (!endDate) errors.endDate = "Required";
+    if (!endTime) errors.endTime = "Required";
+    if (!location?.trim()) errors.location = "Required";
+    if (!isp?.trim()) errors.isp = "Required";
+    if (!ispTicket?.trim()) errors.ispTicket = "Required";
+    if (!(impactExpected === true || impactExpected === false)) errors.impactExpected = "Required";
+    if (!maintenanceReason?.trim()) errors.maintenanceReason = "Required";
+    if (!cc?.trim()) errors.cc = "Required";
+    setFieldErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const friendlyFieldNames: Record<string, string> = {
+    startDate: "Start Date",
+    startTime: "Start Time",
+    endDate: "End Date",
+    endTime: "End Time",
+    location: "Location",
+    isp: "ISP",
+    ispTicket: "ISP Ticket",
+    impactExpected: "Impact Expected",
+    maintenanceReason: "Maintenance Reason",
+    cc: "CC",
+    subject: "Subject",
+  };
 
   const handleSend = async () => {
+    // Enable showing validation UI once the user attempts to send
+    setShowValidation(true);
+    if (!validateCompose()) {
+      // scroll to top so the validation summary is visible
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+    // Clear validation UI if passed
+    setShowValidation(false);
     setSendError(null);
     setSendSuccess(null);
     setSendLoading(true);
     try {
+      // Build comma-separated StartDatetime and EndDatetime (primary + any additional)
+      const startList: string[] = [];
+      const endList: string[] = [];
+      if (startUtc) startList.push(startUtc);
+      if (endUtc) endList.push(endUtc);
+      additionalWindows.forEach((w) => {
+        const s = formatUtcString(w.startDate, w.startTime);
+        const e = formatUtcString(w.endDate, w.endTime);
+        if (s) startList.push(s);
+        if (e) endList.push(e);
+      });
+
       const payload = {
-        to: EMAIL_TO,
-          cc: userEmail ? [userEmail] : [],
-        subject,
-        body: emailBody,
-        metadata: {
-          notificationType,
-          location,
-          maintenanceReason,
-          latLong: latLongCombined,
-          isp,
-          ispTicket,
-          impactExpected,
-          startUtc,
-          endUtc,
-          spans: selectedSpans,
-          region: rackDC || facilityCodeA,
-        },
+        FacilityCodeA: facilityCodeA || "",
+        Diversity:
+          (() => {
+            const raw = (diversity || "").toString();
+            if (!raw) return "";
+            const parsed = raw.split(",")[0].trim().replace(/,$/, "");
+            return parsed.replace(/[^A-Za-z0-9 ]/g, "").trim() || "";
+          })(),
+        SpliceRackA: spliceRackA || "",
+        Stage: "2",
+        CC: cc || "",
+        Subject: subject || "",
+        CircuitIds: spansComma || "",
+        StartDatetime: startList.join(', '),
+        EndDatetime: endList.join(', '),
+        LatLong: latLongCombined || "",
+        NotificationType: notificationType || "",
+        MaintenanceReason: maintenanceReason || "",
+        Location: location || "",
+        ISP: isp || "",
+        ISPTicket: ispTicket || "",
+        ImpactExpected: impactExpected ? "True" : "False",
       };
+
       const resp = await fetch(EMAIL_LOGIC_APP_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      setSendSuccess("Email sent successfully.");
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => ``);
+        throw new Error(`HTTP ${resp.status} ${text}`);
+      }
+
+  setSendSuccess("Request submitted to Logic App successfully.");
+  setShowSendSuccessDialog(true);
     } catch (e: any) {
       setSendError(e?.message || "Failed to send email.");
     } finally {
@@ -747,14 +848,15 @@ const VSOAssistant: React.FC = () => {
 
             {/* policy-info removed per user request */}
 
-            {sendSuccess && (
-              <MessageBar messageBarType={MessageBarType.success} isMultiline={false}>
-                {sendSuccess}
-              </MessageBar>
-            )}
+            {/* success is shown as a dialog to match Emergency UX */}
             {sendError && (
               <MessageBar messageBarType={MessageBarType.error} isMultiline={false}>
                 {sendError}
+              </MessageBar>
+            )}
+            {showValidation && Object.keys(fieldErrors).length > 0 && (
+              <MessageBar messageBarType={MessageBarType.error} isMultiline={false}>
+                Please complete the required fields: {Object.keys(fieldErrors).map(k => friendlyFieldNames[k] || k).join(', ')}
               </MessageBar>
             )}
 
@@ -789,19 +891,48 @@ const VSOAssistant: React.FC = () => {
               </DialogFooter>
             </Dialog>
 
+            <Dialog
+              hidden={!showSendSuccessDialog}
+              onDismiss={() => setShowSendSuccessDialog(false)}
+              dialogContentProps={{
+                type: DialogType.normal,
+                title: 'Email Sent',
+                subText: 'Email has been sent successfully.'
+              }}
+              modalProps={{ isBlocking: false }}
+            >
+              <DialogFooter>
+                <PrimaryButton text="Start Over" onClick={() => { setComposeOpen(false); setShowSendSuccessDialog(false); }} />
+                <DefaultButton text="Close" onClick={() => setShowSendSuccessDialog(false)} />
+              </DialogFooter>
+            </Dialog>
+
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 2 }}>
                     <TextField
                       label="Subject"
                       placeholder="[region] Maintenance scheduled in <region> Contractor:  Lead Engineer:"
                       value={subject}
                       onChange={(_, v) => setSubject(v || "")}
                       styles={textFieldStyles}
+                      required
+                      errorMessage={showValidation ? fieldErrors.subject : undefined}
                     />
                   </div>
-                  <div style={{ width: 320 }}>
+                  <div style={{ flex: 1 }}>
+                    <TextField
+                      label="CC"
+                      placeholder="name@contoso.com"
+                      value={cc}
+                      onChange={(_, v) => setCc(v || "")}
+                      styles={textFieldStyles}
+                      required
+                      errorMessage={showValidation ? fieldErrors.cc : undefined}
+                    />
+                  </div>
+                  <div style={{ width: 320, flexShrink: 0 }}>
                     <Dropdown
                       label="Notification Type"
                       options={[
@@ -813,13 +944,13 @@ const VSOAssistant: React.FC = () => {
                       selectedKey={notificationType}
                       onChange={(_, opt) => opt && setNotificationType(opt.key.toString())}
                       styles={dropdownStyles}
+                      required
                     />
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                    <div>
+                <div className="compose-datetime-row">
+                    <div className="dt-field">
                       <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date (UTC)</Text>
                       <DatePicker
                         placeholder="Select start date"
@@ -831,144 +962,175 @@ const VSOAssistant: React.FC = () => {
                             setStartWarning(
                               "You have selected a date less than 7 days in advance. If this is required please press confirm to continue and the email will be updated with the Emergency Tag."
                             );
-                            setStartWarning(
-                              "You have selected a date less than 7 days in advance. If this is required please press confirm to continue and the email will be updated with the Emergency Tag."
-                            );
                             setPendingEmergency(true);
                             setShowEmergencyDialog(true);
                           } else {
                             setStartWarning(null);
                             setPendingEmergency(false);
+                            // If there are no windows (primary + additional) within 7 days, remove the emergency tag
+                            if (!anyWindowWithin7Days(selected, additionalWindows)) removeEmergencyTag();
                           }
                         }}
                         styles={datePickerStyles}
+                        isRequired
+                        aria-label="Start Date (UTC)"
                       />
+                      {showValidation && fieldErrors.startDate ? (
+                        <Text styles={{ root: { color: '#a80000', fontSize: 12 } }}>Required</Text>
+                      ) : null}
                     </div>
-                    <div>
+
+                    <div className="dt-time">
                       <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time (UTC)</Text>
                       <Dropdown
                         options={timeOptions}
                         selectedKey={startTime}
                         onChange={(_, opt) => opt && setStartTime(opt.key.toString())}
                         styles={timeDropdownStyles}
+                        required
+                        errorMessage={showValidation ? fieldErrors.startTime : undefined}
                       />
                     </div>
-                  </div>
 
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                    <div>
+                    <div className="dt-field">
                       <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date (UTC)</Text>
                       <DatePicker
                         placeholder="Select end date"
                         value={endDate || undefined}
                         onSelectDate={(d) => setEndDate(d || null)}
                         styles={datePickerStyles}
+                        isRequired
+                        aria-label="End Date (UTC)"
                       />
+                      {showValidation && fieldErrors.endDate ? (
+                        <Text styles={{ root: { color: '#a80000', fontSize: 12 } }}>Required</Text>
+                      ) : null}
                     </div>
-                    <div>
+
+                    <div className="dt-time">
                       <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time (UTC)</Text>
                       <Dropdown
                         options={timeOptions}
                         selectedKey={endTime}
                         onChange={(_, opt) => opt && setEndTime(opt.key.toString())}
                         styles={timeDropdownStyles}
+                        required
+                        errorMessage={showValidation ? fieldErrors.endTime : undefined}
                       />
                     </div>
+
+                    <div className="dt-actions">
+                      <button type="button" className="tiny-icon-btn add-window-btn" aria-label="Add Window" onClick={addWindow} title="Add Window">
+                        <span className="glyph">+</span>
+                      </button>
+                    </div>
                 </div>
-              </div>
 
-              {/* Additional maintenance windows (+ / -) */}
+              {/* Additional maintenance windows */}
               <div style={{ marginTop: 8 }}>
-                <button className="sleek-btn optical" onClick={addWindow}>+ Add Window</button>
                 {additionalWindows.map((w, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'flex-start' }}>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                      <div>
-                        <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date (UTC)</Text>
-                        <DatePicker
-                          placeholder="Select start date"
-                          value={w.startDate || undefined}
-                          onSelectDate={(d) => {
-                            setAdditionalWindows((arr) => {
-                              const next = [...arr];
-                              next[i] = { ...next[i], startDate: d || null };
-                              return next;
-                            });
-                          }}
-                          styles={datePickerStyles}
-                        />
-                      </div>
-                      <div>
-                        <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time (UTC)</Text>
-                        <Dropdown
-                          options={timeOptions}
-                          selectedKey={w.startTime}
-                          onChange={(_, opt) => opt && setAdditionalWindows((arr) => {
+                  <div key={i} className="compose-datetime-row additional-window">
+                    <div className="dt-field">
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date (UTC)</Text>
+                      <DatePicker
+                        placeholder="Select start date"
+                        value={w.startDate || undefined}
+                        onSelectDate={(d) => {
+                          const selected = d || null;
+                          setAdditionalWindows((arr) => {
                             const next = [...arr];
-                            next[i] = { ...next[i], startTime: opt.key.toString() };
+                            next[i] = { ...next[i], startDate: selected };
                             return next;
-                          })}
-                          styles={timeDropdownStyles}
-                        />
-                      </div>
-                    </div>
+                          });
 
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                      <div>
-                        <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date (UTC)</Text>
-                        <DatePicker
-                          placeholder="Select end date"
-                          value={w.endDate || undefined}
-                          onSelectDate={(d) => {
-                            setAdditionalWindows((arr) => {
-                              const next = [...arr];
-                              next[i] = { ...next[i], endDate: d || null };
-                              return next;
-                            });
-                          }}
-                          styles={datePickerStyles}
-                        />
-                      </div>
-                      <div>
-                        <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time (UTC)</Text>
-                        <Dropdown
-                          options={timeOptions}
-                          selectedKey={w.endTime}
-                          onChange={(_, opt) => opt && setAdditionalWindows((arr) => {
+                          if (isWithinDays(selected, 7)) {
+                            setStartWarning(
+                              "You have selected a date less than 7 days in advance. If this is required please press confirm to continue and the email will be updated with the Emergency Tag."
+                            );
+                            setPendingEmergency(true);
+                            setShowEmergencyDialog(true);
+                          } else {
+                            // Re-evaluate across primary + updated additional windows
+                            const updated = additionalWindows.map((w, idx) => (idx === i ? { ...w, startDate: selected } : w));
+                            if (!anyWindowWithin7Days(startDate, updated)) {
+                              setStartWarning(null);
+                              setPendingEmergency(false);
+                              removeEmergencyTag();
+                            }
+                          }
+                        }}
+                        styles={datePickerStyles}
+                      />
+                    </div>
+                    <div className="dt-time">
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time (UTC)</Text>
+                      <Dropdown
+                        options={timeOptions}
+                        selectedKey={w.startTime}
+                        onChange={(_, opt) => opt && setAdditionalWindows((arr) => {
+                          const next = [...arr];
+                          next[i] = { ...next[i], startTime: opt.key.toString() };
+                          return next;
+                        })}
+                        styles={timeDropdownStyles}
+                      />
+                    </div>
+                    <div className="dt-field">
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date (UTC)</Text>
+                      <DatePicker
+                        placeholder="Select end date"
+                        value={w.endDate || undefined}
+                        onSelectDate={(d) => {
+                          setAdditionalWindows((arr) => {
                             const next = [...arr];
-                            next[i] = { ...next[i], endTime: opt.key.toString() };
+                            next[i] = { ...next[i], endDate: d || null };
                             return next;
-                          })}
-                          styles={timeDropdownStyles}
-                        />
-                      </div>
+                          });
+                        }}
+                        styles={datePickerStyles}
+                      />
                     </div>
-
-                    <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                      <button className="sleek-btn optical" onClick={() => removeWindow(i)}>- Remove</button>
+                    <div className="dt-time">
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time (UTC)</Text>
+                      <Dropdown
+                        options={timeOptions}
+                        selectedKey={w.endTime}
+                        onChange={(_, opt) => opt && setAdditionalWindows((arr) => {
+                          const next = [...arr];
+                          next[i] = { ...next[i], endTime: opt.key.toString() };
+                          return next;
+                        })}
+                        styles={timeDropdownStyles}
+                      />
+                    </div>
+                    <div className="dt-actions">
+                      {/* only show a compact remove button for additional windows */}
+                      <button type="button" className="tiny-icon-btn remove-window-btn" aria-label={`Remove window ${i + 2}`} title="Remove Window" onClick={() => removeWindow(i)}>
+                        <span className="glyph">−</span>
+                      </button>
                     </div>
                   </div>
                 ))}
               </div>
 
-              <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+                <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
                 <div style={{ flex: 1 }}>
-                  <TextField label="Location" value={location} onChange={(_, v) => setLocation(v || "")} styles={textFieldStyles} />
+                  <TextField label="Location" value={location} onChange={(_, v) => setLocation(v || "")} styles={textFieldStyles} required errorMessage={showValidation ? fieldErrors.location : undefined} />
                 </div>
-                  <div style={{ width: 140 }}>
-                    <TextField label="Latitude" value={lat} onChange={(_, v) => setLat((v || '').trim())} styles={textFieldStyles} />
-                  </div>
-                  <div style={{ width: 140 }}>
-                    <TextField label="Longitude" value={lng} onChange={(_, v) => setLng((v || '').trim())} styles={textFieldStyles} />
-                  </div>
+                <div style={{ flex: 1 }}>
+                  <TextField label="Latitude" value={lat} onChange={(_, v) => setLat((v || '').trim())} styles={textFieldStyles} />
                 </div>
+                <div style={{ flex: 1 }}>
+                  <TextField label="Longitude" value={lng} onChange={(_, v) => setLng((v || '').trim())} styles={textFieldStyles} />
+                </div>
+              </div>
 
                 <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'flex-end' }}>
                   <div style={{ flex: 1 }}>
-                    <TextField label="ISP" value={isp} onChange={(_, v) => setIsp(v || "")} styles={textFieldStyles} />
+                    <TextField label="ISP" value={isp} onChange={(_, v) => setIsp(v || "")} styles={textFieldStyles} required errorMessage={showValidation ? fieldErrors.isp : undefined} />
                   </div>
-                  <div style={{ width: 260 }}>
-                    <TextField label="ISP Ticket / Change ID" value={ispTicket} onChange={(_, v) => setIspTicket(v || "")} styles={textFieldStyles} />
+                  <div style={{ flex: 1 }}>
+                    <TextField label="ISP Ticket / Change ID" value={ispTicket} onChange={(_, v) => setIspTicket(v || "")} styles={textFieldStyles} required errorMessage={showValidation ? fieldErrors.ispTicket : undefined} />
                   </div>
                   <div style={{ width: 200 }}>
                     <Dropdown
@@ -977,6 +1139,8 @@ const VSOAssistant: React.FC = () => {
                       selectedKey={impactExpected ? "true" : "false"}
                       onChange={(_, opt) => opt && setImpactExpected(opt.key === "true")}
                       styles={dropdownStyles}
+                      required
+                      errorMessage={showValidation ? fieldErrors.impactExpected : undefined}
                     />
                   </div>
                 </div>
@@ -1007,6 +1171,8 @@ const VSOAssistant: React.FC = () => {
                   // limit to a reasonable amount
                   maxLength={2000}
                   aria-label="Reason for Maintenance"
+                  required
+                  errorMessage={showValidation ? fieldErrors.maintenanceReason : undefined}
                 />
 
                 <div className="reason-counter" aria-hidden style={{ position: 'absolute', right: 10, bottom: 8, fontSize: 12 }}>

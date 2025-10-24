@@ -6,33 +6,33 @@ import {
   Text,
   TextField,
   PrimaryButton,
+  IconButton,
   Spinner,
   SpinnerSize,
   MessageBar,
   MessageBarType,
-  IconButton,
 } from "@fluentui/react";
-import { saveAs } from "file-saver";
 import * as XLSX from "xlsx";
-import "../Theme.css"; 
-
-initializeIcons();
+import { saveAs } from "file-saver";
 
 export default function UIDLookup() {
+  initializeIcons();
   const location = useLocation();
   const navigate = useNavigate();
+
   const [uid, setUid] = useState<string>("");
-  const [lastSearched, setLastSearched] = useState<string>("");
-  const [history, setHistory] = useState<string[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
   const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [history, setHistory] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem("uidHistory");
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [lastSearched, setLastSearched] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("uidHistory") || "[]");
-    setHistory(saved);
-  }, []);
-
   useEffect(() => {
     localStorage.setItem("uidHistory", JSON.stringify(history.slice(0, 10)));
   }, [history]);

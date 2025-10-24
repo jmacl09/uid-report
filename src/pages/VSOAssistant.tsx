@@ -155,6 +155,34 @@ const VSOAssistant: React.FC = () => {
   const [sendError, setSendError] = useState<string | null>(null);
   const [showSendSuccessDialog, setShowSendSuccessDialog] = useState<boolean>(false);
 
+  const resetForm = () => {
+    // Close compose and clear all compose-related state so form is empty next time
+    setComposeOpen(false);
+    setSelectedSpans([]);
+    setSubject("");
+    setNotificationType("New Maintenance Scheduled");
+    setLocation("");
+    setLat("");
+    setLng("");
+    setIsp("");
+    setIspTicket("");
+    setMaintenanceReason("");
+    setImpactExpected(true);
+    setStartDate(null);
+    setStartTime("00:00");
+    setEndDate(null);
+    setEndTime("00:00");
+    setAdditionalWindows([]);
+    setCc("");
+    setFieldErrors({});
+    setShowValidation(false);
+    setSendError(null);
+    setSendSuccess(null);
+    setShowSendSuccessDialog(false);
+    setStartWarning(null);
+    setPendingEmergency(false);
+  };
+
   // === Diversity options ===
   const diversityOptions: IDropdownOption[] = [
     { key: "West", text: "West, West 1, West 2" },
@@ -842,7 +870,7 @@ const VSOAssistant: React.FC = () => {
         {composeOpen && (
           <div className="table-container compose-container" style={{ marginTop: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <IconButton iconProps={{ iconName: 'Back' }} title="Back" ariaLabel="Back" onClick={() => setComposeOpen(false)} />
+              <IconButton className="back-button" iconProps={{ iconName: 'Back' }} title="Back" ariaLabel="Back" onClick={() => setComposeOpen(false)} />
               <div className="section-title" style={{ margin: 0 }}>Compose Maintenance Email</div>
             </div>
 
@@ -900,7 +928,7 @@ const VSOAssistant: React.FC = () => {
               modalProps={{ isBlocking: false }}
             >
               <DialogFooter>
-                <PrimaryButton text="Start Over" onClick={() => { setComposeOpen(false); setShowSendSuccessDialog(false); }} />
+                <PrimaryButton text="Start Over" onClick={() => { resetForm(); /* navigate to VSO home */ window.location.href = "https://optical360.net/vso"; }} />
                 <DefaultButton text="Close" onClick={() => setShowSendSuccessDialog(false)} />
               </DialogFooter>
             </Dialog>

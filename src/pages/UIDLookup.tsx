@@ -23,6 +23,7 @@ export default function UIDLookup() {
   const [uid, setUid] = useState<string>("");
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [showTip, setShowTip] = useState<boolean>(true);
   const [history, setHistory] = useState<string[]>(() => {
     try {
       const raw = localStorage.getItem("uidHistory");
@@ -300,8 +301,8 @@ export default function UIDLookup() {
       {isInitialView ? (
       <div className="vso-form-container glow" style={{ width: "80%", maxWidth: 800 }}>
         <div className="banner-title">
-          <span className="title-text">UID Lookup</span>
-          <span className="title-sub">The Ulitimate UID Lookup Tool</span>
+          <span className="title-text">UID Assistant</span>
+          <span className="title-sub">The Ultimate UID Assistant Tool</span>
         </div>
 
         <div style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "center" }}>
@@ -398,6 +399,33 @@ export default function UIDLookup() {
 
       {data && (
         <>
+            {showTip && (
+              <div style={{ marginBottom: 6, display: 'flex', justifyContent: 'center' }}>
+                <MessageBar
+                  messageBarType={MessageBarType.success}
+                  isMultiline={false}
+                  onDismiss={() => setShowTip(false)}
+                  dismissButtonAriaLabel="Close"
+                  styles={{
+                    root: {
+                      background: 'linear-gradient(180deg,#e6fff1,#d7fbe8)',
+                      border: '1px solid #9fe9b8',
+                      color: '#033a16',
+                      padding: '6px 12px',
+                      borderRadius: 8,
+                      width: '100%',
+                      maxWidth: 900,
+                      boxShadow: '0 6px 18px rgba(2,72,35,0.06)',
+                      fontSize: 13,
+                      lineHeight: '1.1'
+                    },
+                    icon: { color: '#057a3a' }
+                  }}
+                >
+                  Tip: Click "Copy All" to copy this UID's information as a neatly formatted report — then paste it into OneNote or your notes app to keep.
+                </MessageBar>
+              </div>
+            )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 8 }}>
             <IconButton iconProps={{ iconName: 'Copy' }} title="Copy All" ariaLabel="Copy All" onClick={copyAll} />
             <IconButton iconProps={{ iconName: 'ExcelLogo' }} title="Export to Excel" ariaLabel="Export to Excel" onClick={exportExcel} />

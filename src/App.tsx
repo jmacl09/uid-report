@@ -4,6 +4,9 @@ import { Nav } from "@fluentui/react";
 import Dashboard from "./pages/Dashboard";
 import UIDLookup from "./pages/UIDLookup";
 import VSOAssistant from "./pages/VSOAssistant";
+import DCATAssistant from "./pages/DCATAssistant";
+import WirecheckAutomation from "./pages/WirecheckAutomation";
+import SettingsPage from "./pages/Settings";
 import logo from "./assets/optical360-logo.png";
 import "./Theme.css";
 
@@ -46,12 +49,11 @@ const navLinks = [
   {
     links: [
       { name: "Home", key: "home", icon: "Home", url: "/" },
-      { name: "UID Lookup", key: "uidLookup", icon: "Search", url: "/uid" },
-      { name: "VSO Assistant", key: "vsoAssistant", icon: "Robot", url: "/vso" },
-      { name: "Fiber Spans", key: "fiberSpans", icon: "NetworkTower", url: "#" },
-      { name: "Device Lookup", key: "deviceLookup", icon: "DeviceBug", url: "#" },
-      { name: "Reports", key: "reports", icon: "BarChartVertical", url: "#" },
-      { name: "Settings", key: "settings", icon: "Settings", url: "#" },
+  { name: "UID Assistant", key: "uidAssistant", icon: "Search", url: "/uid" },
+  { name: "VSO Assistant", key: "vsoAssistant", icon: "Robot", url: "/vso" },
+  { name: "DCAT Assistant", key: "dcatAssistant", icon: "CalculatorAddition", url: "/dcat" },
+  { name: "Wirecheck Automation", key: "wirecheck", icon: "Plug", url: "/wirecheck" },
+      { name: "Settings", key: "settings", icon: "Settings", url: "/settings" },
     ],
   },
 ];
@@ -90,7 +92,7 @@ const SidebarNav: React.FC = () => {
           location.pathname === "/"
             ? "home"
             : location.pathname === "/uid"
-            ? "uidLookup"
+            ? "uidAssistant"
             : location.pathname === "/vso"
             ? "vsoAssistant"
             : undefined
@@ -185,6 +187,9 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/uid" element={<UIDLookup />} />
             <Route path="/vso" element={<VSOAssistant />} />
+            <Route path="/dcat" element={<DCATAssistant />} />
+            <Route path="/wirecheck" element={<WirecheckAutomation />} />
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </div>
       </div>

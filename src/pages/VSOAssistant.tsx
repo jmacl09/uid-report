@@ -875,9 +875,7 @@ const VSOAssistant: React.FC = () => {
                   text="Confirm & Mark Emergency"
                   onClick={() => {
                     if (pendingEmergency) {
-                      if (!/\[EMERGENCY\]/i.test(subject || '')) {
-                        setSubject(((subject || '') + ' [EMERGENCY]').trim());
-                      }
+                      addEmergencyTag();
                       setPendingEmergency(false);
                     }
                     setShowEmergencyDialog(false);
@@ -897,7 +895,7 @@ const VSOAssistant: React.FC = () => {
               dialogContentProps={{
                 type: DialogType.normal,
                 title: 'Email Sent',
-                subText: 'Email has been sent successfully.'
+                subText: sendSuccess || 'Email has been sent successfully.'
               }}
               modalProps={{ isBlocking: false }}
             >

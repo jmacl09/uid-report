@@ -14,7 +14,7 @@ const SettingsPage: React.FC = () => {
 
   useEffect(() => {
     applyTheme(theme, animations, compact);
-  }, []);
+  }, [theme, animations, compact]);
 
   const applyTheme = (t: string, anim: boolean, comp: boolean) => {
     try {

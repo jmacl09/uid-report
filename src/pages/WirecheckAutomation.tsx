@@ -3,7 +3,7 @@ import { PrimaryButton, Dialog, DialogType, DialogFooter, DefaultButton, Message
 import '../Theme.css';
 
 const WirecheckAutomation: React.FC = () => {
-  const [description, _setDescription] = useState<string>(() => {
+  const [description] = useState<string>(() => {
     try {
       return localStorage.getItem('wirecheckDescription') || 'Add a short description about Wirecheck Automation here.';
     } catch (e) {
@@ -11,6 +11,8 @@ const WirecheckAutomation: React.FC = () => {
     }
   });
 
+  // The bookmarklet contains many escaped characters and a script: URL. Disable related lint rules for this block.
+  /* eslint-disable no-script-url, no-useless-escape */
   const [code] = useState<string>(() => {
     try {
       return (
@@ -21,6 +23,8 @@ const WirecheckAutomation: React.FC = () => {
       return `// Add your example commands or code snippets here`;
     }
   });
+  /* eslint-enable no-script-url, no-useless-escape */
+
   const [installOpen, setInstallOpen] = useState<boolean>(false);
 
   useEffect(() => {

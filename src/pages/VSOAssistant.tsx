@@ -79,8 +79,7 @@ const VSOAssistant: React.FC = () => {
   // === Stage 2: Compose Email state ===
   const [composeOpen, setComposeOpen] = useState<boolean>(false);
   const EMAIL_TO = "opticaldri@microsoft.com"; // fixed
-  // Use secure backend function proxy to avoid exposing Logic App signature
-  const EMAIL_LOGIC_APP_URL = "/api/vso/email";
+  const EMAIL_LOGIC_APP_URL = "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net:443/api/VSO/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=6ViXNM-TmW5F7Qd9_e4fz3IhRNqmNzKwovWvcmuNJto";
   const [subject, setSubject] = useState<string>("");
   const [notificationType, setNotificationType] = useState<string>("New Maintenance Scheduled");
   const [location, setLocation] = useState<string>("");
@@ -367,8 +366,8 @@ const VSOAssistant: React.FC = () => {
     setSearchDone(false);
 
     try {
-      // Stage 1 request via backend proxy
-      const logicAppUrl = "/api/vso/email";
+      const logicAppUrl =
+        "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net:443/api/VSO/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=6ViXNM-TmW5F7Qd9_e4fz3IhRNqmNzKwovWvcmuNJto";
 
       const payload = {
         FacilityCodeA: facilityCodeA,

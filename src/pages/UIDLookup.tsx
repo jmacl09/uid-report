@@ -846,14 +846,14 @@ export default function UIDLookup() {
   // mark start time for adaptive timing
   const t0 = Date.now();
 
-  // Secure proxy call to Azure Function (keeps Logic App signature out of client)
-  const proxyUrl = `/api/uid/${encodeURIComponent(query)}`;
+  // Direct Logic App call (no local proxy)
+  const directUrl = `https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ&UID=${encodeURIComponent(query)}`;
 
     try {
       // Helper to verify JSON response
       const isJson = (r: Response) => /application\/json/i.test(r.headers.get('content-type') || '');
 
-  const res = await fetch(proxyUrl, { redirect: 'follow' });
+      const res = await fetch(directUrl, { redirect: 'follow' });
       if (!(res.ok && isJson(res))) {
         const text = await res.text().catch(() => '');
         const statusPart = `HTTP ${res.status}`;

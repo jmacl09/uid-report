@@ -44,22 +44,3 @@ You don’t have to ever use `eject`. The curated feature set is suitable for sm
 You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
 
 To learn React, check out the [React documentation](https://reactjs.org/).
-
-## Secure backend proxies (no secrets in client)
-
-This app uses Azure Functions as secure proxies so that signed Logic App URLs are never exposed in client code or static configuration files. Two function endpoints are used:
-
-- GET `/api/uid/{uid}` → Proxies UID lookup to the upstream Logic App. Configure `LOGICAPP_URL` in the Functions app settings.
-- POST `/api/vso/email` → Proxies VSO Assistant Stage 1 (span search) and Stage 2 (email send). Configure `VSO_LOGICAPP_URL` in the Functions app settings.
-
-Local development:
-
-- Do NOT commit secrets. Add them to `functions/local.settings.json` (excluded from git by default):
-	- `LOGICAPP_URL`: upstream UID Logic App trigger URL (with signature)
-	- `VSO_LOGICAPP_URL`: upstream VSO Logic App trigger URL (with signature)
-- Start the Functions host alongside the React app.
-
-Deployment:
-
-- Set the same settings (`LOGICAPP_URL`, `VSO_LOGICAPP_URL`) in your Azure Functions configuration or Static Web Apps linked functions.
-- Ensure build artifacts (the `build/` folder) are not tracked in git.

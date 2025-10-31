@@ -4,12 +4,7 @@
     "exclude": ["/.auth/*"]
   },
   "routes": [
-    {
-      "route": "/api/uid",
-      "allowedRoles": ["authenticated"],
-      "methods": ["GET"],
-      "rewrite": "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ"
-    },
+    
     {
       "route": "/login",
       "rewrite": "/.auth/login/aad"

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   ComboBox,
   IComboBox,
@@ -19,10 +20,12 @@ import {
   TextField,
   Text,
   DatePicker,
+  initializeIcons,
 } from "@fluentui/react";
 import "../Theme.css";
 import datacenterOptions from "../data/datacenterOptions";
 import { getRackElevationUrl } from "../data/MappedREs";
+import VSOCalendar, { VsoCalendarEvent } from "../components/VSOCalendar";
 
 interface SpanData {
   SpanID: string;
@@ -48,6 +51,11 @@ interface MaintenanceWindow {
 }
 
 const VSOAssistant: React.FC = () => {
+  const navigate = useNavigate();
+  // Ensure Fluent UI icon font is available for this page
+  useEffect(() => {
+    try { initializeIcons(); } catch {}
+  }, []);
   const [facilityCodeA, setFacilityCodeA] = useState<string>("");
   const [diversity, setDiversity] = useState<string>();
   const [spliceRackA, setSpliceRackA] = useState<string>();
@@ -92,6 +100,24 @@ const VSOAssistant: React.FC = () => {
   const [userEmail, setUserEmail] = useState<string>("");
   const [cc, setCc] = useState<string>("");
 
+  // === Calendar state (persisted locally) ===
+  const [vsoEvents, setVsoEvents] = useState<VsoCalendarEvent[]>([]);
+  const [calendarDate, setCalendarDate] = useState<Date | null>(null);
+
+  // Ensure unique IDs across sessions
+  const ensureUnique = (arr: VsoCalendarEvent[]) => {
+    const seen = new Set<string>();
+    const out: VsoCalendarEvent[] = [];
+    for (const e of arr) {
+      const id = String(e.id || "");
+      if (!id) continue;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(e);
+    }
+    return out;
+  };
+
   // simple validation state
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showValidation, setShowValidation] = useState<boolean>(false);
@@ -103,6 +129,51 @@ const VSOAssistant: React.FC = () => {
       const stored = localStorage.getItem("loggedInEmail");
       if (stored && stored.length > 3) setUserEmail(stored);
     } catch (e) {}
+
+    // Load persisted calendar events (with backup fallback)
+    try {
+      const raw = localStorage.getItem("vsoEvents");
+      const rawBackup = localStorage.getItem("vsoEventsBackup");
+      const loadList = (txt?: string | null) => {
+        if (!txt) return [] as any[];
+        try { const a = JSON.parse(txt); return Array.isArray(a) ? a : []; } catch { return []; }
+      };
+      const arr = loadList(raw);
+      const arrBackup = loadList(rawBackup);
+      const source = (arr && arr.length ? arr : arrBackup);
+      if (source && source.length) {
+        const parsed: VsoCalendarEvent[] = (source || []).map((e) => {
+          // Prefer date-only reconstruction when available to avoid timezone drift
+          const parseYmd = (ymd?: string, fallback?: string) => {
+            try {
+              if (ymd && /^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
+                const [yy, mm, dd] = ymd.split('-').map((x: string) => parseInt(x, 10));
+                return new Date(yy, (mm || 1) - 1, dd || 1);
+              }
+            } catch {}
+            if (fallback) {
+              const d = new Date(fallback);
+              // Normalize to local midnight to keep it on the intended day
+              return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+            }
+            return new Date();
+          };
+          const start = parseYmd(e.startYMD, e.start);
+          const end = parseYmd(e.endYMD, e.end);
+          return { ...e, start, end } as VsoCalendarEvent;
+        });
+        setVsoEvents(ensureUnique(parsed));
+      }
+    } catch {}
+
+    // Restore last viewed calendar month if available
+    try {
+      const saved = localStorage.getItem("vsoCalendarDate");
+      if (saved) {
+        const d = new Date(saved);
+        setCalendarDate(new Date(d.getFullYear(), d.getMonth(), 1));
+      }
+    } catch {}
 
     const fetchUserEmail = async () => {
       try {
@@ -142,6 +213,54 @@ const VSOAssistant: React.FC = () => {
     fetchUserEmail();
   }, []);
 
+  // Persist calendar events whenever they change
+  useEffect(() => {
+    try {
+      const serializable = vsoEvents.map((e) => ({
+        ...e,
+        // Persist both ISO and date-only for robust reload across timezones
+        start: e.start.toISOString(),
+        end: e.end.toISOString(),
+        startYMD: `${e.start.getFullYear()}-${String(e.start.getMonth() + 1).padStart(2, '0')}-${String(e.start.getDate()).padStart(2, '0')}`,
+        endYMD: `${e.end.getFullYear()}-${String(e.end.getMonth() + 1).padStart(2, '0')}-${String(e.end.getDate()).padStart(2, '0')}`,
+      }));
+      localStorage.setItem("vsoEvents", JSON.stringify(serializable));
+      // Also write a backup copy to guard against accidental clears/overwrites
+      localStorage.setItem("vsoEventsBackup", JSON.stringify(serializable));
+      localStorage.setItem("vsoEventsLastSaved", String(Date.now()));
+    } catch {}
+  }, [vsoEvents]);
+
+  // Watch for external/local changes to storage and auto-restore if needed
+  useEffect(() => {
+    const onStorage = (ev: StorageEvent) => {
+      if (ev.storageArea !== localStorage) return;
+      if (ev.key !== 'vsoEvents') return;
+      try {
+        const primary = localStorage.getItem('vsoEvents');
+        const backup = localStorage.getItem('vsoEventsBackup');
+        const parseList = (txt?: string | null) => {
+          if (!txt) return [] as any[];
+          try { const a = JSON.parse(txt); return Array.isArray(a) ? a : []; } catch { return []; }
+        };
+        const p = parseList(primary);
+        if (p && p.length) return; // still has events; no action
+        const b = parseList(backup);
+        if (b && b.length) {
+          // Rehydrate from backup
+          const restored: VsoCalendarEvent[] = b.map((e: any) => ({
+            ...e,
+            start: new Date(e.start),
+            end: new Date(e.end),
+          }));
+          setVsoEvents(ensureUnique(restored));
+        }
+      } catch {}
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
   const addWindow = () =>
     setAdditionalWindows((w) => [
       ...w,
@@ -154,6 +273,9 @@ const VSOAssistant: React.FC = () => {
   const [sendSuccess, setSendSuccess] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [showSendSuccessDialog, setShowSendSuccessDialog] = useState<boolean>(false);
+  // Calendar event dialog
+  const [showEventDialog, setShowEventDialog] = useState<boolean>(false);
+  const [activeEventId, setActiveEventId] = useState<string | null>(null);
 
   const resetForm = () => {
     // Close compose and clear all compose-related state so form is empty next time
@@ -183,8 +305,31 @@ const VSOAssistant: React.FC = () => {
     setPendingEmergency(false);
   };
 
+  // Fully reset page (search + compose) and return to base route
+  const resetAll = () => {
+    resetForm();
+    // Clear search and results
+    setFacilityCodeA("");
+    setDiversity(undefined);
+    setSpliceRackA(undefined);
+    setLoading(false);
+    setResult([]);
+    setSelectedSpans([]);
+    setError(null);
+    setShowAll(false);
+    setRackUrl(undefined);
+    setRackDC(undefined);
+    setDcSearch("");
+    setSearchDone(false);
+    setSortBy("");
+    setSortDir("asc");
+    setComposeOpen(false);
+  };
+
   // === Diversity options ===
   const diversityOptions: IDropdownOption[] = [
+    // Blank option to allow clearing selection
+    { key: "", text: "" },
     { key: "West", text: "West, West 1, West 2" },
     { key: "East", text: "East, East 1, East 2" },
     { key: "North", text: "North" },
@@ -461,8 +606,13 @@ const VSOAssistant: React.FC = () => {
   };
 
   const addEmergencyTag = () => {
-    if (!/\[EMERGENCY\]/i.test(subject || "")) {
-      setSubject(((subject || "") + " [EMERGENCY]").trim());
+    const s = (subject || "").trim();
+    if (!/\[EMERGENCY\]/i.test(s)) {
+      setSubject(`[EMERGENCY] ${s}`.trim());
+    } else if (!/^\s*\[EMERGENCY\]/i.test(s)) {
+      // If tag exists but not at the start, move it to the start
+      const without = s.replace(/\s*\[EMERGENCY\]\s*/i, "").trim();
+      setSubject(`[EMERGENCY] ${without}`.trim());
     }
   };
 
@@ -618,8 +768,80 @@ const VSOAssistant: React.FC = () => {
         throw new Error(`HTTP ${resp.status} ${text}`);
       }
 
-  setSendSuccess("Request submitted to Logic App successfully.");
-  setShowSendSuccessDialog(true);
+      // Add events to calendar (primary + additional windows) as Draft
+      const newEvents: VsoCalendarEvent[] = [];
+      const dcCode = rackDC || facilityCodeA;
+      const spansShort = (() => {
+        if (selectedSpans.length <= 3) return selectedSpans.join(", ");
+        return `${selectedSpans.slice(0, 3).join(", ")} (+${selectedSpans.length - 3} more)`;
+      })();
+      const title = `Fiber Maintenance ${dcCode || ""} - ${spansShort || "Spans"}`.trim();
+      const fullReason = (maintenanceReason || "").trim();
+      const summary = fullReason.slice(0, 160);
+
+      const makeAllDayRange = (d: Date | null) => {
+        if (!d) return null;
+        const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+        const end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1); // exclusive
+        return { start, end };
+      };
+
+      // Primary window
+      const primary = makeAllDayRange(startDate);
+      if (primary) {
+        newEvents.push({
+          id: `vso-${Date.now()}-0-${Math.random().toString(36).slice(2,6)}`,
+          title,
+          start: primary.start,
+          end: primary.end,
+          status: "Draft",
+          summary,
+          maintenanceReason: fullReason,
+          dcCode: dcCode || undefined,
+          spans: [...selectedSpans],
+          startTimeUtc: startTime,
+          endTimeUtc: endTime,
+          subject,
+          notificationType,
+          location,
+          isp,
+          ispTicket,
+          impactExpected,
+        });
+      }
+      // Additional windows
+      additionalWindows.forEach((w, i) => {
+        const r = makeAllDayRange(w.startDate);
+        if (!r) return;
+        newEvents.push({
+          id: `vso-${Date.now()}-${i + 1}-${Math.random().toString(36).slice(2,6)}`,
+          title,
+          start: r.start,
+          end: r.end,
+          status: "Draft",
+          summary,
+          maintenanceReason: fullReason,
+          dcCode: dcCode || undefined,
+          spans: [...selectedSpans],
+          startTimeUtc: w.startTime,
+          endTimeUtc: w.endTime,
+          subject,
+          notificationType,
+          location,
+          isp,
+          ispTicket,
+          impactExpected,
+        });
+      });
+      setVsoEvents((prev) => ensureUnique([...prev, ...newEvents]));
+      // Focus calendar on the first window's month so users see it after reload
+      if (!calendarDate && (startDate || additionalWindows[0]?.startDate)) {
+        const d = startDate || additionalWindows[0]?.startDate || null;
+        if (d) setCalendarDate(new Date(d.getFullYear(), d.getMonth(), 1));
+      }
+
+      setSendSuccess("Request submitted to Logic App successfully.");
+      setShowSendSuccessDialog(true);
     } catch (e: any) {
       setSendError(e?.message || "Failed to send email.");
     } finally {
@@ -720,7 +942,7 @@ const VSOAssistant: React.FC = () => {
           Diversity Path (Optional)
         </Text>
         <Dropdown
-          placeholder="Select a Diversity Path"
+          placeholder=""
           options={diversityOptions}
           calloutProps={{ className: 'combo-dark-callout' }}
           styles={diversityDropdownStyles}
@@ -728,6 +950,11 @@ const VSOAssistant: React.FC = () => {
           onChange={(_, option) => {
             if (!option) return;
             const nextKey = option.key?.toString() ?? "";
+            // Selecting the blank option always clears the selection
+            if (nextKey === "") {
+              setDiversity(undefined);
+              return;
+            }
             // Toggle off if the same diversity option is clicked
             if ((diversity || "") === nextKey) {
               setDiversity(undefined);
@@ -747,9 +974,6 @@ const VSOAssistant: React.FC = () => {
         <div className="form-buttons" style={{ marginTop: 16 }}>
           <button className="submit-btn" onClick={handleSubmit}>
             Submit
-          </button>
-          <button className="help-btn" onClick={() => alert("Coming soon")}>
-            Help
           </button>
         </div>
 
@@ -870,7 +1094,13 @@ const VSOAssistant: React.FC = () => {
         {composeOpen && (
           <div className="table-container compose-container" style={{ marginTop: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <IconButton className="back-button" iconProps={{ iconName: 'Back' }} title="Back" ariaLabel="Back" onClick={() => setComposeOpen(false)} />
+              <IconButton
+                className="back-button"
+                iconProps={{ iconName: 'ChevronLeft' }}
+                title="Back"
+                ariaLabel="Back"
+                onClick={() => setComposeOpen(false)}
+              />
               <div className="section-title" style={{ margin: 0 }}>Compose Maintenance Email</div>
             </div>
 
@@ -928,10 +1158,18 @@ const VSOAssistant: React.FC = () => {
               modalProps={{ isBlocking: false }}
             >
               <DialogFooter>
-                <PrimaryButton text="Start Over" onClick={() => { resetForm(); /* navigate to VSO home */ window.location.href = "https://optical360.net/vso"; }} />
+                <PrimaryButton
+                  text="Start Over"
+                  onClick={() => {
+                    // Reset everything and navigate forcing a refresh key
+                    resetAll();
+                    navigate(`/vso?reset=${Date.now()}`, { replace: true });
+                  }}
+                />
                 <DefaultButton text="Close" onClick={() => setShowSendSuccessDialog(false)} />
               </DialogFooter>
             </Dialog>
+
 
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <div style={{ flex: 1 }}>
@@ -1212,10 +1450,13 @@ const VSOAssistant: React.FC = () => {
               {emailBody}
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
-                <button className="sleek-btn wan" disabled={!canSend || sendLoading} onClick={handleSend}>
-                  {sendLoading ? "Sending..." : "Confirm & Send"}
-                </button>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: 'center', marginTop: 12 }}>
+              <button className="sleek-btn danger" onClick={() => setComposeOpen(false)}>
+                Back
+              </button>
+              <button className="sleek-btn wan" disabled={!canSend || sendLoading} onClick={handleSend}>
+                {sendLoading ? "Sending..." : "Confirm & Send"}
+              </button>
             </div>
           </div>
         )}
@@ -1225,6 +1466,113 @@ const VSOAssistant: React.FC = () => {
         This tool is intended for internal use within Microsoft’s Data Center Operations and Network Delivery environments. Always verify critical data before taking operational action. The information provided is automatically retrieved from validated sources but may not reflect the most recent updates, configurations, or status changes in live systems. Users are responsible for ensuring all details are accurate before proceeding with submitting a VSO. This application is developed and maintained by <b>Josh Maclean</b>, supported by the <b>CIA | Network Delivery</b> team. For for any issues or requests please <a href="https://teams.microsoft.com/l/chat/0/0?users=joshmaclean@microsoft.com" className="uid-click">send a message</a>. 
         </div>
       </div>
+      {/* Big calendar below the card */}
+      <VSOCalendar
+        events={vsoEvents}
+        date={calendarDate || undefined}
+        onNavigate={(d) => {
+          setCalendarDate(d);
+          try { localStorage.setItem("vsoCalendarDate", d.toISOString()); } catch {}
+        }}
+        onEventClick={(ev) => {
+          setActiveEventId(ev.id);
+          setShowEventDialog(true);
+        }}
+      />
+
+      {/* Event Details Dialog - rendered globally so it works from anywhere */}
+      <Dialog
+        hidden={!showEventDialog}
+        onDismiss={() => setShowEventDialog(false)}
+        dialogContentProps={{
+          type: DialogType.normal,
+          title: 'Maintenance Details',
+        }}
+        modalProps={{ isBlocking: false }}
+      >
+        {(() => {
+          const ev = vsoEvents.find((e) => e.id === activeEventId);
+          if (!ev) return null;
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 12 }}>
+                <div style={{ flex: 2 }}>
+                  <Text styles={{ root: { color: '#a6b7c6', fontSize: 12 } }}>Title</Text>
+                  <div style={{ color: '#e6f6ff' }}>{ev.title}</div>
+                </div>
+                <div style={{ width: 240 }}>
+                  <Dropdown
+                    label="Status"
+                    options={[
+                      { key: 'Draft', text: 'Draft' },
+                      { key: 'Approved', text: 'Approved' },
+                      { key: 'Rejected', text: 'Rejected' },
+                    ]}
+                    selectedKey={ev.status}
+                    onChange={(_, opt) => {
+                      if (!opt) return;
+                      const next = opt.key.toString() as any;
+                      setVsoEvents((arr) => arr.map((x) => (x.id === ev.id ? { ...x, status: next } : x)));
+                    }}
+                    styles={{
+                      ...dropdownStyles,
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="equal-tables-row" style={{ gap: 12 }}>
+                <div className="table-container details-fit" style={{ flex: 1 }}>
+                  <div className="section-title">Schedule</div>
+                  <table className="data-table compact details-table">
+                    <tbody>
+                      <tr><td>Day</td><td>{ev.start.toLocaleDateString()}</td></tr>
+                      <tr><td>Time (UTC)</td><td>{ev.startTimeUtc || '--'} - {ev.endTimeUtc || '--'}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="table-container details-fit" style={{ flex: 1 }}>
+                  <div className="section-title">Context</div>
+                  <table className="data-table compact details-table">
+                    <tbody>
+                      <tr><td>DC</td><td>{ev.dcCode || '--'}</td></tr>
+                      <tr><td>Notification</td><td>{ev.notificationType || '--'}</td></tr>
+                      <tr><td>Subject</td><td>{ev.subject || '--'}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="equal-tables-row" style={{ gap: 12 }}>
+                <div className="table-container details-fit" style={{ flex: 1 }}>
+                  <div className="section-title">Location</div>
+                  <table className="data-table compact details-table">
+                    <tbody>
+                      <tr><td>Location</td><td>{ev.location || '--'}</td></tr>
+                      <tr><td>ISP</td><td>{ev.isp || '--'}</td></tr>
+                      <tr><td>ISP Ticket</td><td>{ev.ispTicket || '--'}</td></tr>
+                      <tr><td>Impact Expected</td><td>{ev.impactExpected ? 'Yes/True' : 'No/False'}</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="table-container details-fit" style={{ flex: 1 }}>
+                  <div className="section-title">Spans</div>
+                  <div style={{ padding: 8, color: '#e6f6ff' }}>{(ev.spans || []).join(', ') || '--'}</div>
+                </div>
+              </div>
+
+              <div className="table-container details-fit">
+                <div className="section-title">Reason</div>
+                <div style={{ padding: 8, color: '#dfefff', whiteSpace: 'pre-wrap' }}>{ev.maintenanceReason || ev.summary || '--'}</div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                <DefaultButton text="Close" onClick={() => setShowEventDialog(false)} />
+              </div>
+            </div>
+          );
+        })()}
+      </Dialog>
     </div>
   );
 };

@@ -1,0 +1,10 @@
+local.settings.json
+**/*.md
+node_modules
+bin
+obj
+.vscode
+
+# Ignore stray root-level artifacts (we use the subfoldered function)
+function.json
+projects.js

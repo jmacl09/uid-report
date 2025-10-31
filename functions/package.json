@@ -1,0 +1,12 @@
+{
+  "name": "fibertools-api",
+  "version": "1.0.0",
+  "dependencies": {
+    "@azure/data-tables": "^13.3.0",
+    "node-fetch": "^2.6.9"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "start": "func start"
+  }
+}

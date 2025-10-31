@@ -1,0 +1,9 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "TABLES_ACCOUNT_URL": "https://optical360.table.core.windows.net"
+  },
+  "ConnectionStrings": {}
+}

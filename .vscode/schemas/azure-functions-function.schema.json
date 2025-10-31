@@ -1,0 +1,28 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Azure Functions function.json",
+  "type": "object",
+  "properties": {
+    "bindings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "authLevel": { "type": "string" },
+          "type": { "type": "string" },
+          "direction": { "type": "string" },
+          "name": { "type": "string" },
+          "methods": { "type": "array", "items": { "type": "string" } },
+          "route": { "type": "string" }
+        },
+        "required": ["type", "direction", "name"],
+        "additionalProperties": true
+      }
+    },
+    "disabled": { "type": "boolean" },
+    "scriptFile": { "type": "string" },
+    "entryPoint": { "type": "string" }
+  },
+  "required": ["bindings"],
+  "additionalProperties": true
+}

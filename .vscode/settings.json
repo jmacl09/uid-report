@@ -1,0 +1,23 @@
+{
+    "azureFunctions.deploySubpath": ".",
+    "azureFunctions.postDeployTask": "npm install (functions)",
+    "azureFunctions.projectLanguage": "JavaScript",
+    "azureFunctions.projectRuntime": "~4",
+    "debug.internalConsoleOptions": "neverOpen",
+    "azureFunctions.projectLanguageModel": 4,
+    "azureFunctions.preDeployTask": "npm prune (functions)",
+    // Map Azure Functions function.json to a local schema to avoid remote fetch timeouts
+    "json.schemas": [
+        {
+            "fileMatch": [
+                "/functions/**/function.json",
+                "functions/**/function.json",
+                "/**/functions/**/function.json"
+            ],
+            "url": "/.vscode/schemas/azure-functions-function.schema.json"
+        }
+    ],
+    "json.maxItemsComputed": 10000,
+    // Avoid downloading remote schemas (prevents ETIMEDOUT warnings)
+    "json.schemaDownload.enable": false
+}

@@ -42,7 +42,7 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
     : new Date().toISOString();
 
   // Post to the deployed Projects function (route: /api/projects)
-  const url = `${API_BASE}/projects`;
+  const url = `${API_BASE}/HttpTrigger1`;
 
   const body = {
     category: input.category,

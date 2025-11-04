@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Toggle, Dropdown, IDropdownOption, PrimaryButton } from '@fluentui/react';
+import { Toggle, Dropdown, IDropdownOption, PrimaryButton, TextField, MessageBar, MessageBarType } from '@fluentui/react';
+import { saveToStorage, SaveError } from '../api/saveToStorage';
 import '../Theme.css';
 
 const themeOptions: IDropdownOption[] = [
@@ -11,6 +12,11 @@ const SettingsPage: React.FC = () => {
   const [theme, setTheme] = useState<string>(localStorage.getItem('appTheme') || 'dark');
   const [animations, setAnimations] = useState<boolean>(localStorage.getItem('appAnimations') !== 'false');
   const [compact, setCompact] = useState<boolean>(localStorage.getItem('appCompact') === 'true');
+  // Simple storage test state
+  const [testUid, setTestUid] = useState<string>('99999999999');
+  const [testLoading, setTestLoading] = useState<boolean>(false);
+  const [testOk, setTestOk] = useState<string | null>(null);
+  const [testErr, setTestErr] = useState<string | null>(null);
 
   useEffect(() => {
     applyTheme(theme, animations, compact);
@@ -31,6 +37,25 @@ const SettingsPage: React.FC = () => {
     localStorage.setItem('appCompact', compact ? 'true' : 'false');
     applyTheme(theme, animations, compact);
     alert('Settings saved.');
+  };
+
+  const handleStorageTest = async () => {
+    setTestOk(null); setTestErr(null); setTestLoading(true);
+    try {
+      const uid = (testUid || '').trim() || '99999999999';
+      const email = (() => { try { return localStorage.getItem('loggedInEmail') || ''; } catch { return ''; } })();
+      const resp = await saveToStorage({
+        category: 'Comments',
+        uid,
+        title: 'Test Save',
+        description: `SWA storage test at ${new Date().toISOString()}`,
+        owner: email || 'tester',
+      });
+      setTestOk(resp || 'OK');
+    } catch (e: any) {
+      const msg = e instanceof SaveError ? (e.body || e.message) : (e?.body || e?.message || 'Failed to save');
+      setTestErr(String(msg));
+    } finally { setTestLoading(false); }
   };
 
   return (
@@ -69,6 +94,17 @@ const SettingsPage: React.FC = () => {
 
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
             <PrimaryButton text="Save" onClick={handleSave} />
+          </div>
+
+          {/* Storage save test */}
+          <div style={{ marginTop: 28 }}>
+            <div className="section-title" style={{ margin: '8px 0' }}>Storage save test</div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', maxWidth: 540 }}>
+              <TextField label="UID (for test)" value={testUid} onChange={(_, v) => setTestUid((v||'').replace(/\D/g, '').slice(0, 11))} placeholder="11-digit UID" />
+              <PrimaryButton text={testLoading ? 'Testing…' : 'Run test'} disabled={testLoading} onClick={handleStorageTest} />
+            </div>
+            {testOk && (<div style={{ marginTop: 8 }}><MessageBar messageBarType={MessageBarType.success} isMultiline={false}>Saved successfully: {testOk.slice(0, 200)}</MessageBar></div>)}
+            {testErr && (<div style={{ marginTop: 8 }}><MessageBar messageBarType={MessageBarType.error} isMultiline={false}>{testErr}</MessageBar></div>)}
           </div>
         </div>
       </div>

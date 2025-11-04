@@ -1,4 +1,4 @@
-// Removed unused API_BASE import
+import { API_BASE } from "./config";
 
 export type StorageCategory = "Comments" | "Projects" | "Troubleshooting" | "Calendar";
 
@@ -41,7 +41,7 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
     ? (input.timestamp instanceof Date ? input.timestamp.toISOString() : new Date(input.timestamp).toISOString())
     : new Date().toISOString();
 
-  const url = "http://localhost:7071/api/HttpTrigger1";
+  const url = `${API_BASE}/HttpTrigger1`;
 
   const body = {
     category: input.category,

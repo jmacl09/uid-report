@@ -41,7 +41,8 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
     ? (input.timestamp instanceof Date ? input.timestamp.toISOString() : new Date(input.timestamp).toISOString())
     : new Date().toISOString();
 
-  const url = `${API_BASE}/HttpTrigger1`;
+  // Post to the deployed Projects function (route: /api/projects)
+  const url = `${API_BASE}/projects`;
 
   const body = {
     category: input.category,
@@ -64,7 +65,7 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
       },
       body: JSON.stringify(body),
       signal,
-      // credentials: 'include' // not needed unless you require cookies
+      credentials: 'include' // include auth cookie when SWA protects /api
     });
   } catch (networkErr: any) {
     // Network or CORS-level failure

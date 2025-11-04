@@ -4,6 +4,7 @@ import { Nav } from "@fluentui/react";
 import Dashboard from "./pages/Dashboard";
 import UIDLookup from "./pages/UIDLookup";
 import VSOAssistant from "./pages/VSOAssistant";
+import VSOAssistantDev from "./pages/VSOAssistantDev";
 import DCATAssistant from "./pages/DCATAssistant";
 import WirecheckAutomation from "./pages/WirecheckAutomation";
 import SettingsPage from "./pages/Settings";
@@ -404,6 +405,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/uid" element={<UIDLookup />} />
             <Route path="/vso" element={<VSOAssistant />} />
+            <Route path="/vso2" element={<VSOAssistantDev />} />
             <Route path="/dcat" element={<DCATAssistant />} />
             <Route path="/wirecheck" element={<WirecheckAutomation />} />
             <Route path="/suggestions" element={<SuggestionsPageInline />} />

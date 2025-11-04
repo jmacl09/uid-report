@@ -1,9 +1,10 @@
 {
   "IsEncrypted": false,
   "Values": {
-    "FUNCTIONS_WORKER_RUNTIME": "node",
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
-    "TABLES_ACCOUNT_URL": "https://optical360.table.core.windows.net"
-  },
-  "ConnectionStrings": {}
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "TABLES_ACCOUNT_URL": "https://optical360.table.core.windows.net",
+    "TABLES_TABLE_NAME": "Projects",
+    "CLIENT_ID": "30c8c03f-8962-45b0-b689-54e876bc0b02"
+  }
 }

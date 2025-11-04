@@ -19,5 +19,7 @@
     ],
     "json.maxItemsComputed": 10000,
     // Avoid downloading remote schemas (prevents ETIMEDOUT warnings)
-    "json.schemaDownload.enable": false
+    "json.schemaDownload.enable": false,
+    "python-envs.defaultEnvManager": "ms-python.python:venv",
+    "python-envs.pythonProjects": []
 }

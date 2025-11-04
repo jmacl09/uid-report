@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { Calendar, dateFnsLocalizer, Views, EventProps } from "react-big-calendar";
+import { saveToStorage } from "../api/saveToStorage";
+import { Calendar, dateFnsLocalizer, Views } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay } from "date-fns";
 import { enUS } from "date-fns/locale";
 import "react-big-calendar/lib/css/react-big-calendar.css";
@@ -49,7 +50,8 @@ const statusColors: Record<VsoStatus, { bg: string; border: string; text: string
   Rejected: { bg: "rgba(214, 55, 55, 0.18)", border: "#cc3333", text: "#ffb3b3" },
 };
 
-const EventItem: React.FC<EventProps<VsoCalendarEvent>> = ({ event }) => {
+const EventItem: React.FC<any> = ({ event }) => {
+  const status: VsoStatus = (event.status as VsoStatus) || 'Draft';
   const spansPreview = useMemo(() => {
     const s = event.spans || [];
     if (!s.length) return "";
@@ -67,7 +69,7 @@ const EventItem: React.FC<EventProps<VsoCalendarEvent>> = ({ event }) => {
     .filter(Boolean)
     .join("\n");
 
-  const colors = statusColors[event.status];
+  const colors = statusColors[status];
 
   return (
     <div
@@ -83,7 +85,7 @@ const EventItem: React.FC<EventProps<VsoCalendarEvent>> = ({ event }) => {
         color: colors.text,
       }}
     >
-      <span className={`vso-cal-pill status-${event.status.toLowerCase()}`}>{event.status}</span>
+  <span className={`vso-cal-pill status-${status.toLowerCase()}`}>{status}</span>
       <span className="vso-cal-title" style={{ overflow: "hidden", textOverflow: "ellipsis" }}>
         {event.title}
       </span>
@@ -93,7 +95,8 @@ const EventItem: React.FC<EventProps<VsoCalendarEvent>> = ({ event }) => {
 
 const VSOCalendar: React.FC<Props> = ({ events, onEventClick, date, onNavigate }) => {
   const eventPropGetter = (event: VsoCalendarEvent) => {
-    const colors = statusColors[event.status];
+    const status: VsoStatus = (event.status as VsoStatus) || 'Draft';
+    const colors = statusColors[status];
     return {
       style: {
         backgroundColor: colors.bg,
@@ -129,7 +132,7 @@ const VSOCalendar: React.FC<Props> = ({ events, onEventClick, date, onNavigate }
         eventPropGetter={eventPropGetter}
         components={{ event: EventItem }}
         onSelectEvent={handleSelectEvent}
-        onNavigate={(d) => onNavigate?.(d)}
+  onNavigate={(d: Date) => onNavigate?.(d)}
         style={{ height: 650 }}
       />
       <div className="calendar-legend" style={{ display: "flex", gap: 10, marginTop: 8, color: "#9ab" }}>
@@ -142,3 +145,24 @@ const VSOCalendar: React.FC<Props> = ({ events, onEventClick, date, onNavigate }
 };
 
 export default VSOCalendar;
+
+// Example usage: save a calendar-related note to storage.
+// This doesn't alter the UI; call from parent code when an event is created/approved, etc.
+export async function saveCalendarEntryExample(uid: string, opts: { title: string; description?: string; owner?: string }) {
+  try {
+    const result = await saveToStorage({
+      category: "Calendar",
+      uid,
+      title: opts.title,
+      description: opts.description || "Scheduled maintenance window",
+      owner: opts.owner || "Calendar Bot",
+    });
+    console.log(`[save] Calendar entry saved for UID ${uid}:`, result);
+  } catch (e: any) {
+    if (e?.status && e.status >= 500) {
+      console.error("Server error while saving calendar entry:", e?.body || e?.message);
+    } else {
+      console.error("Failed to save calendar entry:", e?.body || e?.message || e);
+    }
+  }
+}

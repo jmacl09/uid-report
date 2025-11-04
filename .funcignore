@@ -8,3 +8,6 @@ __queuestorage__
 local.settings.json
 test
 tsconfig.json
+
+# Do NOT exclude node_modules for Flex deployments
+!node_modules/**

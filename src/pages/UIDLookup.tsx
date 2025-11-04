@@ -1,26 +1,27 @@
 import React, { useState, useEffect } from "react";
+import { saveToStorage } from "../api/saveToStorage";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   initializeIcons,
   Stack,
   Text,
+  IconButton,
   TextField,
   PrimaryButton,
-  IconButton,
+  DefaultButton,
+  Dialog,
+  DialogFooter,
+  DialogType,
   MessageBar,
   MessageBarType,
-  Dialog,
-  DialogType,
-  DialogFooter,
-  DefaultButton,
-} from "@fluentui/react";
-import * as XLSX from "xlsx";
-import { saveAs } from "file-saver";
-import CapacityCircle from "../components/CapacityCircle";
-import deriveLineForC0 from "../data/mappedlines";
+} from '@fluentui/react';
+import ThemedProgressBar from "../components/ThemedProgressBar";
 import UIDSummaryPanel from "../components/UIDSummaryPanel";
 import UIDStatusPanel from "../components/UIDStatusPanel";
-import ThemedProgressBar from "../components/ThemedProgressBar";
+import CapacityCircle from "../components/CapacityCircle";
+import deriveLineForC0 from "../data/mappedlines";
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 export default function UIDLookup() {
   initializeIcons();
@@ -323,6 +324,24 @@ export default function UIDLookup() {
       if (!existing.find(x => x.id === n.id)) map[uidKey] = [n, ...existing];
       return { ...p, notes: map };
     }));
+    // Fire-and-forget server save of this comment to the Projects table via Function app
+    // Title kept compact; description holds full note text
+    try {
+      void saveToStorage({
+        category: "Comments",
+        uid: uidKey,
+        title: "UID Comment",
+        description: text,
+        owner: alias || email || "",
+      }).then((msg) => {
+        // Optional visibility in console to confirm network save
+        // eslint-disable-next-line no-console
+        console.log(`[save] Comment saved server-side for UID ${uidKey}:`, msg);
+      }).catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn("Server-side save failed (comment kept locally):", e?.body || e?.message || e);
+      });
+    } catch {}
   };
   const canModify = (n: Note) => {
     const email = getEmail();
@@ -381,7 +400,7 @@ export default function UIDLookup() {
   useEffect(() => {
     if (!data || !lastSearched) return;
     if (lastPromptUid === lastSearched) return; // already prompted for this UID
-    const raw = String(data?.KQLData?.WorkflowStatus ?? '').trim();
+    const raw = String(getWFStatusFor(data, lastSearched) || '').trim();
     const isCancelled = /cancel|cancelled|canceled/i.test(raw);
     const isDecom = /decom/i.test(raw);
     if (isCancelled || isDecom) {
@@ -432,10 +451,86 @@ export default function UIDLookup() {
       try { const raw = localStorage.getItem(`uidNotes:${uidKey}`); const arr = raw ? JSON.parse(raw) : []; return Array.isArray(arr) ? arr : []; } catch { return []; }
     })();
     try { localStorage.setItem(`uidNotes:${uidKey}`, JSON.stringify([n, ...uidNotes])); } catch {}
+
+    // Fire-and-forget server save for project notes as well
+    try {
+      void saveToStorage({
+        category: "Comments",
+        uid: uidKey,
+        title: "Project Comment",
+        description: text,
+        owner: alias || email || "",
+      }).catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn("Server-side save failed (project comment kept locally):", e?.body || e?.message || e);
+      });
+    } catch {}
   };
 
   const naturalSort = (a: string, b: string) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+
+  // Normalize WorkflowStatus strings to friendly labels
+  const niceWorkflowStatus = (raw?: any): string => {
+    const t = String(raw ?? '').trim();
+    if (!t) return '';
+    const isCancelled = /cancel|cancelled|canceled/i.test(t);
+    const isDecom = /decom/i.test(t);
+    const isFinished = /wffinished|wf finished|finished/i.test(t);
+    const isInProgress = /inprogress|in progress|in-progress|running/i.test(t);
+    return isCancelled
+      ? 'WF Cancelled'
+      : isDecom
+      ? 'DECOM'
+      : isFinished
+      ? 'WF Finished'
+      : isInProgress
+      ? 'WF In Progress'
+      : t;
+  };
+
+  // Prefer status from AllWorkflowStatus map for a specific UID; fallback to KQLData.WorkflowStatus
+  const getWFStatusFor = (src: any, uidKey?: string | null): string => {
+    try {
+      const map: Record<string, string> | undefined = (src as any)?.__WFStatusByUid;
+      const u = (uidKey || '').toString();
+      if (u && map && map[u]) {
+        return niceWorkflowStatus(map[u]);
+      }
+      return niceWorkflowStatus(src?.KQLData?.WorkflowStatus);
+    } catch {
+      return niceWorkflowStatus(src?.KQLData?.WorkflowStatus);
+    }
+  };
+
+  // Associated UIDs view filter: show only In Progress by default
+  const [showAllAssociatedWF, setShowAllAssociatedWF] = useState<boolean>(false);
+  // Track which view (UID or Project) we've auto-applied the default for, so user toggles aren't overridden
+  const [associatedWFViewKey, setAssociatedWFViewKey] = useState<string | null>(null);
+
+  // When changing to a new view (new UID or project), auto-toggle: if there are no In-Progress rows, show all by default
+  useEffect(() => {
+    try {
+      const viewKey = activeProjectId ? `project:${activeProjectId}` : (lastSearched ? `uid:${lastSearched}` : null);
+      const current = getViewData();
+      if (!viewKey || !current) return;
+      if (associatedWFViewKey === viewKey) return; // already applied for this view
+      const rows: any[] = Array.isArray((current as any).AssociatedUIDs) ? (current as any).AssociatedUIDs : [];
+      const wfMap: Record<string, string> | undefined = (current as any).__WFStatusByUid;
+      const hasInProgress = rows.some((r: any) => {
+        const uid = r?.UID ?? r?.Uid ?? r?.uid ?? '';
+        const wf = niceWorkflowStatus(wfMap?.[String(uid)]) || '';
+        return /in\s*-?\s*progress|running/i.test(wf);
+      });
+      setShowAllAssociatedWF(!hasInProgress);
+      setAssociatedWFViewKey(viewKey);
+    } catch {
+      // On any error determining status, default to showing all so the user still sees data
+      const viewKey = activeProjectId ? `project:${activeProjectId}` : (lastSearched ? `uid:${lastSearched}` : null);
+      if (viewKey) setAssociatedWFViewKey(viewKey);
+      setShowAllAssociatedWF(true);
+    }
+  }, [activeProjectId, lastSearched, data]);
 
   // computeCapacity: derive display strings from Link Summary rows, summing mixed per-link speeds
   const computeCapacity = (links: any[] | undefined, increment?: string | number | null, deviceAFallback?: string | null) => {
@@ -861,6 +956,28 @@ export default function UIDLookup() {
         throw new Error(statusPart + bodyPart);
       }
   const result = await res.json();
+  // Parse and attach AllWorkflowStatus (stringified or array)
+  try {
+    let wfList: any[] = [];
+    if (typeof result.AllWorkflowStatus === 'string') {
+      const s = result.AllWorkflowStatus.trim();
+      if (s.startsWith('[')) {
+        wfList = JSON.parse(s);
+      }
+    } else if (Array.isArray(result.AllWorkflowStatus)) {
+      wfList = result.AllWorkflowStatus;
+    }
+    if (Array.isArray(wfList) && wfList.length) {
+      const wfMap: Record<string, string> = {};
+      for (const it of wfList) {
+        const uid = String(it?.Uid ?? it?.UID ?? it?.uid ?? '').trim();
+        if (!uid) continue;
+        wfMap[uid] = niceWorkflowStatus(it?.WorkflowStatus);
+      }
+      try { Object.defineProperty(result, '__AllWorkflowStatus', { value: wfList, enumerable: false }); } catch { (result as any).__AllWorkflowStatus = wfList; }
+      try { Object.defineProperty(result, '__WFStatusByUid', { value: wfMap, enumerable: false }); } catch { (result as any).__WFStatusByUid = wfMap; }
+    }
+  } catch { /* ignore parse errors */ }
   // Stable sorts for consistent UI
   result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
   result.MGFXA?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
@@ -955,7 +1072,7 @@ export default function UIDLookup() {
 
     // Details
     try {
-  const rawStatus = String(dataNow?.KQLData?.WorkflowStatus ?? '').trim();
+      const rawStatus = String(getWFStatusFor(dataNow, lastSearched) || '').trim();
       const isCancelled = /cancel|cancelled|canceled/i.test(rawStatus);
       const isDecom = /decom/i.test(rawStatus);
       const statusDisplay = isCancelled ? 'WF Cancelled' : isDecom ? 'DECOM' : (rawStatus || '—');
@@ -1003,16 +1120,54 @@ export default function UIDLookup() {
         "A Optical Port",
         "Z Optical Device",
         "Z Optical Port",
-        "Workflow",
+        "Wirecheck",
       ]
     );
 
-    // Associated UIDs
-    text += formatTableText(
-      "Associated UIDs",
-  dataNow.AssociatedUIDs,
-      ["UID", "SrlgId", "Action", "Type", "Device A", "Device Z", "Site A", "Site Z", "Lag A", "Lag Z"]
-    );
+    // Associated UIDs (with Workflow Status if available)
+    try {
+      const rows: any[] = Array.isArray((dataNow as any).AssociatedUIDs) ? (dataNow as any).AssociatedUIDs : [];
+      const wfMap: Record<string, string> | undefined = (dataNow as any).__WFStatusByUid;
+      const mapped = rows.map((r: any) => {
+        const uid = r?.UID ?? r?.Uid ?? r?.uid ?? '';
+        const srlg = r?.SrlgId ?? r?.SRLGID ?? r?.SrlgID ?? r?.srlgid ?? '';
+        const action = r?.Action ?? r?.action ?? '';
+        const type = r?.Type ?? r?.type ?? '';
+        const aDev = r['A Device'] ?? r['Device A'] ?? r?.ADevice ?? r?.DeviceA ?? '';
+        const zDev = r['Z Device'] ?? r['Device Z'] ?? r?.ZDevice ?? r?.DeviceZ ?? '';
+        const siteA = r['Site A'] ?? r?.ASite ?? r?.SiteA ?? r?.Site ?? '';
+        const siteZ = r['Site Z'] ?? r?.ZSite ?? r?.SiteZ ?? '';
+        const wf = niceWorkflowStatus(wfMap?.[String(uid)]) || '';
+        return {
+          UID: uid,
+          SrlgId: srlg,
+          Action: action,
+          Type: type,
+          'Device A': aDev,
+          'Device Z': zDev,
+          'Site A': siteA,
+          'Site Z': siteZ,
+          'WF Status': wf,
+        };
+      });
+      mapped.sort((a: any, b: any) => {
+        const aInProg = /in\s*-?\s*progress/i.test(String(a['WF Status']));
+        const bInProg = /in\s*-?\s*progress/i.test(String(b['WF Status']));
+        if (aInProg !== bInProg) return aInProg ? -1 : 1;
+        return String(a.UID).localeCompare(String(b.UID), undefined, { numeric: true });
+      });
+      text += formatTableText(
+        "Associated UIDs",
+        mapped as any,
+        ["UID", "SrlgId", "Action", "Type", "Device A", "Device Z", "Site A", "Site Z", "WF Status"]
+      );
+    } catch {
+      text += formatTableText(
+        "Associated UIDs",
+        (dataNow as any).AssociatedUIDs,
+        ["UID", "SrlgId", "Action", "Type", "Device A", "Device Z", "Site A", "Site Z"]
+      );
+    }
 
     // GDCO Tickets
   text += formatTableText("GDCO Tickets", dataNow.GDCOTickets, ["Ticket Id", "DC Code", "Title", "State", "Assigned To", "Link"]);
@@ -1084,9 +1239,9 @@ export default function UIDLookup() {
     const detailsRow = [
       {
         SRLGID: String(getSrlgIdFrom(dataNow, lastSearched) ?? ""),
-  SRLG: String(getSrlgFrom(dataNow) ?? ""),
+        SRLG: String(getSrlgFrom(dataNow) ?? ""),
         SolutionID: getSolutionIds(dataNow).map(formatSolutionId).join(', '),
-        Status: String(dataNow?.KQLData?.WorkflowStatus ?? ""),
+        Status: String(getWFStatusFor(dataNow, lastSearched) || ""),
         CIS_Workflow: dataNow?.KQLData?.JobId ? `https://azcis.trafficmanager.net/Public/NetworkingOptical/JobDetails/${dataNow?.KQLData?.JobId}` : "",
       },
     ];
@@ -1110,14 +1265,51 @@ export default function UIDLookup() {
       },
     ].filter(r => r.URL);
 
+    // Build Associated UIDs rows with WF Status if available
+    const associatedRows = (() => {
+      try {
+        const rows: any[] = Array.isArray((dataNow as any).AssociatedUIDs) ? (dataNow as any).AssociatedUIDs : [];
+        const wfMap: Record<string, string> | undefined = (dataNow as any).__WFStatusByUid;
+        const mapped = rows.map((r: any) => {
+          const uid = r?.UID ?? r?.Uid ?? r?.uid ?? '';
+          const srlg = r?.SrlgId ?? r?.SRLGID ?? r?.SrlgID ?? r?.srlgid ?? '';
+          const action = r?.Action ?? r?.action ?? '';
+          const type = r?.Type ?? r?.type ?? '';
+          const aDev = r['A Device'] ?? r['Device A'] ?? r?.ADevice ?? r?.DeviceA ?? '';
+          const zDev = r['Z Device'] ?? r['Device Z'] ?? r?.ZDevice ?? r?.DeviceZ ?? '';
+          const siteA = r['Site A'] ?? r?.ASite ?? r?.SiteA ?? r?.Site ?? '';
+          const siteZ = r['Site Z'] ?? r?.ZSite ?? r?.SiteZ ?? '';
+          const wf = niceWorkflowStatus(wfMap?.[String(uid)]) || '';
+          return {
+            UID: uid,
+            SrlgId: srlg,
+            Action: action,
+            Type: type,
+            'Device A': aDev,
+            'Device Z': zDev,
+            'Site A': siteA,
+            'Site Z': siteZ,
+            'WF Status': wf,
+          };
+        });
+        mapped.sort((a: any, b: any) => {
+          const aInProg = /in\s*-?\s*progress/i.test(String(a['WF Status']));
+          const bInProg = /in\s*-?\s*progress/i.test(String(b['WF Status']));
+          if (aInProg !== bInProg) return aInProg ? -1 : 1;
+          return String(a.UID).localeCompare(String(b.UID), undefined, { numeric: true });
+        });
+        return mapped;
+      } catch { return (dataNow as any).AssociatedUIDs; }
+    })();
+
     const sections = {
       ...(Array.isArray((dataNow as any)?.sourceUids) && (dataNow as any).sourceUids.length ? {
         "Project UIDs": ((dataNow as any).sourceUids as any[]).map(u => ({ UID: String(u) }))
       } : {}),
       "Details": detailsRow,
       "Tools": toolsRows,
-      "Link Summary": dataNow.OLSLinks,
-      "Associated UIDs": dataNow.AssociatedUIDs,
+  "Link Summary": dataNow.OLSLinks,
+  "Associated UIDs": associatedRows,
       "GDCO Tickets": dataNow.GDCOTickets,
       "MGFX A-Side": dataNow.MGFXA,
       "MGFX Z-Side": dataNow.MGFXZ,
@@ -1162,8 +1354,8 @@ export default function UIDLookup() {
       });
     }, [rows, sortKey, sortDir]);
 
-    // Early return after hooks are declared to satisfy the Rules of Hooks
-    if (!rows || rows.length === 0) return null;
+  // Keep rendering header even when there are no rows, so controls (like filters) remain accessible
+  const noRows = !rows || rows.length === 0;
 
     
 
@@ -1197,7 +1389,10 @@ export default function UIDLookup() {
             <CopyIconInline onCopy={() => copyTableText(title, rows, effectiveHeaders)} message="Table copied" />
           </div>
         </Stack>
-        <div style={shouldScroll ? { maxHeight: 360, overflowY: 'auto', marginTop: 4 } : undefined}>
+        {noRows ? (
+          <div style={{ padding: '8px 0', color: '#a6b7c6' }}>No rows to display.</div>
+        ) : (
+          <div style={shouldScroll ? { maxHeight: 360, overflowY: 'auto', marginTop: 4 } : undefined}>
         <table className="data-table">
           <thead>
             <tr>
@@ -1248,19 +1443,24 @@ export default function UIDLookup() {
                       );
                     }
 
-                    // If column is a link-like field, show Open + Copy
-                    if (String(key).toLowerCase().includes('workflow') || String(key).toLowerCase().includes('diff') || String(key).toLowerCase().includes('ticketlink') || String(key).toLowerCase().includes('url') || String(key).toLowerCase().includes('link')) {
-                      const link = val;
-                      return (
-                        <td key={j}>
-                          {link ? (
-                            <>
-                              <button className="open-btn" onClick={() => window.open(link, '_blank')}>Open</button>
-                              <CopyIconInline onCopy={() => { navigator.clipboard.writeText(String(link)); }} message="Link copied" />
-                            </>
-                          ) : null}
-                        </td>
-                      );
+                    // If column is a link-like field, show Open + Copy (include Wirecheck as link)
+                    {
+                      const keyLower = String(key).toLowerCase();
+                      const headerLower = String(effectiveHeaders[j] || '').toLowerCase();
+                      const looksLikeLink = ['workflow', 'diff', 'ticketlink', 'url', 'link', 'wirecheck'].some(s => keyLower.includes(s) || headerLower.includes(s));
+                      if (looksLikeLink) {
+                        const link = val;
+                        return (
+                          <td key={j}>
+                            {link ? (
+                              <>
+                                <button className="open-btn" onClick={() => window.open(link, '_blank')}>Open</button>
+                                <CopyIconInline onCopy={() => { navigator.clipboard.writeText(String(link)); }} message="Link copied" />
+                              </>
+                            ) : null}
+                          </td>
+                        );
+                      }
                     }
 
                     // Special: Associated/Project UIDs clicking behavior
@@ -1279,6 +1479,61 @@ export default function UIDLookup() {
                                 >
                                   {v}
                                 </span>
+                        </td>
+                      );
+                    }
+
+                    // Special: Colored WF Status badge in Associated UIDs
+                    if (title === 'Associated UIDs' && (String(key).toLowerCase() === 'wf status' || String(effectiveHeaders[j]).toLowerCase() === 'wf status')) {
+                      const s = String(val ?? '').trim();
+                      const isCancelled = /cancel|cancelled|canceled/i.test(s);
+                      const isDecom = /decom/i.test(s);
+                      const isFinished = /wf\s*finished|finished/i.test(s);
+                      const isInProgress = /in\s*-?\s*progress|running/i.test(s);
+                      const display = s || '—';
+                      if (isFinished) {
+                        return (
+                          <td key={j} style={{ textAlign: 'center' }}>
+                            <span
+                              className="wf-finished-badge wf-finished-pulse"
+                              style={{
+                                color: '#00c853',
+                                fontWeight: 900,
+                                fontSize: 12,
+                                padding: '2px 8px',
+                                borderRadius: 10,
+                                border: '1px solid rgba(0,200,83,0.45)'
+                              }}
+                            >
+                              {display}
+                            </span>
+                          </td>
+                        );
+                      }
+                      if (isInProgress) {
+                        return (
+                          <td key={j} style={{ textAlign: 'center' }}>
+                            <span
+                              className="wf-inprogress-badge wf-inprogress-pulse"
+                              style={{
+                                color: '#50b3ff',
+                                fontWeight: 800,
+                                fontSize: 11,
+                                padding: '1px 6px',
+                                borderRadius: 10,
+                                border: '1px solid rgba(80,179,255,0.28)'
+                              }}
+                            >
+                              {display}
+                            </span>
+                          </td>
+                        );
+                      }
+                      const color = (isCancelled || isDecom) ? '#d13438' : '#a6b7c6';
+                      const border = (isCancelled || isDecom) ? '1px solid rgba(209,52,56,0.45)' : '1px solid rgba(166,183,198,0.35)';
+                      return (
+                        <td key={j} style={{ textAlign: 'center' }}>
+                          <span style={{ color, fontWeight: 700, fontSize: 12, padding: '2px 8px', borderRadius: 10, border }}>{display}</span>
                         </td>
                       );
                     }
@@ -1306,7 +1561,8 @@ export default function UIDLookup() {
             })}
           </tbody>
         </table>
-        </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -1381,7 +1637,14 @@ export default function UIDLookup() {
 
   // compute capacity values for the reusable component
   const viewData = getViewData();
-  const capacity = viewData ? computeCapacity(viewData.OLSLinks, viewData?.KQLData?.Increment, viewData?.KQLData?.DeviceA) : null;
+  const capacity = (() => {
+    if (!viewData) return null;
+    const linksArr: any[] = Array.isArray(viewData.OLSLinks) ? viewData.OLSLinks : [];
+    // If no link rows, synthesize a single placeholder when KQLData provides devices, so the circle shows Increment capacity
+    const hasKdDevices = !!(viewData?.KQLData?.DeviceA || viewData?.KQLData?.DeviceZ);
+    const effectiveLinks = linksArr.length ? linksArr : (hasKdDevices ? [{}] : []);
+    return computeCapacity(effectiveLinks, viewData?.KQLData?.Increment, viewData?.KQLData?.DeviceA);
+  })();
 
   // Extract SolutionID(s): prefer KQLData.SolutionId; fallback to any solutionId-like fields in KQLData/OLSLinks
   const getSolutionIds = (src: any): string[] => {
@@ -1422,6 +1685,212 @@ export default function UIDLookup() {
     .map(formatSolutionId)
     .filter(Boolean)
     .join(', ');
+
+  // Troubleshooting section component (collapsible, interactive per-link tracking)
+  const TroubleshootingSection: React.FC<{ contextKey: string; rows: any[] }> = ({ contextKey, rows }) => {
+    const STORE_KEY = `${contextKey}:troubles`;
+    const COLLAPSE_KEY = `${contextKey}:troublesCollapsed`;
+  type TItem = { note?: string; notes?: Array<{ id: string; text: string }>; color?: string; done?: boolean };
+    const [map, setMap] = useState<Record<string, TItem>>(() => {
+      try { const raw = localStorage.getItem(STORE_KEY); const obj = raw ? JSON.parse(raw) : {}; return obj && typeof obj === 'object' ? obj : {}; } catch { return {}; }
+    });
+    const [collapsed, setCollapsed] = useState<boolean>(() => {
+      try { const raw = localStorage.getItem(COLLAPSE_KEY); return raw == null ? true : raw === '1'; } catch { return true; }
+    });
+  useEffect(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify(map)); } catch {} }, [map, STORE_KEY]);
+  useEffect(() => { try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch {} }, [collapsed, COLLAPSE_KEY]);
+
+    const normalize = (r: any) => {
+      const aDev = r["ADevice"] ?? r["A Device"] ?? r["DeviceA"] ?? r["Device A"] ?? '';
+      const aPort = r["APort"] ?? r["A Port"] ?? r["PortA"] ?? r["Port A"] ?? '';
+      const aOptDev = r["AOpticalDevice"] ?? r["A Optical Device"] ?? '';
+      const aOptPort = r["AOpticalPort"] ?? r["A Optical Port"] ?? '';
+      const zDev = r["ZDevice"] ?? r["Z Device"] ?? r["DeviceZ"] ?? r["Device Z"] ?? '';
+      const zPort = r["ZPort"] ?? r["Z Port"] ?? r["PortZ"] ?? r["Port Z"] ?? '';
+      const zOptDev = r["ZOpticalDevice"] ?? r["Z Optical Device"] ?? '';
+      const zOptPort = r["ZOpticalPort"] ?? r["Z Optical Port"] ?? '';
+      return { aDev, aPort, aOptDev, aOptPort, zDev, zPort, zOptDev, zOptPort };
+    };
+    const keyFor = (r: any) => {
+      const n = normalize(r);
+      return `${n.aDev}|${n.aPort}|${n.zDev}|${n.zPort}`;
+    };
+    const setField = (id: string, patch: Partial<TItem>) => {
+      setMap(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
+    };
+    const clearRow = (id: string) => {
+      setMap(prev => { const next = { ...prev }; delete next[id]; return next; });
+    };
+
+    const colorStyle = (c?: string): React.CSSProperties => {
+      if (!c) return {};
+      const bg = c === 'yellow' ? '#3a3a00' : c === 'orange' ? '#442a00' : c === 'red' ? '#4d1f1f' : c === 'blue' ? '#0d2a4d' : c === 'purple' ? '#3a1f4d' : '';
+      const border = c === 'yellow' ? '#b3a100' : c === 'orange' ? '#b36b00' : c === 'red' ? '#b33a3a' : c === 'blue' ? '#3b7bd6' : c === 'purple' ? '#9159c1' : '';
+      return bg ? { background: bg, border: `1px solid ${border}` } : {};
+    };
+
+    if (!Array.isArray(rows) || rows.length === 0) return null;
+    return (
+      <div className="notes-card" style={{ marginTop: 12 }}>
+        <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
+          <Text className="section-title">Troubleshooting</Text>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              className="sleek-btn"
+              style={{ padding: '4px 10px', fontSize: 12, background: '#2b2b2b', color: '#e6f6ff', border: '1px solid #3a4a5e' }}
+              onClick={() => setCollapsed(c => !c)}
+            >
+              {collapsed ? 'Expand' : 'Collapse'}
+            </button>
+          </div>
+        </Stack>
+        {!collapsed && (
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {rows.map((r: any, idx: number) => {
+              const id = keyFor(r);
+              const n = normalize(r);
+              const item = map[id] || {};
+              const done = !!item.done;
+              const rowStyle: React.CSSProperties = done
+                ? { background: '#0f3d24', border: '1px solid #2e7d32' }
+                : colorStyle(item.color);
+              return (
+                <div key={id || idx} className="table-container" style={{ padding: 8, ...rowStyle }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ lineHeight: 1.3 }}>
+                      <div>
+                        <b style={{ color: '#cfe7ff' }}>{n.aDev}</b>
+                        <span style={{ opacity: 0.6 }}> · </span>
+                        <span>{n.aPort}</span>
+                        <span style={{ margin: '0 10px', opacity: 0.8 }}>⇄</span>
+                        <b style={{ color: '#cfe7ff' }}>{n.zDev}</b>
+                        <span style={{ opacity: 0.6 }}> · </span>
+                        <span>{n.zPort}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#e6f6ff', marginTop: 4 }}>
+                        <span style={{ fontWeight: 700, color: '#9fd1ff' }}>A Optical:</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 6 }}>
+                          <span style={{ background: '#15324f', border: '1px solid #295a86', borderRadius: 10, padding: '1px 8px' }}>{n.aOptDev || '—'}</span>
+                          {n.aOptPort ? <span style={{ opacity: 0.85 }}>{n.aOptPort}</span> : null}
+                        </span>
+                        <span style={{ margin: '0 10px', opacity: 0.55 }}>|</span>
+                        <span style={{ fontWeight: 700, color: '#9fd1ff' }}>Z Optical:</span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 6 }}>
+                          <span style={{ background: '#15324f', border: '1px solid #295a86', borderRadius: 10, padding: '1px 8px' }}>{n.zOptDev || '—'}</span>
+                          {n.zOptPort ? <span style={{ opacity: 0.85 }}>{n.zOptPort}</span> : null}
+                        </span>
+                      </div>
+                    </div>
+                    {/* Middle: output area for added notes (multiple) */}
+                    <div style={{ flex: 1, minWidth: 200, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      {(() => {
+                        // Back-compat: if legacy single note exists, show it as a chip
+                        const notesArr: Array<{ id: string; text: string }> =
+                          (item.notes && Array.isArray(item.notes))
+                            ? item.notes
+                            : (item.note ? [{ id: `legacy-${idx}`, text: item.note }] : []);
+                        return notesArr.map((nObj) => (
+                          <span
+                            key={nObj.id}
+                            style={{
+                              position: 'relative',
+                              background: '#1f2d3a',
+                              border: '1px solid #335c8a',
+                              color: '#e8f0ff',
+                              padding: '4px 22px 4px 10px',
+                              borderRadius: 12,
+                              fontSize: 13,
+                              fontWeight: 600,
+                              maxWidth: 520,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              boxShadow: 'inset 0 0 6px rgba(255,255,255,0.03)'
+                            }}
+                            title={nObj.text}
+                          >
+                            {nObj.text}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const existing = (item.notes && Array.isArray(item.notes)) ? item.notes : (item.note ? [{ id: `legacy-${idx}`, text: item.note }] : []);
+                                const filtered = existing.filter(n => n.id !== nObj.id);
+                                setField(id, { notes: filtered, note: undefined });
+                              }}
+                              aria-label="Delete note"
+                              title="Delete note"
+                              style={{
+                                position: 'absolute',
+                                top: 2,
+                                right: 2,
+                                width: 16,
+                                height: 16,
+                                borderRadius: 999,
+                                background: 'rgba(58,74,94,0.9)',
+                                color: '#e8f0ff',
+                                border: '1px solid #2b3a4e',
+                                cursor: 'pointer',
+                                fontSize: 11,
+                                lineHeight: '14px',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                zIndex: 1
+                              }}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ));
+                      })()}
+                    </div>
+                    {/* Right: input + color / done / clear */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 320, justifyContent: 'flex-end' }}>
+                      <input
+                        className="projects-filter-input"
+                        placeholder="Add note… (Enter)"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const val = (e.currentTarget as HTMLInputElement).value.trim();
+                            if (val) {
+                              const newNote = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, text: val };
+                              const existing = (item.notes && Array.isArray(item.notes)) ? item.notes : (item.note ? [{ id: `legacy-${idx}`, text: item.note }] : []);
+                              setField(id, { notes: [...existing, newNote], note: undefined });
+                              (e.currentTarget as HTMLInputElement).value = '';
+                            }
+                          }
+                        }}
+                        style={{ minWidth: 160, width: 180 }}
+                        title="Type a note and press Enter"
+                      />
+                      <select
+                        className="sleek-select"
+                        value={item.color || ''}
+                        onChange={(e) => setField(id, { color: e.target.value || undefined })}
+                        title="Highlight color"
+                      >
+                        <option value="">No highlight</option>
+                        <option value="yellow">Yellow</option>
+                        <option value="orange">Orange</option>
+                        <option value="red">Red</option>
+                        <option value="blue">Blue</option>
+                        <option value="purple">Purple</option>
+                      </select>
+                      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }} title="Mark as complete">
+                        <input type="checkbox" checked={!!item.done} onChange={(e) => setField(id, { done: e.target.checked })} />
+                        <span>Done</span>
+                      </label>
+                      <button className="sleek-btn" style={{ padding: '4px 10px', fontSize: 12, background: '#444' }} onClick={() => clearRow(id)}>Clear</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Timestamp helpers
   const getTimestamp = (obj: any): string | null => {
@@ -1476,7 +1945,18 @@ export default function UIDLookup() {
             style={{ marginLeft: summaryShift, position: 'relative', zIndex: 2 }}
           >
             <div className="combined-inner">
-              <UIDSummaryPanel data={viewData} bare />
+              <UIDSummaryPanel
+                data={viewData}
+                currentUid={(() => {
+                  if (activeProjectId) {
+                    const ap = getActiveProject();
+                    const first = (ap?.data?.sourceUids || [])[0] || null;
+                    return first || (lastSearched || null);
+                  }
+                  return lastSearched || null;
+                })()}
+                bare
+              />
               <UIDStatusPanel uid={lastSearched || null} data={viewData} bare />
             </div>
           </div>
@@ -1492,7 +1972,7 @@ export default function UIDLookup() {
             top: capacityTop ?? 8,
             pointerEvents: 'none',
             filter: 'drop-shadow(0 0 2px rgba(0,120,212,0.12))',
-            zIndex: 1,
+            zIndex: 50,
           }}
         >
           <CapacityCircle main={capacity?.main ?? '?'} size={140} />
@@ -1746,7 +2226,7 @@ export default function UIDLookup() {
                   <td>{solutionIdDisplay || '—'}</td>
                   <td style={{ textAlign: 'center' }}>
                     {(() => {
-                      const raw = String(viewData?.KQLData?.WorkflowStatus ?? '').trim();
+                      const raw = String(getWFStatusFor(viewData, lastSearched) || '').trim();
                       const isCancelled = /cancel|cancelled|canceled/i.test(raw);
                       const isDecom = /decom/i.test(raw);
                       const isFinished = /wffinished|wf finished|finished/i.test(raw);
@@ -1940,19 +2420,56 @@ export default function UIDLookup() {
               "State",
               "Z Optical Device",
               "Z Optical Port",
-              "Workflow",
+              "Wirecheck",
             ]}
-            rows={(viewData.OLSLinks || []).map((r: any) => {
+            rows={(() => {
+              const links: any[] = Array.isArray(viewData.OLSLinks) ? viewData.OLSLinks : [];
+              // If there are no link rows, synthesize a single fallback row from KQLData
+              if (!links.length) {
+                const kd = (viewData as any)?.KQLData || {};
+                const aDev = String(kd?.DeviceA ?? '').trim();
+                const zDev = String(kd?.DeviceZ ?? '').trim();
+                // Do NOT use LagA/LagZ for ports; ports and LAGs are not the same. Leave ports blank.
+                const aPort = '';
+                const zPort = '';
+                if (aDev || zDev) {
+                  return [
+                    {
+                      "A Device": aDev,
+                      "A Port": aPort,
+                      "A Admin": '',
+                      "A Oper": '',
+                      "A Optical Device": '',
+                      "A Optical Port": '',
+                      "Z Device": zDev,
+                      "Z Port": zPort,
+                      "Z Admin": '',
+                      "Z Oper": '',
+                      "Z Optical Device": '',
+                      "Z Optical Port": '',
+                      "Wirecheck": '',
+                    },
+                  ];
+                }
+                // No fallback data available
+                return [];
+              }
+
+              return links.map((r: any) => {
               // Map directly from canonical keys you provided, with safe fallbacks
-              const aDev = r["ADevice"] ?? r["A Device"] ?? r["A_Device"] ?? r["DeviceA"] ?? r["Device A"] ?? "";
+              const aDevRaw = r["ADevice"] ?? r["A Device"] ?? r["A_Device"] ?? r["DeviceA"] ?? r["Device A"] ?? "";
               const aPort = r["APort"] ?? r["A Port"] ?? r["A_Port"] ?? r["PortA"] ?? r["Port A"] ?? "";
-              const zDev = r["ZDevice"] ?? r["Z Device"] ?? r["Z_Device"] ?? r["DeviceZ"] ?? r["Device Z"] ?? "";
+              const zDevRaw = r["ZDevice"] ?? r["Z Device"] ?? r["Z_Device"] ?? r["DeviceZ"] ?? r["Device Z"] ?? "";
               const zPort = r["ZPort"] ?? r["Z Port"] ?? r["Z_Port"] ?? r["PortZ"] ?? r["Port Z"] ?? "";
               const aOptDev = r["AOpticalDevice"] ?? r["A Optical Device"] ?? r["A_Optical_Device"] ?? r["A OpticalDevice"] ?? r["A Optical"] ?? "";
               const aOptPort = r["AOpticalPort"] ?? r["A Optical Port"] ?? r["A_Optical_Port"] ?? r["A OpticalPort"] ?? "";
               const zOptDev = r["ZOpticalDevice"] ?? r["Z Optical Device"] ?? r["Z_Optical_Device"] ?? r["Z OpticalDevice"] ?? r["Z Optical"] ?? "";
               const zOptPort = r["ZOpticalPort"] ?? r["Z Optical Port"] ?? r["Z_Optical_Port"] ?? r["Z OpticalPort"] ?? "";
               const workflow = r["Workflow"] ?? r["workflow"] ?? r["Link"] ?? r["link"] ?? r["URL"] ?? r["Url"] ?? "";
+
+              // Fallback to KQLData DeviceA/DeviceZ only if per-row device fields are blank
+              const aDev = (String(aDevRaw ?? '').trim() || String(viewData?.KQLData?.DeviceA ?? '').trim());
+              const zDev = (String(zDevRaw ?? '').trim() || String(viewData?.KQLData?.DeviceZ ?? '').trim());
 
               // Admin/Oper status for A/Z sides (support multiple possible key names; fallback to global AdminStatus/OperStatus)
               const aAdmin = r["AAdminStatus"] ?? r["AdminStatusA"] ?? r["AdminStatus_A"] ?? r["A_AdminStatus"] ?? r["A AdminStatus"] ?? r["AdminStatus"] ?? '';
@@ -1974,9 +2491,10 @@ export default function UIDLookup() {
                 "Z Oper": zOper,
                 "Z Optical Device": zOptDev,
                 "Z Optical Port": zOptPort,
-                "Workflow": workflow,
+                "Wirecheck": workflow,
               };
-            })}
+              });
+            })()}
             headerRight={(() => {
               const ts = formatTimestamp(getTimestamp(viewData));
               return ts ? (
@@ -1997,10 +2515,56 @@ export default function UIDLookup() {
                 "Device Z",
                 "Site A",
                 "Site Z",
-                "Lag A",
-                "Lag Z",
+                "WF Status",
               ]}
-              rows={viewData.AssociatedUIDs}
+              rows={(() => {
+                const rows = Array.isArray(viewData.AssociatedUIDs) ? viewData.AssociatedUIDs : [];
+                const wfMap: Record<string, string> | undefined = (viewData as any).__WFStatusByUid;
+                const mapped = rows.map((r: any) => {
+                  const uid = r?.UID ?? r?.Uid ?? r?.uid ?? '';
+                  const srlg = r?.SrlgId ?? r?.SRLGID ?? r?.SrlgID ?? r?.srlgid ?? '';
+                  const action = r?.Action ?? r?.action ?? '';
+                  const type = r?.Type ?? r?.type ?? '';
+                  const aDev = r['A Device'] ?? r['Device A'] ?? r?.ADevice ?? r?.DeviceA ?? '';
+                  const zDev = r['Z Device'] ?? r['Device Z'] ?? r?.ZDevice ?? r?.DeviceZ ?? '';
+                  const siteA = r['Site A'] ?? r?.ASite ?? r?.SiteA ?? r?.Site ?? '';
+                  const siteZ = r['Site Z'] ?? r?.ZSite ?? r?.SiteZ ?? '';
+                  const wf = niceWorkflowStatus(wfMap?.[String(uid)]) || '';
+                  return {
+                    UID: uid,
+                    SrlgId: srlg,
+                    Action: action,
+                    Type: type,
+                    'Device A': aDev,
+                    'Device Z': zDev,
+                    'Site A': siteA,
+                    'Site Z': siteZ,
+                    'WF Status': wf,
+                  };
+                });
+                // Apply default filter: only show In Progress unless toggled to show all
+                const base = showAllAssociatedWF
+                  ? mapped
+                  : mapped.filter((r: any) => /in\s*-?\s*progress|running/i.test(String(r['WF Status'])));
+                // Always show In Progress rows at the top by default
+                base.sort((a: any, b: any) => {
+                  const aInProg = /in\s*-?\s*progress/i.test(String(a['WF Status']));
+                  const bInProg = /in\s*-?\s*progress/i.test(String(b['WF Status']));
+                  if (aInProg !== bInProg) return aInProg ? -1 : 1;
+                  // tie-breaker: by UID (numeric-aware)
+                  return String(a.UID).localeCompare(String(b.UID), undefined, { numeric: true });
+                });
+                return base;
+              })()}
+              headerRight={(
+                <button
+                  className="sleek-btn repo"
+                  onClick={() => setShowAllAssociatedWF(v => !v)}
+                  title={showAllAssociatedWF ? 'Show only In Progress' : 'Show all UIDs'}
+                >
+                  {showAllAssociatedWF ? 'Show In Progress only' : 'Show All'}
+                </button>
+              )}
               highlightUid={uid}
             />
             <Table
@@ -2008,7 +2572,22 @@ export default function UIDLookup() {
               headers={["Ticket Id", "DC Code", "Title", "State", "Assigned To"]}
               rows={(() => {
                 const rows = Array.isArray(viewData.GDCOTickets) ? viewData.GDCOTickets : [];
-                return rows.map((r: any) => {
+                // Remove any rows that are effectively empty (no visible fields populated)
+                const nonEmpty = rows.filter((r: any) => {
+                  if (!r || typeof r !== 'object') return false;
+                  const visibleFields = [
+                    'Ticket Id','TicketId','TicketID',
+                    'DC Code','DCCode','Datacenter','DC',
+                    'Title',
+                    'State','Status',
+                    'Assigned To','AssignedTo','Owner'
+                  ];
+                  return visibleFields.some((k) => {
+                    const v = (r as any)[k];
+                    return v != null && String(v).trim() !== '';
+                  });
+                });
+                return nonEmpty.map((r: any) => {
                   const { Link, link, URL, Url, TicketLink, ticketLink, ...rest } = r || {};
                   const l = r?.Link || r?.link || r?.URL || r?.Url || r?.TicketLink || r?.ticketLink || null;
                   const obj: any = { ...rest };
@@ -2179,6 +2758,11 @@ export default function UIDLookup() {
             </div>
           )}
 
+          {/* Troubleshooting (below UID notes) */}
+          {lastSearched && !activeProjectId && (
+            <TroubleshootingSection contextKey={`uid:${lastSearched}`} rows={Array.isArray(viewData?.OLSLinks) ? viewData.OLSLinks : []} />
+          )}
+
           {/* Project Notes (when viewing a saved project) */}
           {activeProjectId && (() => {
             const ap = getActiveProject();
@@ -2245,6 +2829,11 @@ export default function UIDLookup() {
               </div>
             );
           })()}
+
+          {/* Troubleshooting (below Project notes) */}
+          {activeProjectId && (
+            <TroubleshootingSection contextKey={`project:${activeProjectId}`} rows={Array.isArray(viewData?.OLSLinks) ? viewData.OLSLinks : []} />
+          )}
         </>
       )}
 

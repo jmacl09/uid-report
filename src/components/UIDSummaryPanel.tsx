@@ -2,17 +2,21 @@ import React, { useMemo } from "react";
 
 interface Props {
   data: any; // expects the same shape as viewData in UIDLookup (AExpansions, ZExpansions, KQLData, OLSLinks, AssociatedUIDs, GDCOTickets)
+  currentUid?: string | null; // Prefer WF Status from AllWorkflowStatus map for this UID when available
   style?: React.CSSProperties; // optional absolute positioning override
   bare?: boolean; // render without outer panel wrapper so it can be composed
 }
 
 const normalize = (v: any) => (v == null ? "" : String(v));
 
-const UIDSummaryPanel: React.FC<Props> = ({ data, style, bare }) => {
+const UIDSummaryPanel: React.FC<Props> = ({ data, currentUid, style, bare }) => {
   const summary = useMemo(() => {
     if (!data) return null;
-
-    const links: any[] = Array.isArray(data?.OLSLinks) ? data.OLSLinks : [];
+    const rawLinks: any[] = Array.isArray(data?.OLSLinks) ? data.OLSLinks : [];
+    // Fallback: if there are no link rows, synthesize one from KQLData DeviceA/DeviceZ so count reflects a link
+    const kd = (data as any)?.KQLData || {};
+    const hasKdDevices = !!(kd?.DeviceA || kd?.DeviceZ);
+    const links: any[] = rawLinks.length ? rawLinks : (hasKdDevices ? [{ 'A Device': kd?.DeviceA || '', 'Z Device': kd?.DeviceZ || '' }] : []);
     const count = links.length;
     const incNum = data?.KQLData?.Increment != null && data?.KQLData?.Increment !== '' && !isNaN(Number(data?.KQLData?.Increment))
       ? Number(data?.KQLData?.Increment) : null;
@@ -46,8 +50,10 @@ const UIDSummaryPanel: React.FC<Props> = ({ data, style, bare }) => {
     }
     if (Object.keys(bucket).length === 0) totalGb = null;
 
-    // WF Status presentation
-    const rawWF = normalize(data?.KQLData?.WorkflowStatus).trim();
+  // WF Status presentation: prefer AllWorkflowStatus map for currentUid, fallback to KQLData.WorkflowStatus
+  const map = (data as any)?.__WFStatusByUid as Record<string, string> | undefined;
+  const fromMap = currentUid && map ? map[String(currentUid)] : undefined;
+  const rawWF = normalize(fromMap ?? data?.KQLData?.WorkflowStatus).trim();
     const isCancelled = /cancel|cancelled|canceled/i.test(rawWF);
     const isDecom = /decom/i.test(rawWF);
     const isFinished = /wffinished|wf finished|finished/i.test(rawWF);
@@ -79,7 +85,7 @@ const UIDSummaryPanel: React.FC<Props> = ({ data, style, bare }) => {
     })();
 
     return { count, totalGb, wfDisplay, dcA, dcZ, bucket, typeLabel: normType } as const;
-  }, [data]);
+  }, [data, currentUid]);
 
   const capStr = (() => {
     if (!summary) return '';
@@ -96,13 +102,23 @@ const UIDSummaryPanel: React.FC<Props> = ({ data, style, bare }) => {
   const dcFrom = summary && summary.dcA.length ? summary.dcA.join(', ') : 'Unknown';
   const dcTo = summary && summary.dcZ.length ? summary.dcZ.join(', ') : 'Unknown';
 
-  const localSummary = useMemo(() => {
+  const leftSummary = useMemo(() => {
     if (!summary) return '';
-    const typeLine = `Type: ${summary.typeLabel}`;
-    return `Path: ${dcFrom} → ${dcTo}\nCapacity: ${capStr}\nWF Status: ${summary.wfDisplay}\n${typeLine}`;
+    // Path, Capacity, WF Status, and Type (no explicit Links count in line)
+    return `Path: ${dcFrom} → ${dcTo}\nCapacity: ${capStr}\nWF Status: ${summary.wfDisplay}\nType: ${summary.typeLabel}`;
   }, [dcFrom, dcTo, capStr, summary]);
 
   if (!summary) return null;
+
+  const opticA = normalize((data as any)?.KQLData?.OpticTypeA) || '—';
+  const opticZ = normalize((data as any)?.KQLData?.OpticTypeZ) || '—';
+  const incRaw = normalize((data as any)?.KQLData?.Increment);
+  const speed = (() => {
+    if (!incRaw) return '—';
+    const n = Number(incRaw);
+    if (Number.isFinite(n)) return `${n}G`;
+    return /g$/i.test(incRaw) ? incRaw.toUpperCase() : `${incRaw}G`;
+  })();
 
   if (bare) {
     return (
@@ -110,7 +126,24 @@ const UIDSummaryPanel: React.FC<Props> = ({ data, style, bare }) => {
         <div className="ai-summary-header">AI Summary</div>
         <div className="ai-summary-body">
           <div className="ai-chat">
-            <div className="ai-chat-bubble fallback" style={{ whiteSpace: 'pre-wrap' }}>{localSummary}</div>
+            <div className="ai-chat-bubble fallback">
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'max-content 1px 1fr',
+                  columnGap: 12,
+                  alignItems: 'start',
+                }}
+              >
+                <div style={{ whiteSpace: 'pre-wrap' }}>{leftSummary}</div>
+                <div style={{ width: 1, background: 'rgba(255,255,255,0.12)', height: '100%' }} />
+                <div style={{ minWidth: 180, fontSize: 13 }}>
+                  <div><span style={{ opacity: 0.85 }}>Router A Optic:</span> <b style={{ marginLeft: 6 }}>{opticA}</b></div>
+                  <div><span style={{ opacity: 0.85 }}>Router Z Optic:</span> <b style={{ marginLeft: 6 }}>{opticZ}</b></div>
+                  <div><span style={{ opacity: 0.85 }}>Speed:</span> <b style={{ marginLeft: 6 }}>{speed}</b></div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -122,7 +155,24 @@ const UIDSummaryPanel: React.FC<Props> = ({ data, style, bare }) => {
       <div className="ai-summary-header">AI Summary</div>
       <div className="ai-summary-body">
         <div className="ai-chat">
-          <div className="ai-chat-bubble fallback" style={{ whiteSpace: 'pre-wrap', fontSize: 14 }}>{localSummary}</div>
+          <div className="ai-chat-bubble fallback" style={{ fontSize: 14 }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'max-content 1px 1fr',
+                columnGap: 12,
+                alignItems: 'start',
+              }}
+            >
+              <div style={{ whiteSpace: 'pre-wrap' }}>{leftSummary}</div>
+              <div style={{ width: 1, background: 'rgba(255,255,255,0.12)', height: '100%' }} />
+              <div style={{ minWidth: 180 }}>
+                <div><span style={{ opacity: 0.85 }}>Router A Optic:</span> <b style={{ marginLeft: 6 }}>{opticA}</b></div>
+                <div><span style={{ opacity: 0.85 }}>Router Z Optic:</span> <b style={{ marginLeft: 6 }}>{opticZ}</b></div>
+                <div><span style={{ opacity: 0.85 }}>Speed:</span> <b style={{ marginLeft: 6 }}>{speed}</b></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

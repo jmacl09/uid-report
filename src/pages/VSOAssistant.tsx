@@ -138,7 +138,7 @@ const VSOAssistant: React.FC = () => {
         if (!txt) return [] as any[];
         try { const a = JSON.parse(txt); return Array.isArray(a) ? a : []; } catch { return []; }
       };
-      const arr = loadList(raw);
+  const arr = loadList(raw);
       const arrBackup = loadList(rawBackup);
       const source = (arr && arr.length ? arr : arrBackup);
       if (source && source.length) {
@@ -158,9 +158,12 @@ const VSOAssistant: React.FC = () => {
             }
             return new Date();
           };
-          const start = parseYmd(e.startYMD, e.start);
-          const end = parseYmd(e.endYMD, e.end);
-          return { ...e, start, end } as VsoCalendarEvent;
+          const start = parseYmd((e as any).startYMD, (e as any).start);
+          const end = parseYmd((e as any).endYMD, (e as any).end);
+          const status = (e as any).status || 'Draft';
+          const id = (e as any).id || `restored-${start?.getTime() || Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+          const title = (e as any).title || 'Fiber Maintenance';
+          return { ...(e as any), id, title, status, start, end } as VsoCalendarEvent;
         });
         setVsoEvents(ensureUnique(parsed));
       }

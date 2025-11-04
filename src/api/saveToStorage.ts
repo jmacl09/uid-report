@@ -1,4 +1,4 @@
-import { API_BASE } from "./config";
+// Removed unused API_BASE import
 
 export type StorageCategory = "Comments" | "Projects" | "Troubleshooting" | "Calendar";
 

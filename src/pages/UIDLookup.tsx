@@ -23,6 +23,38 @@ import deriveLineForC0 from "../data/mappedlines";
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
+// Pure helpers moved to module scope to avoid react-hooks exhaustive-deps issues
+const niceWorkflowStatus = (raw?: any): string => {
+  const t = String(raw ?? '').trim();
+  if (!t) return '';
+  const isCancelled = /cancel|cancelled|canceled/i.test(t);
+  const isDecom = /decom/i.test(t);
+  const isFinished = /wffinished|wf finished|finished/i.test(t);
+  const isInProgress = /inprogress|in progress|in-progress|running/i.test(t);
+  return isCancelled
+    ? 'WF Cancelled'
+    : isDecom
+    ? 'DECOM'
+    : isFinished
+    ? 'WF Finished'
+    : isInProgress
+    ? 'WF In Progress'
+    : t;
+};
+
+const getWFStatusFor = (src: any, uidKey?: string | null): string => {
+  try {
+    const map: Record<string, string> | undefined = (src as any)?.__WFStatusByUid;
+    const u = (uidKey || '').toString();
+    if (u && map && map[u]) {
+      return niceWorkflowStatus(map[u]);
+    }
+    return niceWorkflowStatus(src?.KQLData?.WorkflowStatus);
+  } catch {
+    return niceWorkflowStatus(src?.KQLData?.WorkflowStatus);
+  }
+};
+
 export default function UIDLookup() {
   initializeIcons();
   const location = useLocation();
@@ -470,38 +502,7 @@ export default function UIDLookup() {
   const naturalSort = (a: string, b: string) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
 
-  // Normalize WorkflowStatus strings to friendly labels
-  const niceWorkflowStatus = (raw?: any): string => {
-    const t = String(raw ?? '').trim();
-    if (!t) return '';
-    const isCancelled = /cancel|cancelled|canceled/i.test(t);
-    const isDecom = /decom/i.test(t);
-    const isFinished = /wffinished|wf finished|finished/i.test(t);
-    const isInProgress = /inprogress|in progress|in-progress|running/i.test(t);
-    return isCancelled
-      ? 'WF Cancelled'
-      : isDecom
-      ? 'DECOM'
-      : isFinished
-      ? 'WF Finished'
-      : isInProgress
-      ? 'WF In Progress'
-      : t;
-  };
-
-  // Prefer status from AllWorkflowStatus map for a specific UID; fallback to KQLData.WorkflowStatus
-  const getWFStatusFor = (src: any, uidKey?: string | null): string => {
-    try {
-      const map: Record<string, string> | undefined = (src as any)?.__WFStatusByUid;
-      const u = (uidKey || '').toString();
-      if (u && map && map[u]) {
-        return niceWorkflowStatus(map[u]);
-      }
-      return niceWorkflowStatus(src?.KQLData?.WorkflowStatus);
-    } catch {
-      return niceWorkflowStatus(src?.KQLData?.WorkflowStatus);
-    }
-  };
+  // Normalize WorkflowStatus strings: now using module-scope helpers above
 
   // Associated UIDs view filter: show only In Progress by default
   const [showAllAssociatedWF, setShowAllAssociatedWF] = useState<boolean>(false);
@@ -512,7 +513,9 @@ export default function UIDLookup() {
   useEffect(() => {
     try {
       const viewKey = activeProjectId ? `project:${activeProjectId}` : (lastSearched ? `uid:${lastSearched}` : null);
-      const current = getViewData();
+      const current = activeProjectId
+        ? (projects.find(p => p.id === activeProjectId)?.data || null)
+        : data;
       if (!viewKey || !current) return;
       if (associatedWFViewKey === viewKey) return; // already applied for this view
       const rows: any[] = Array.isArray((current as any).AssociatedUIDs) ? (current as any).AssociatedUIDs : [];
@@ -525,12 +528,11 @@ export default function UIDLookup() {
       setShowAllAssociatedWF(!hasInProgress);
       setAssociatedWFViewKey(viewKey);
     } catch {
-      // On any error determining status, default to showing all so the user still sees data
       const viewKey = activeProjectId ? `project:${activeProjectId}` : (lastSearched ? `uid:${lastSearched}` : null);
       if (viewKey) setAssociatedWFViewKey(viewKey);
       setShowAllAssociatedWF(true);
     }
-  }, [activeProjectId, lastSearched, data]);
+  }, [activeProjectId, lastSearched, data, projects, associatedWFViewKey]);
 
   // computeCapacity: derive display strings from Link Summary rows, summing mixed per-link speeds
   const computeCapacity = (links: any[] | undefined, increment?: string | number | null, deviceAFallback?: string | null) => {

@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import {
   ComboBox,
   IComboBox,
@@ -51,7 +50,6 @@ interface MaintenanceWindow {
 }
 
 const VSOAssistantDev: React.FC = () => {
-  const navigate = useNavigate();
   useEffect(() => { try { initializeIcons(); } catch {} }, []);
 
   // Search state

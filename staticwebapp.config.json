@@ -5,6 +5,14 @@
   },
   "routes": [
     {
+      "route": "/manifest.json",
+      "allowedRoles": ["anonymous"]
+    },
+    {
+      "route": "/favicon.ico",
+      "allowedRoles": ["anonymous"]
+    },
+    {
       "route": "/api/uid",
       "allowedRoles": ["authenticated"],
       "methods": ["GET"],

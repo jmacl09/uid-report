@@ -19,26 +19,22 @@ export type SaveResponse = {
 
 /**
  * Fetch notes for a given UID.
- * Since GetItems API was removed, this now returns an empty list
- * or can be updated later when a new read endpoint exists.
+ * Read endpoint is not implemented yet; return empty array for now.
  */
-export async function getNotesForUid(uid: string): Promise<NoteEntity[]> {
-  console.warn(
-    `[getNotesForUid] Called for UID ${uid}, but GetItems endpoint no longer exists. Returning []`
-  );
+export async function getNotesForUid(_uid: string): Promise<NoteEntity[]> {
   return [];
 }
 
 /**
  * Save a new note for a UID.
- * This uses the current HttpTrigger1 function (POST).
+ * This uses the Azure Function routed as /api/projects (POST).
  */
 export async function saveNote(
   uid: string,
   description: string,
   owner: string = "Unknown"
 ): Promise<SaveResponse> {
-  const url = `${API_BASE}/HttpTrigger1`;
+  const url = `${API_BASE}/projects`;
 
   const body = {
     category: "Notes",
@@ -46,7 +42,13 @@ export async function saveNote(
     title: "General comment",
     description,
     owner,
-  };
+    // compatibility keys for backends expecting PascalCase
+    Category: "Notes",
+    UID: uid,
+    Title: "General comment",
+    Description: description,
+    Owner: owner,
+  } as Record<string, unknown>;
 
   const res = await fetch(url, {
     method: "POST",

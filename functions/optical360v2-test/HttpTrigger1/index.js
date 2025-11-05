@@ -64,13 +64,25 @@ app.http('HttpTrigger1', {
     //-----------------------------------------------------------
     let payload = {};
     try {
-      if (request.body && Object.keys(request.body).length > 0) {
-        payload = request.body;
-        context.log('DEBUG using parsed request.body');
-      } else {
-        const raw = await request.text();
+      // Azure Functions v4 may provide body as object, string, Buffer/Uint8Array, or empty
+      let raw = '';
+      if (request.body != null) {
+        if (typeof request.body === 'string') {
+          raw = request.body;
+        } else if (request.body instanceof Uint8Array) {
+          raw = new TextDecoder().decode(request.body);
+        } else if (typeof request.body === 'object') {
+          // Already parsed JSON
+          payload = request.body;
+        }
+      }
+      // If not parsed yet, fall back to request.text()
+      if (!payload || Object.keys(payload).length === 0) {
+        if (!raw) raw = await request.text();
         context.log('DEBUG raw text body:', raw);
         payload = raw ? JSON.parse(raw) : {};
+      } else {
+        context.log('DEBUG using object request.body');
       }
     } catch (err) {
       context.log('Invalid JSON body:', err);

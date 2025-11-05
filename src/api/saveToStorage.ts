@@ -42,16 +42,26 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
     : new Date().toISOString();
 
   // Post to the deployed Projects function (route: /api/projects)
-  const url = `${API_BASE}/HttpTrigger1`;
+  const url = `${API_BASE}/projects`;
 
+  // Be liberal in what we send: include both lowerCamel and PascalCase keys
+  // to maximize compatibility with any deployed Functions code paths.
   const body = {
+    // canonical
     category: input.category,
     uid: input.uid,
     title: input.title,
     description: input.description,
     owner: input.owner,
     timestamp,
-  };
+    // compatibility (some backends expect PascalCase or alternative names)
+    Category: input.category,
+    UID: input.uid,
+    Title: input.title,
+    Description: input.description,
+    Owner: input.owner,
+    Timestamp: timestamp,
+  } as Record<string, unknown>;
 
   let res: Response;
   try {

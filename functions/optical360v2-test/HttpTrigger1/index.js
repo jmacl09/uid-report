@@ -51,21 +51,25 @@ app.http('HttpTrigger1', {
       'Access-Control-Allow-Credentials': 'true'
     };
 
+    // Handle CORS preflight
     if (request.method === 'OPTIONS')
       return { status: 204, headers: corsHeaders };
 
+    // Basic readiness check
     if (request.method === 'GET')
       return { status: 200, headers: corsHeaders, jsonBody: { ok: true, message: 'Ready.' } };
 
     //-----------------------------------------------------------
-    // ✅ Robust body parsing that works for all runtimes
+    // ✅ Final robust JSON body parsing
     //-----------------------------------------------------------
     let payload = {};
     try {
-      if (request.body && typeof request.body === 'object') {
+      if (request.body && Object.keys(request.body).length > 0) {
         payload = request.body;
+        context.log('DEBUG using parsed request.body');
       } else {
         const raw = await request.text();
+        context.log('DEBUG raw text body:', raw);
         payload = raw ? JSON.parse(raw) : {};
       }
     } catch (err) {

@@ -41,10 +41,12 @@ app.http('HttpTrigger1', {
         context.log(`HTTP function processed request for URL "${request.url}"`);
 
         // --- CORS setup ---
+        const allowedOrigin = "https://optical360.net"; // your real site domain
         const corsHeaders = {
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': allowedOrigin,
             'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-            'Access-Control-Allow-Headers': '*',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            "Access-Control-Allow-Credentials": "true",
         };
 
         // --- OPTIONS preflight ---

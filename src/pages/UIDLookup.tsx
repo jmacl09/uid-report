@@ -24,6 +24,25 @@ import deriveLineForC0 from "../data/mappedlines";
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
+// Note type used across the component for UID notes
+type Note = { id: string; uid: string; authorEmail?: string; authorAlias?: string; text: string; ts: number; _pk?: string; _rk?: string };
+
+// Map a table entity from Notes table to local Note type
+const mapEntityToNote = (uidKey: string, e: NoteEntity): Note => {
+  const authorAlias = (e.User || e.user || e.Owner || '').toString() || undefined;
+  const created = (e.CreatedAt || e.createdAt || e.rowKey || e.timestamp || '') as string;
+  const ts = (() => { const d = Date.parse(created); return Number.isFinite(d) ? d : Date.now(); })();
+  return {
+    id: String(e.rowKey || `${Date.now()}`),
+    uid: uidKey,
+    authorAlias,
+    text: String(e.Comment || e.comment || e.Description || e.description || e.Title || ''),
+    ts,
+    _pk: String(e.partitionKey || ''),
+    _rk: String(e.rowKey || ''),
+  };
+};
+
 // Pure helpers moved to module scope to avoid react-hooks exhaustive-deps issues
 const niceWorkflowStatus = (raw?: any): string => {
   const t = String(raw ?? '').trim();
@@ -203,7 +222,6 @@ export default function UIDLookup() {
     try { localStorage.setItem('uidProjectSections', JSON.stringify(sections)); } catch {}
   }, [sections]);
   // Notes/chatbox state
-  type Note = { id: string; uid: string; authorEmail?: string; authorAlias?: string; text: string; ts: number; _pk?: string; _rk?: string };
   const [notes, setNotes] = useState<Note[]>([]);
   const [noteText, setNoteText] = useState<string>("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -321,22 +339,6 @@ export default function UIDLookup() {
   useEffect(() => {
     try { localStorage.setItem('uidProjects', JSON.stringify(projects)); } catch {}
   }, [projects]);
-
-  // Map a table entity from Notes table to local Note type
-  const mapEntityToNote = (uidKey: string, e: NoteEntity): Note => {
-    const authorAlias = (e.User || e.user || e.Owner || '').toString() || undefined;
-    const created = (e.CreatedAt || e.createdAt || e.rowKey || e.timestamp || '') as string;
-    const ts = (() => { const d = Date.parse(created); return Number.isFinite(d) ? d : Date.now(); })();
-    return {
-      id: String(e.rowKey || `${Date.now()}`),
-      uid: uidKey,
-      authorAlias,
-      text: String(e.Comment || e.comment || e.Description || e.description || e.Title || ''),
-      ts,
-      _pk: String(e.partitionKey || ''),
-      _rk: String(e.rowKey || ''),
-    };
-  };
 
   // Load notes when the current UID changes (server-first, fallback to cache)
   useEffect(() => {

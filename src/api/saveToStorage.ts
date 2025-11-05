@@ -1,6 +1,6 @@
 import { API_BASE } from "./config";
 
-export type StorageCategory = "Comments" | "Projects" | "Troubleshooting" | "Calendar";
+export type StorageCategory = "Comments" | "Notes" | "Projects" | "Troubleshooting" | "Calendar";
 
 export interface SaveInput {
   category: StorageCategory;

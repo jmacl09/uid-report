@@ -45,7 +45,7 @@ const SettingsPage: React.FC = () => {
       const uid = (testUid || '').trim() || '99999999999';
       const email = (() => { try { return localStorage.getItem('loggedInEmail') || ''; } catch { return ''; } })();
       const resp = await saveToStorage({
-        category: 'Comments',
+        category: 'Notes',
         uid,
         title: 'Test Save',
         description: `SWA storage test at ${new Date().toISOString()}`,

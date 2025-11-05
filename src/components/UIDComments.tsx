@@ -9,7 +9,7 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
   const handleSave = async () => {
     try {
       const result = await saveToStorage({
-        category: "Comments",
+        category: "Notes",
         uid,
         title: "General comment",
         description: "This UID was validated by NOC",

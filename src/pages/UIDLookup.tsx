@@ -392,7 +392,7 @@ export default function UIDLookup() {
     // Title kept compact; description holds full note text
     try {
       void saveToStorage({
-        category: "Comments",
+        category: "Notes",
         uid: uidKey,
         title: "UID Comment",
         description: text,
@@ -540,7 +540,7 @@ export default function UIDLookup() {
     // Fire-and-forget server save for project notes as well
     try {
       void saveToStorage({
-        category: "Comments",
+        category: "Notes",
         uid: uidKey,
         title: "Project Comment",
         description: text,

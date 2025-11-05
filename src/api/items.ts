@@ -21,7 +21,7 @@ export type GetItemsResponse = {
 };
 
 export async function getNotesForUid(uid: string, signal?: AbortSignal): Promise<NoteEntity[]> {
-  const url = `${API_BASE}/GetItems?uid=${encodeURIComponent(uid)}&category=Comments`;
+  const url = `${API_BASE}/GetItems?uid=${encodeURIComponent(uid)}&category=Notes`;
   const res = await fetch(url, { method: 'GET', credentials: 'include', signal });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -34,7 +34,7 @@ export async function getNotesForUid(uid: string, signal?: AbortSignal): Promise
 
 export async function deleteNote(partitionKey: string, rowKey: string, signal?: AbortSignal): Promise<void> {
   const url = `${API_BASE}/DeleteItem`;
-  const body = { category: 'Comments', partitionKey, rowKey };
+  const body = { category: 'Notes', partitionKey, rowKey };
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -58,18 +58,25 @@ app.http('HttpTrigger1', {
       return { status: 200, headers: corsHeaders, jsonBody: { ok: true, message: 'Ready.' } };
 
     //-----------------------------------------------------------
-    // Parse request body
+    // ✅ Robust body parsing that works for all runtimes
     //-----------------------------------------------------------
-    let bodyText = await request.text();
     let payload = {};
     try {
-      payload = JSON.parse(bodyText);
-    } catch {
-      context.log('DEBUG Invalid JSON body:', bodyText);
-      return { status: 400, headers: corsHeaders, jsonBody: { ok: false, error: 'Invalid JSON', bodyText } };
+      if (request.body && typeof request.body === 'object') {
+        payload = request.body;
+      } else {
+        const raw = await request.text();
+        payload = raw ? JSON.parse(raw) : {};
+      }
+    } catch (err) {
+      context.log('Invalid JSON body:', err);
+      return {
+        status: 400,
+        headers: corsHeaders,
+        jsonBody: { ok: false, error: 'Invalid JSON body', details: String(err) }
+      };
     }
 
-    context.log('DEBUG raw bodyText:', bodyText);
     context.log('DEBUG parsed payload:', JSON.stringify(payload));
 
     const { category, uid, title, description = '', owner = 'Unknown', timestamp } = payload;
@@ -79,7 +86,11 @@ app.http('HttpTrigger1', {
     //-----------------------------------------------------------
     if (!uid || !category || !title) {
       context.log('DEBUG missing fields:', { uid, category, title });
-      return { status: 400, headers: corsHeaders, jsonBody: { ok: false, error: 'Missing required fields', payload } };
+      return {
+        status: 400,
+        headers: corsHeaders,
+        jsonBody: { ok: false, error: 'Missing required fields', payload }
+      };
     }
 
     //-----------------------------------------------------------
@@ -109,13 +120,17 @@ app.http('HttpTrigger1', {
       };
 
       await client.upsertEntity(entity, 'Merge');
-      context.log(`Saved entity for UID ${uid} to table ${tableName}`);
+      context.log(`✅ Saved entity for UID ${uid} to table ${tableName}`);
 
       return { status: 200, headers: corsHeaders, jsonBody: { ok: true, entity } };
 
     } catch (err) {
-      context.log('Error:', err);
-      return { status: 500, headers: corsHeaders, jsonBody: { ok: false, error: String(err?.message || err) } };
+      context.log('❌ Error:', err);
+      return {
+        status: 500,
+        headers: corsHeaders,
+        jsonBody: { ok: false, error: String(err?.message || err) }
+      };
     }
   }
 });

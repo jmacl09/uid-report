@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { saveToStorage } from "../api/saveToStorage";
+import { getNotesForUid, deleteNote as deleteNoteApi, NoteEntity } from "../api/items";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   initializeIcons,
@@ -202,7 +203,7 @@ export default function UIDLookup() {
     try { localStorage.setItem('uidProjectSections', JSON.stringify(sections)); } catch {}
   }, [sections]);
   // Notes/chatbox state
-  type Note = { id: string; uid: string; authorEmail?: string; authorAlias?: string; text: string; ts: number };
+  type Note = { id: string; uid: string; authorEmail?: string; authorAlias?: string; text: string; ts: number; _pk?: string; _rk?: string };
   const [notes, setNotes] = useState<Note[]>([]);
   const [noteText, setNoteText] = useState<string>("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -321,15 +322,44 @@ export default function UIDLookup() {
     try { localStorage.setItem('uidProjects', JSON.stringify(projects)); } catch {}
   }, [projects]);
 
-  // Load notes when the current UID changes
+  // Map a table entity from Notes table to local Note type
+  const mapEntityToNote = (uidKey: string, e: NoteEntity): Note => {
+    const authorAlias = (e.User || e.user || e.Owner || '').toString() || undefined;
+    const created = (e.CreatedAt || e.createdAt || e.rowKey || e.timestamp || '') as string;
+    const ts = (() => { const d = Date.parse(created); return Number.isFinite(d) ? d : Date.now(); })();
+    return {
+      id: String(e.rowKey || `${Date.now()}`),
+      uid: uidKey,
+      authorAlias,
+      text: String(e.Comment || e.comment || e.Description || e.description || e.Title || ''),
+      ts,
+      _pk: String(e.partitionKey || ''),
+      _rk: String(e.rowKey || ''),
+    };
+  };
+
+  // Load notes when the current UID changes (server-first, fallback to cache)
   useEffect(() => {
     const keyUid = lastSearched || '';
     if (!keyUid) { setNotes([]); return; }
-    try {
-      const raw = localStorage.getItem(`uidNotes:${keyUid}`);
-      const arr = raw ? JSON.parse(raw) : [];
-      setNotes(Array.isArray(arr) ? arr : []);
-    } catch { setNotes([]); }
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = await getNotesForUid(keyUid);
+        if (cancelled) return;
+        const mapped: Note[] = items.map(e => mapEntityToNote(keyUid, e)).sort((a,b)=>b.ts-a.ts);
+        setNotes(mapped);
+        try { localStorage.setItem(`uidNotes:${keyUid}`, JSON.stringify(mapped)); } catch {}
+      } catch (err) {
+        // Fallback to local cache on network/server error
+        try {
+          const raw = localStorage.getItem(`uidNotes:${keyUid}`);
+          const arr = raw ? JSON.parse(raw) : [];
+          setNotes(Array.isArray(arr) ? arr : []);
+        } catch { setNotes([]); }
+      }
+    })();
+    return () => { cancelled = true; };
   }, [lastSearched]);
   const persistNotes = (uidKey: string, next: Note[]) => {
     try { localStorage.setItem(`uidNotes:${uidKey}`, JSON.stringify(next)); } catch {}
@@ -365,10 +395,14 @@ export default function UIDLookup() {
         title: "UID Comment",
         description: text,
         owner: alias || email || "",
-      }).then((msg) => {
-        // Optional visibility in console to confirm network save
-        // eslint-disable-next-line no-console
-        console.log(`[save] Comment saved server-side for UID ${uidKey}:`, msg);
+      }).then(async () => {
+        // After save, refresh from server to get authoritative IDs (rowKey)
+        try {
+          const items = await getNotesForUid(uidKey);
+          const mapped: Note[] = items.map(e => mapEntityToNote(uidKey, e)).sort((a,b)=>b.ts-a.ts);
+          setNotes(mapped);
+          persistNotes(uidKey, mapped);
+        } catch {}
       }).catch((e) => {
         // eslint-disable-next-line no-console
         console.warn("Server-side save failed (comment kept locally):", e?.body || e?.message || e);
@@ -379,12 +413,29 @@ export default function UIDLookup() {
     const email = getEmail();
     return !!email && email === (n.authorEmail || '');
   };
-  const removeNote = (id: string) => {
+  const removeNote = async (id: string) => {
     const uidKey = lastSearched || '';
     if (!uidKey) return;
-    const next = notes.filter(n => n.id !== id);
-    setNotes(next);
-    persistNotes(uidKey, next);
+    const target = notes.find(n => n.id === id);
+    if (!target) return;
+    const pk = target._pk || `UID_${uidKey}`;
+    const rk = target._rk || target.id;
+    try {
+      await deleteNoteApi(pk, rk);
+      // Refresh notes from server after successful delete
+      const items = await getNotesForUid(uidKey);
+      const mapped: Note[] = items.map(e => mapEntityToNote(uidKey, e)).sort((a,b)=>b.ts-a.ts);
+      setNotes(mapped);
+      persistNotes(uidKey, mapped);
+    } catch (err) {
+      // On failure, keep current list but log
+      // eslint-disable-next-line no-console
+      console.warn('Failed to delete note from server:', err);
+      // Optimistic local removal as fallback
+      const next = notes.filter(n => n.id !== id);
+      setNotes(next);
+      persistNotes(uidKey, next);
+    }
   };
   const startEdit = (n: Note) => {
     setEditingId(n.id);

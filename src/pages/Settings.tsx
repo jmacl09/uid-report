@@ -17,6 +17,10 @@ const SettingsPage: React.FC = () => {
   const [testLoading, setTestLoading] = useState<boolean>(false);
   const [testOk, setTestOk] = useState<string | null>(null);
   const [testErr, setTestErr] = useState<string | null>(null);
+  // Ping Projects API (GET) to prove endpoint is reachable
+  const [pingLoading, setPingLoading] = useState<boolean>(false);
+  const [pingOk, setPingOk] = useState<string | null>(null);
+  const [pingErr, setPingErr] = useState<string | null>(null);
 
   useEffect(() => {
     applyTheme(theme, animations, compact);
@@ -43,6 +47,9 @@ const SettingsPage: React.FC = () => {
     setTestOk(null); setTestErr(null); setTestLoading(true);
     try {
       const uid = (testUid || '').trim() || '99999999999';
+      if (!/^\d{11}$/.test(uid)) {
+        throw new Error('Please enter a valid 11-digit UID.');
+      }
       const email = (() => { try { return localStorage.getItem('loggedInEmail') || ''; } catch { return ''; } })();
       const resp = await saveToStorage({
         category: 'Notes',
@@ -56,6 +63,21 @@ const SettingsPage: React.FC = () => {
       const msg = e instanceof SaveError ? (e.body || e.message) : (e?.body || e?.message || 'Failed to save');
       setTestErr(String(msg));
     } finally { setTestLoading(false); }
+  };
+
+  const handlePingProjects = async () => {
+    setPingOk(null); setPingErr(null); setPingLoading(true);
+    try {
+      const url = (process.env.REACT_APP_API_BASE as string || '/api') + '/Projects';
+      const res = await fetch(url, { method: 'GET', credentials: 'include' });
+      const text = await res.text();
+      if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+      setPingOk(text.slice(0, 200));
+    } catch (err: any) {
+      setPingErr(String(err?.message || err));
+    } finally {
+      setPingLoading(false);
+    }
   };
 
   return (
@@ -105,6 +127,16 @@ const SettingsPage: React.FC = () => {
             </div>
             {testOk && (<div style={{ marginTop: 8 }}><MessageBar messageBarType={MessageBarType.success} isMultiline={false}>Saved successfully: {testOk.slice(0, 200)}</MessageBar></div>)}
             {testErr && (<div style={{ marginTop: 8 }}><MessageBar messageBarType={MessageBarType.error} isMultiline={false}>{testErr}</MessageBar></div>)}
+          </div>
+
+          {/* API ping (GET /api/Projects) */}
+          <div style={{ marginTop: 20 }}>
+            <div className="section-title" style={{ margin: '8px 0' }}>API connectivity</div>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', maxWidth: 540 }}>
+              <PrimaryButton text={pingLoading ? 'Pinging…' : 'Ping /api/Projects'} disabled={pingLoading} onClick={handlePingProjects} />
+            </div>
+            {pingOk && (<div style={{ marginTop: 8 }}><MessageBar messageBarType={MessageBarType.success} isMultiline={false}>Ping OK: {pingOk}</MessageBar></div>)}
+            {pingErr && (<div style={{ marginTop: 8 }}><MessageBar messageBarType={MessageBarType.error} isMultiline={false}>{pingErr}</MessageBar></div>)}
           </div>
         </div>
       </div>

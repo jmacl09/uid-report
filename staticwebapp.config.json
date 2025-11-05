@@ -18,6 +18,24 @@
       "rewrite": "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ"
     },
     {
+      "route": "/api/HttpTrigger1",
+      "methods": ["GET","POST","OPTIONS"],
+      "allowedRoles": ["anonymous"],
+      "rewrite": "https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1"
+    },
+    {
+      "route": "/api/GetItems",
+      "methods": ["GET","OPTIONS"],
+      "allowedRoles": ["anonymous"],
+      "rewrite": "https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/GetItems"
+    },
+    {
+      "route": "/api/DeleteItem",
+      "methods": ["POST","OPTIONS"],
+      "allowedRoles": ["anonymous"],
+      "rewrite": "https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/DeleteItem"
+    },
+    {
       "route": "/api/*",
       "allowedRoles": [
         "anonymous"

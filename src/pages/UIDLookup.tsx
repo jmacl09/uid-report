@@ -3,7 +3,6 @@ import { saveToStorage } from "../api/saveToStorage";
 import { getNotesForUid, deleteNote as deleteNoteApi, NoteEntity } from "../api/items";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  initializeIcons,
   Stack,
   Text,
   IconButton,
@@ -76,7 +75,6 @@ const getWFStatusFor = (src: any, uidKey?: string | null): string => {
 };
 
 export default function UIDLookup() {
-  initializeIcons();
   const location = useLocation();
   const navigate = useNavigate();
 

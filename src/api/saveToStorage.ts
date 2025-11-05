@@ -64,8 +64,7 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body),
-      signal,
-      credentials: 'include' // include auth cookie when SWA protects /api
+      signal
     });
   } catch (networkErr: any) {
     // Network or CORS-level failure

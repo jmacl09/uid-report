@@ -8,8 +8,7 @@ export interface SaveInput {
   title: string;
   description: string;
   owner: string;
-  // Optional timestamp override; when omitted current time is used.
-  timestamp?: string | Date;
+  timestamp?: string | Date; // Optional timestamp override
 }
 
 export interface SaveOptions {
@@ -33,7 +32,7 @@ export class SaveError extends Error {
   }
 }
 
-// Reusable helper that posts to the Azure Function and returns response text.
+// === MAIN FUNCTION ===
 export async function saveToStorage(input: SaveInput, options: SaveOptions = {}): Promise<string> {
   const { signal } = options;
 
@@ -41,7 +40,6 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
     ? (input.timestamp instanceof Date ? input.timestamp.toISOString() : new Date(input.timestamp).toISOString())
     : new Date().toISOString();
 
-  // Post to the deployed Projects function (route: /api/projects)
   const url = `${API_BASE}/HttpTrigger1`;
 
   const body = {
@@ -53,35 +51,24 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
     timestamp,
   };
 
-  let res: Response;
   try {
-    // Debug: surface the intent in the browser console
-    // eslint-disable-next-line no-console
-    console.debug('[saveToStorage] POST', url, body);
-    res = await fetch(url, {
+    console.debug("[saveToStorage] POST", url, body);
+
+    const res = await fetch(url, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal
+      signal,
     });
+
+    const text = await res.text();
+    if (!res.ok) {
+      throw new SaveError(`Save failed with status ${res.status}`, res.status, text);
+    }
+
+    return text;
   } catch (networkErr: any) {
-    // Network or CORS-level failure
-    // eslint-disable-next-line no-console
-    console.warn('[saveToStorage] Network/CORS error', networkErr);
+    console.warn("[saveToStorage] Network/CORS error", networkErr);
     throw new SaveError(`Network error while saving data: ${networkErr?.message || networkErr}`, undefined);
   }
-
-  const text = await res.text();
-
-  if (!res.ok) {
-    // Gracefully surface server and client errors to the caller
-    const err = new SaveError(`Save failed with status ${res.status}`, res.status, text);
-    // eslint-disable-next-line no-console
-    console.warn('[saveToStorage] Server returned error', res.status, text);
-    throw err;
-  }
-
-  return text;
 }

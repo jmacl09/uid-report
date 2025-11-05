@@ -40,7 +40,7 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for GitHub integrations (e.g. PR comments)
           action: "upload"
           app_location: "/"        # Root of your React app
-          api_location: ""         # No serverless functions directory
+          api_location: "src/functions"         # No serverless functions directory
           output_location: "build" # Build output folder
 
   close_pull_request_job:
@@ -59,3 +59,4 @@ jobs:
           app_location: "/"
           api_location: ""
           output_location: "build"
+

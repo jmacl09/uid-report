@@ -55,3 +55,7 @@ jobs:
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_WONDERFUL_FLOWER_09C6DC503 }}
           action: "close"
+          # Inputs below are not required for 'close' but silence some IDE validators
+          app_location: "/"
+          api_location: ""
+          output_location: "build"

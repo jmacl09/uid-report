@@ -42,7 +42,7 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
     : new Date().toISOString();
 
   // Post to the deployed Projects function (route: /api/projects)
-  const url = `${API_BASE}/projects`;
+  const url = `${API_BASE}/Projects`;
 
   // Be liberal in what we send: include both lowerCamel and PascalCase keys
   // to maximize compatibility with any deployed Functions code paths.

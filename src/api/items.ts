@@ -34,7 +34,7 @@ export async function saveNote(
   description: string,
   owner: string = "Unknown"
 ): Promise<SaveResponse> {
-  const url = `${API_BASE}/projects`;
+  const url = `${API_BASE}/Projects`;
 
   const body = {
     category: "Notes",

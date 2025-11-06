@@ -345,7 +345,7 @@ export default function UIDLookup() {
     let cancelled = false;
     (async () => {
       try {
-        const items = await getNotesForUid(keyUid);
+        const items = await getNotesForUid(keyUid, NOTES_ENDPOINT);
         if (cancelled) return;
         const mapped: Note[] = items.map(e => mapEntityToNote(keyUid, e)).sort((a,b)=>b.ts-a.ts);
         setNotes(mapped);
@@ -372,10 +372,13 @@ export default function UIDLookup() {
     const email = getEmail();
     const alias = getAlias(email);
     const n: Note = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, uid: uidKey, authorEmail: email || undefined, authorAlias: alias || undefined, text, ts: Date.now() };
-    const next = [n, ...notes];
-    setNotes(next);
+    // Optimistic local append using functional state to avoid stale closures
+    setNotes(prev => {
+      const next = [n, ...prev];
+      persistNotes(uidKey, next);
+      return next;
+    });
     setNoteText('');
-    persistNotes(uidKey, next);
     // Also add to any saved projects that contain this UID
     setProjects(prev => prev.map(p => {
       const src = p?.data?.sourceUids || [];
@@ -390,6 +393,7 @@ export default function UIDLookup() {
     // Title kept compact; description holds full note text
     try {
       void saveToStorage({
+        endpoint: NOTES_ENDPOINT,
         category: "Notes",
         uid: uidKey,
         title: "UID Comment",
@@ -398,7 +402,7 @@ export default function UIDLookup() {
       }).then(async () => {
         // After save, refresh from server to get authoritative IDs (rowKey)
         try {
-          const items = await getNotesForUid(uidKey);
+          const items = await getNotesForUid(uidKey, NOTES_ENDPOINT);
           const mapped: Note[] = items.map(e => mapEntityToNote(uidKey, e)).sort((a,b)=>b.ts-a.ts);
           setNotes(mapped);
           persistNotes(uidKey, mapped);
@@ -423,7 +427,7 @@ export default function UIDLookup() {
     try {
       await deleteNoteApi(pk, rk);
       // Refresh notes from server after successful delete
-      const items = await getNotesForUid(uidKey);
+      const items = await getNotesForUid(uidKey, NOTES_ENDPOINT);
       const mapped: Note[] = items.map(e => mapEntityToNote(uidKey, e)).sort((a,b)=>b.ts-a.ts);
       setNotes(mapped);
       persistNotes(uidKey, mapped);
@@ -3282,3 +3286,5 @@ export default function UIDLookup() {
 
 
 
+// Use a consistent endpoint for saving/fetching notes to avoid mismatches
+const NOTES_ENDPOINT = "https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1";

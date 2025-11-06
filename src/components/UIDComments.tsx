@@ -16,6 +16,8 @@ type CommentItem = {
 };
 
 const storageKeyFor = (uid: string) => `uid-comments:${uid}`;
+const COMMENTS_ENDPOINT =
+  "https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1";
 
 const UIDComments: React.FC<Props> = ({ uid }) => {
   const [comment, setComment] = useState("This UID was validated by NOC");
@@ -25,11 +27,32 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<CommentItem[]>([]);
 
-  // Load any locally cached comments for this UID
+  const refresh = async () => {
+    try {
+      const remote = await getCommentsForUid(uid, COMMENTS_ENDPOINT);
+      if (Array.isArray(remote)) {
+        const mapped: CommentItem[] = remote.map((r: any) => ({
+          description: r.description || r.Description || '',
+          owner: r.owner || r.Owner || 'Unknown',
+          savedAt: r.savedAt || r.rowKey || new Date().toISOString(),
+          title: r.title || r.Title || 'General comment',
+          category: r.category || r.Category || 'Comments',
+          rowKey: r.rowKey,
+        }));
+        mapped.sort((a, b) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : 0));
+        setItems(mapped);
+        try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(mapped)); } catch {}
+      }
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[UIDComments] Failed to fetch remote comments', e);
+    }
+  };
+
+  // Load any locally cached comments for this UID, then refresh from server
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      // 1. Load local cache immediately for snappy UI
       try {
         const raw = localStorage.getItem(storageKeyFor(uid));
         if (raw) {
@@ -37,26 +60,7 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
           if (!cancelled && Array.isArray(parsed)) setItems(parsed);
         }
       } catch { /* ignore */ }
-      // 2. Fetch authoritative list from Azure Table
-      try {
-        const remote = await getCommentsForUid(uid, 'https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1');
-        if (!cancelled && Array.isArray(remote)) {
-          const mapped: CommentItem[] = remote.map((r: any) => ({
-            description: r.description || r.Description || '',
-            owner: r.owner || r.Owner || 'Unknown',
-            savedAt: r.savedAt || r.rowKey || new Date().toISOString(),
-            title: r.title || r.Title || 'General comment',
-            category: r.category || r.Category || 'Comments',
-            rowKey: r.rowKey,
-          }));
-          // Sort newest first by savedAt
-          mapped.sort((a, b) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : 0));
-          setItems(mapped);
-          try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(mapped)); } catch {}
-        }
-      } catch (e) {
-        console.warn('[UIDComments] Failed to fetch remote comments', e);
-      }
+      if (!cancelled) await refresh();
     };
     void load();
     return () => { cancelled = true; };
@@ -74,7 +78,7 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
     try {
       const result = await saveToStorage({
         // Call the deployed Azure Function directly (cross-origin)
-        endpoint: 'https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1',
+        endpoint: COMMENTS_ENDPOINT,
         category: "Comments",             // domain specific categorization
         uid,
         title: "General comment",         // required by backend
@@ -101,10 +105,18 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
         category: 'Comments',
         rowKey,
       };
-      persist([nextItem, ...items]);
+      // Optimistic update using functional state to avoid stale closure
+      setItems((prev) => {
+        const next = [nextItem, ...prev];
+        try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(next)); } catch {}
+        return next;
+      });
       setComment("");
       setLastSaved(new Date().toLocaleTimeString());
       console.log(`[save] Comment saved for UID ${uid}:`, nextItem);
+
+      // Refresh from server for authoritative IDs and ordering
+      await refresh();
     } catch (e: any) {
       const se: SaveError | undefined = e instanceof SaveError ? e : undefined;
       if (se?.status && se.status >= 500) {

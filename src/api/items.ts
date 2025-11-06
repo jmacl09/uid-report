@@ -18,11 +18,25 @@ export type SaveResponse = {
 };
 
 /**
- * Fetch notes for a given UID.
- * Read endpoint is not implemented yet; return empty array for now.
+ * Fetch notes for a given UID from the HttpTrigger1 function.
+ * Uses category=Notes to align with saveToStorage usage in UIDLookup.
  */
-export async function getNotesForUid(_uid: string): Promise<NoteEntity[]> {
-  return [];
+export async function getNotesForUid(uid: string, endpoint?: string): Promise<NoteEntity[]> {
+  const rawEndpoint = endpoint || 'HttpTrigger1';
+  const isAbsolute = /^https?:\/\//i.test(rawEndpoint);
+  const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
+  const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Notes')}`;
+
+  const res = await fetch(url, { method: 'GET' });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`getNotesForUid failed ${res.status}: ${text}`);
+  try {
+    const data = JSON.parse(text);
+    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+    return [];
+  } catch {
+    return [];
+  }
 }
 
 /**

@@ -3,13 +3,20 @@ import { API_BASE } from "./config";
 export type StorageCategory = "Comments" | "Notes" | "Projects" | "Troubleshooting" | "Calendar";
 
 export interface SaveInput {
-  category: StorageCategory;
-  uid: string;
-  title: string;
-  description: string;
-  owner: string;
+  category: StorageCategory; // Logical grouping (e.g. Comments, Notes, Projects)
+  uid: string;               // The UID being annotated
+  title: string;             // Short title for the entry
+  description: string;       // Longer free‑form text
+  owner: string;             // Person saving the record
   // Optional timestamp override; when omitted current time is used.
   timestamp?: string | Date;
+  /**
+   * (Advanced) Override the target Azure Function route. Defaults to 'HttpTrigger1'
+   * which is the new optical360v2-test function that persists to Table Storage.
+   * Previous code used 'Projects'; keeping this extensibility lets older calls keep working
+   * while new comment saves can explicitly hit the new function.
+   */
+  endpoint?: string;
 }
 
 export interface SaveOptions {
@@ -41,13 +48,18 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
     ? (input.timestamp instanceof Date ? input.timestamp.toISOString() : new Date(input.timestamp).toISOString())
     : new Date().toISOString();
 
-  // Post to the deployed Projects function (route: /api/projects)
-  const url = `${API_BASE}/Projects`;
+  // Determine which backend function to hit.
+  // If caller provides a full URL, use it as-is; otherwise build from API_BASE and endpoint.
+  // Default endpoint is the new optical360v2-test function name 'HttpTrigger1'.
+  const rawEndpoint = input.endpoint || 'HttpTrigger1';
+  const isAbsolute = /^https?:\/\//i.test(rawEndpoint);
+  const endpoint = isAbsolute ? rawEndpoint : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
+  const url = endpoint;
 
   // Be liberal in what we send: include both lowerCamel and PascalCase keys
   // to maximize compatibility with any deployed Functions code paths.
   const body = {
-    // canonical
+  // canonical (lower camel case expected by new function)
     category: input.category,
     uid: input.uid,
     title: input.title,
@@ -68,6 +80,15 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
     // Debug: surface the intent in the browser console
     // eslint-disable-next-line no-console
     console.debug('[saveToStorage] POST', url, body);
+    // Determine credentials policy: include for same-origin (SWA proxy), omit for cross-origin public Function URL.
+    const isCrossOrigin = (() => {
+      try {
+        if (typeof window === 'undefined') return false;
+        const target = new URL(url, window.location.href);
+        return target.origin !== window.location.origin;
+      } catch { return false; }
+    })();
+
     res = await fetch(url, {
       method: "POST",
       headers: {
@@ -75,7 +96,7 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
       },
       body: JSON.stringify(body),
       signal,
-      credentials: 'include' // include auth cookie when SWA protects /api
+      credentials: isCrossOrigin ? 'omit' : 'include',
     });
   } catch (networkErr: any) {
     // Network or CORS-level failure

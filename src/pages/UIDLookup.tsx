@@ -2750,6 +2750,13 @@ export default function UIDLookup() {
                   }}
                   rows={3}
                 />
+                <div style={{ display: 'flex', alignItems: 'flex-end', paddingLeft: 8 }}>
+                  <PrimaryButton
+                    text="Add note"
+                    onClick={addNote}
+                    disabled={!noteText.trim()}
+                  />
+                </div>
                 <div className="notes-user-hint">
                   {(() => {
                     const email = getEmail();

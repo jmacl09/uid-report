@@ -22,7 +22,9 @@ export type SaveResponse = {
  * Uses category=Notes to align with saveToStorage usage in UIDLookup.
  */
 export async function getNotesForUid(uid: string, endpoint?: string): Promise<NoteEntity[]> {
-  const rawEndpoint = endpoint || 'HttpTrigger1';
+  // Prefer the deployed Function URL by default to avoid proxy/env issues
+  const defaultAbsolute = 'https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1';
+  const rawEndpoint = endpoint || defaultAbsolute;
   const isAbsolute = /^https?:\/\//i.test(rawEndpoint);
   const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
   const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Notes')}`;

@@ -9,7 +9,7 @@ interface Props {
 type CommentItem = {
   description: string;
   owner: string;
-  savedAt: string; // ISO or human readable
+  savedAt: string;
   title?: string;
   category?: string;
   rowKey?: string;
@@ -20,12 +20,23 @@ const COMMENTS_ENDPOINT =
   "https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1";
 
 const UIDComments: React.FC<Props> = ({ uid }) => {
-  const [comment, setComment] = useState("This UID was validated by NOC");
+  const [comment, setComment] = useState("");
   const [owner, setOwner] = useState("Josh Maclean");
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<CommentItem[]>([]);
+
+  const mergeComments = (existing: CommentItem[], incoming: CommentItem[]) => {
+    const seen = new Set(existing.map(i => i.rowKey || i.savedAt + i.owner + i.description));
+    const merged = [...existing];
+    for (const c of incoming) {
+      const key = c.rowKey || c.savedAt + c.owner + c.description;
+      if (!seen.has(key)) merged.push(c);
+    }
+    merged.sort((a, b) => (a.savedAt < b.savedAt ? 1 : -1));
+    return merged;
+  };
 
   const refresh = async () => {
     try {
@@ -34,22 +45,22 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
         const mapped: CommentItem[] = remote.map((r: any) => ({
           description: r.description || r.Description || '',
           owner: r.owner || r.Owner || 'Unknown',
-          savedAt: r.savedAt || r.rowKey || new Date().toISOString(),
+          savedAt: r.savedAt || r.timestamp || r.rowKey || new Date().toISOString(),
           title: r.title || r.Title || 'General comment',
           category: r.category || r.Category || 'Comments',
           rowKey: r.rowKey,
         }));
-        mapped.sort((a, b) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : 0));
-        setItems(mapped);
-        try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(mapped)); } catch {}
+        setItems(prev => {
+          const next = mergeComments(prev, mapped);
+          try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(next)); } catch {}
+          return next;
+        });
       }
     } catch (e) {
-      // eslint-disable-next-line no-console
       console.warn('[UIDComments] Failed to fetch remote comments', e);
     }
   };
 
-  // Load any locally cached comments for this UID, then refresh from server
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
@@ -59,73 +70,61 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
           const parsed = JSON.parse(raw) as CommentItem[];
           if (!cancelled && Array.isArray(parsed)) setItems(parsed);
         }
-      } catch { /* ignore */ }
+      } catch {}
       if (!cancelled) await refresh();
     };
     void load();
     return () => { cancelled = true; };
   }, [uid]);
 
-  const persist = (next: CommentItem[]) => {
-    setItems(next);
-    try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(next)); } catch {}
-  };
-
   const handleSave = async () => {
     if (!comment.trim()) return;
     setSaving(true);
     setError(null);
+    const newComment: CommentItem = {
+      description: comment.trim(),
+      owner: owner.trim() || 'Unknown',
+      savedAt: new Date().toISOString(),
+      title: 'General comment',
+      category: 'Comments',
+    };
+
+    // Show it immediately
+    setItems(prev => {
+      const next = [newComment, ...prev];
+      try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(next)); } catch {}
+      return next;
+    });
+    setComment("");
+
     try {
       const result = await saveToStorage({
-        // Call the deployed Azure Function directly (cross-origin)
         endpoint: COMMENTS_ENDPOINT,
-        category: "Comments",             // domain specific categorization
+        category: "Comments",
         uid,
-        title: "General comment",         // required by backend
-        description: comment.trim(),
-        owner: owner.trim() || 'Unknown',
+        title: "General comment",
+        description: newComment.description,
+        owner: newComment.owner,
       });
-      // Try to parse response to extract saved entity details
-      let savedAt = new Date().toISOString();
-      let rowKey: string | undefined;
+
+      // Parse returned entity data if present
       try {
         const parsed = JSON.parse(result);
         const entity = parsed?.entity ?? parsed?.Entity;
-        if (entity) {
-          savedAt = entity.savedAt || entity.SavedAt || entity.rowKey || savedAt;
-          rowKey = entity.rowKey || entity.RowKey;
+        if (entity?.RowKey) {
+          newComment.rowKey = entity.RowKey;
+          newComment.savedAt = entity.Timestamp || newComment.savedAt;
         }
-      } catch { /* non-JSON response, ignore */ }
+      } catch {}
 
-      const nextItem: CommentItem = {
-        description: comment.trim(),
-        owner: owner.trim() || 'Unknown',
-        savedAt,
-        title: 'General comment',
-        category: 'Comments',
-        rowKey,
-      };
-      // Optimistic update using functional state to avoid stale closure
-      setItems((prev) => {
-        const next = [nextItem, ...prev];
-        try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(next)); } catch {}
-        return next;
-      });
-      setComment("");
       setLastSaved(new Date().toLocaleTimeString());
-      console.log(`[save] Comment saved for UID ${uid}:`, nextItem);
 
-      // Refresh from server for authoritative IDs and ordering
-      await refresh();
+      // 🔧 Delay refresh slightly so Function result is persisted in Table Storage
+      setTimeout(() => refresh(), 2000);
     } catch (e: any) {
       const se: SaveError | undefined = e instanceof SaveError ? e : undefined;
-      if (se?.status && se.status >= 500) {
-        console.error("Server error while saving comment:", se?.body || se?.message);
-        setError(`Server error (${se.status}): ${se.body || se.message}`);
-      } else {
-        console.error("Failed to save comment:", se?.body || se?.message || e);
-        setError(se?.body || se?.message || String(e));
-      }
+      setError(se?.body || se?.message || String(e));
+      console.error("Failed to save comment:", e);
     } finally {
       setSaving(false);
     }
@@ -146,7 +145,7 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
           value={comment}
           onChange={(e) => setComment(e.target.value)}
           onKeyDown={handleKeyDown}
-          rows={4}
+          rows={3}
           style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 14, marginTop: 4 }}
           placeholder="Add a comment about this UID"
           disabled={saving}

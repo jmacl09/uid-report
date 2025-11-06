@@ -1,9 +1,21 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { saveToStorage, SaveError } from "../api/saveToStorage";
+import { getCommentsForUid } from "../api/items";
 
 interface Props {
   uid: string;
 }
+
+type CommentItem = {
+  description: string;
+  owner: string;
+  savedAt: string; // ISO or human readable
+  title?: string;
+  category?: string;
+  rowKey?: string;
+};
+
+const storageKeyFor = (uid: string) => `uid-comments:${uid}`;
 
 const UIDComments: React.FC<Props> = ({ uid }) => {
   const [comment, setComment] = useState("This UID was validated by NOC");
@@ -11,6 +23,49 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [items, setItems] = useState<CommentItem[]>([]);
+
+  // Load any locally cached comments for this UID
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      // 1. Load local cache immediately for snappy UI
+      try {
+        const raw = localStorage.getItem(storageKeyFor(uid));
+        if (raw) {
+          const parsed = JSON.parse(raw) as CommentItem[];
+          if (!cancelled && Array.isArray(parsed)) setItems(parsed);
+        }
+      } catch { /* ignore */ }
+      // 2. Fetch authoritative list from Azure Table
+      try {
+        const remote = await getCommentsForUid(uid, 'https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1');
+        if (!cancelled && Array.isArray(remote)) {
+          const mapped: CommentItem[] = remote.map((r: any) => ({
+            description: r.description || r.Description || '',
+            owner: r.owner || r.Owner || 'Unknown',
+            savedAt: r.savedAt || r.rowKey || new Date().toISOString(),
+            title: r.title || r.Title || 'General comment',
+            category: r.category || r.Category || 'Comments',
+            rowKey: r.rowKey,
+          }));
+          // Sort newest first by savedAt
+          mapped.sort((a, b) => (a.savedAt < b.savedAt ? 1 : a.savedAt > b.savedAt ? -1 : 0));
+          setItems(mapped);
+          try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(mapped)); } catch {}
+        }
+      } catch (e) {
+        console.warn('[UIDComments] Failed to fetch remote comments', e);
+      }
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [uid]);
+
+  const persist = (next: CommentItem[]) => {
+    setItems(next);
+    try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(next)); } catch {}
+  };
 
   const handleSave = async () => {
     if (!comment.trim()) return;
@@ -26,8 +81,30 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
         description: comment.trim(),
         owner: owner.trim() || 'Unknown',
       });
-      console.log(`[save] Comment saved for UID ${uid}:`, result);
+      // Try to parse response to extract saved entity details
+      let savedAt = new Date().toISOString();
+      let rowKey: string | undefined;
+      try {
+        const parsed = JSON.parse(result);
+        const entity = parsed?.entity ?? parsed?.Entity;
+        if (entity) {
+          savedAt = entity.savedAt || entity.SavedAt || entity.rowKey || savedAt;
+          rowKey = entity.rowKey || entity.RowKey;
+        }
+      } catch { /* non-JSON response, ignore */ }
+
+      const nextItem: CommentItem = {
+        description: comment.trim(),
+        owner: owner.trim() || 'Unknown',
+        savedAt,
+        title: 'General comment',
+        category: 'Comments',
+        rowKey,
+      };
+      persist([nextItem, ...items]);
+      setComment("");
       setLastSaved(new Date().toLocaleTimeString());
+      console.log(`[save] Comment saved for UID ${uid}:`, nextItem);
     } catch (e: any) {
       const se: SaveError | undefined = e instanceof SaveError ? e : undefined;
       if (se?.status && se.status >= 500) {
@@ -42,6 +119,13 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
     }
   };
 
+  const handleKeyDown: React.KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      void handleSave();
+    }
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: 'column', gap: 8, alignItems: "flex-start", maxWidth: 500 }}>
       <label style={{ width: '100%' }}>
@@ -49,6 +133,7 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
         <textarea
           value={comment}
           onChange={(e) => setComment(e.target.value)}
+          onKeyDown={handleKeyDown}
           rows={4}
           style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 14, marginTop: 4 }}
           placeholder="Add a comment about this UID"
@@ -76,6 +161,21 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
           <span style={{ fontSize: 12, color: '#d33' }}>Error: {error}</span>
         )}
       </div>
+      {items.length > 0 && (
+        <div style={{ marginTop: 8, width: '100%' }}>
+          <div style={{ fontWeight: 600, marginBottom: 4 }}>Recent comments</div>
+          <ul style={{ paddingLeft: 16, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {items.map((it, idx) => (
+              <li key={it.rowKey || `${it.savedAt}-${idx}`} style={{ listStyle: 'disc' }}>
+                <div style={{ whiteSpace: 'pre-wrap' }}>{it.description}</div>
+                <div style={{ fontSize: 12, color: '#666' }}>
+                  by {it.owner} • {new Date(it.savedAt).toLocaleString()}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 };

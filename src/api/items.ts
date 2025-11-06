@@ -26,6 +26,28 @@ export async function getNotesForUid(_uid: string): Promise<NoteEntity[]> {
 }
 
 /**
+ * Fetch comments for a given UID from the HttpTrigger1 function.
+ * If endpoint is an absolute URL, it's used directly; otherwise we build from API_BASE.
+ */
+export async function getCommentsForUid(uid: string, endpoint?: string): Promise<NoteEntity[]> {
+  const rawEndpoint = endpoint || 'HttpTrigger1';
+  const isAbsolute = /^https?:\/\//i.test(rawEndpoint);
+  const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
+  const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Comments')}`;
+
+  const res = await fetch(url, { method: 'GET' });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`getCommentsForUid failed ${res.status}: ${text}`);
+  try {
+    const data = JSON.parse(text);
+    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Save a new note for a UID.
  * This uses the Azure Function routed as /api/projects (POST).
  */

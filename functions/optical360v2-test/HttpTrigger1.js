@@ -58,11 +58,49 @@ app.http('HttpTrigger1', {
         }
 
         if (request.method === 'GET') {
-            return {
-                status: 200,
-                headers: corsHeaders,
-                jsonBody: { ok: true, message: 'UID storage endpoint is alive. Use POST with JSON to save.' },
-            };
+            try {
+                const url = new URL(request.url);
+                const uid = url.searchParams.get('uid');
+                const category = url.searchParams.get('category');
+
+                if (!uid) {
+                    return {
+                        status: 200,
+                        headers: corsHeaders,
+                        jsonBody: { ok: true, message: 'Supply ?uid={UID}[&category=Comments] to list saved entries.' },
+                    };
+                }
+
+                const tableName = process.env.TABLES_TABLE_NAME || 'Projects';
+                const { client, ensureTable } = getTableClient(tableName);
+                await ensureTable();
+
+                const filters = [`PartitionKey eq 'UID_${uid}'`];
+                if (category) {
+                    // Prefer lower-cased 'category' property by writer; fallback to 'Category' if present
+                    filters.push(`(category eq '${category}' or Category eq '${category}')`);
+                }
+                const filterStr = filters.join(' and ');
+
+                const items = [];
+                for await (const entity of client.listEntities({ queryOptions: { filter: filterStr } })) {
+                    items.push(entity);
+                }
+                // Sort newest first by rowKey (ISO timestamp) or savedAt
+                items.sort((a, b) => {
+                    const ak = a.rowKey || a.savedAt || '';
+                    const bk = b.rowKey || b.savedAt || '';
+                    return ak < bk ? 1 : ak > bk ? -1 : 0;
+                });
+
+                return {
+                    status: 200,
+                    headers: corsHeaders,
+                    jsonBody: { ok: true, uid, category: category || null, count: items.length, items },
+                };
+            } catch (e) {
+                return { status: 500, headers: corsHeaders, jsonBody: { ok: false, error: String(e?.message || e) } };
+            }
         }
 
         // ✅ Parse JSON input

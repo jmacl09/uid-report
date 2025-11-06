@@ -56,7 +56,7 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
   const endpoint = isAbsolute ? rawEndpoint : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
   const url = endpoint;
 
-  // Be liberal in what we send: include both lowerCamel and PascalCase keys
+  // Be liberl in what we send: include both lowerCamel and PascalCase keys
   // to maximize compatibility with any deployed Functions code paths.
   const body = {
   // canonical (lower camel case expected by new function)

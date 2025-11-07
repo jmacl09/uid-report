@@ -28,7 +28,7 @@ type Note = { id: string; uid: string; authorEmail?: string; authorAlias?: strin
 
 // Map a table entity from Notes table to local Note type
 const mapEntityToNote = (uidKey: string, e: NoteEntity): Note => {
-  const authorAlias = (e.User || e.user || e.Owner || '').toString() || undefined;
+  const authorAlias = (e.User || e.user || e.Owner || (e as any)?.OwnerName || (e as any)?.owner || '').toString() || undefined;
   const rowKey = (e.rowKey || (e as any)?.RowKey || '').toString();
   const partitionKey = (e.partitionKey || (e as any)?.PartitionKey || '').toString();
   const savedAt =
@@ -37,10 +37,12 @@ const mapEntityToNote = (uidKey: string, e: NoteEntity): Note => {
     const d = Date.parse(savedAt);
     return Number.isFinite(d) ? d : Date.now();
   })();
+  const authorEmail = (e.authorEmail || (e as any)?.AuthorEmail || (e as any)?.Email || '').toString() || undefined;
   return {
     id: rowKey || `${Date.now()}`,
     uid: uidKey,
     authorAlias,
+    authorEmail,
     text: String(e.Comment || e.comment || e.Description || e.description || e.Title || ''),
     ts,
     _pk: partitionKey,
@@ -345,7 +347,7 @@ export default function UIDLookup() {
     try { localStorage.setItem('uidProjects', JSON.stringify(projects)); } catch {}
   }, [projects]);
 
-  // Load notes when the current UID changes (server-first, fallback to cache)
+  // Load notes when the current UID changes (server data only)
   useEffect(() => {
     const keyUid = lastSearched || '';
     if (!keyUid) { setNotes([]); return; }
@@ -356,21 +358,12 @@ export default function UIDLookup() {
         if (cancelled) return;
         const mapped: Note[] = items.map(e => mapEntityToNote(keyUid, e)).sort((a,b)=>b.ts-a.ts);
         setNotes(mapped);
-        try { localStorage.setItem(`uidNotes:${keyUid}`, JSON.stringify(mapped)); } catch {}
       } catch (err) {
-        // Fallback to local cache on network/server error
-        try {
-          const raw = localStorage.getItem(`uidNotes:${keyUid}`);
-          const arr = raw ? JSON.parse(raw) : [];
-          setNotes(Array.isArray(arr) ? arr : []);
-        } catch { setNotes([]); }
+        setNotes([]);
       }
     })();
     return () => { cancelled = true; };
   }, [lastSearched]);
-  const persistNotes = (uidKey: string, next: Note[]) => {
-    try { localStorage.setItem(`uidNotes:${uidKey}`, JSON.stringify(next)); } catch {}
-  };
   const addNote = () => {
     const uidKey = lastSearched || '';
     if (!uidKey) return;
@@ -380,11 +373,7 @@ export default function UIDLookup() {
     const alias = getAlias(email);
     const n: Note = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, uid: uidKey, authorEmail: email || undefined, authorAlias: alias || undefined, text, ts: Date.now() };
     // Optimistic local append using functional state to avoid stale closures
-    setNotes(prev => {
-      const next = [n, ...prev];
-      persistNotes(uidKey, next);
-      return next;
-    });
+    setNotes(prev => [n, ...prev]);
     setNoteText('');
     // Also add to any saved projects that contain this UID
     setProjects(prev => prev.map(p => {
@@ -419,7 +408,6 @@ export default function UIDLookup() {
               if (idx === -1) return prev;
               const next = [...prev];
               next[idx] = savedNote as Note;
-              persistNotes(uidKey, next);
               return next;
             });
           }
@@ -437,7 +425,6 @@ export default function UIDLookup() {
             const remoteIds = new Set(mapped.map(item => item.id));
             const leftovers = prev.filter(item => !remoteIds.has(item.id));
             const next = [...mapped, ...leftovers];
-            persistNotes(uidKey, next);
             return next;
           });
         } catch {
@@ -468,7 +455,6 @@ export default function UIDLookup() {
       const items = await getNotesForUid(uidKey, NOTES_ENDPOINT);
       const mapped: Note[] = items.map(e => mapEntityToNote(uidKey, e)).sort((a,b)=>b.ts-a.ts);
       setNotes(mapped);
-      persistNotes(uidKey, mapped);
     } catch (err) {
       // On failure, keep current list but log
       // eslint-disable-next-line no-console
@@ -476,7 +462,6 @@ export default function UIDLookup() {
       // Optimistic local removal as fallback
       const next = notes.filter(n => n.id !== id);
       setNotes(next);
-      persistNotes(uidKey, next);
     } finally {
       setDeletingNoteId(current => (current === id ? null : current));
     }
@@ -493,7 +478,6 @@ export default function UIDLookup() {
     setNotes(next);
     setEditingId(null);
     setEditingText('');
-    persistNotes(uidKey, next);
   };
   const cancelEdit = () => { setEditingId(null); setEditingText(''); };
   useEffect(() => {
@@ -573,12 +557,6 @@ export default function UIDLookup() {
       return { ...p, notes: map };
     }));
     setProjNoteText('');
-    // Also persist to UID-level notes store for cross-context consistency
-    const uidNotes = (() => {
-      try { const raw = localStorage.getItem(`uidNotes:${uidKey}`); const arr = raw ? JSON.parse(raw) : []; return Array.isArray(arr) ? arr : []; } catch { return []; }
-    })();
-    try { localStorage.setItem(`uidNotes:${uidKey}`, JSON.stringify([n, ...uidNotes])); } catch {}
-
     // Fire-and-forget server save for project notes as well
     try {
       void saveToStorage({
@@ -855,19 +833,7 @@ export default function UIDLookup() {
     setProjects(prev => prev.map(pp => {
       if (pp.id !== targetId) return pp;
       const merged = mergeSnapshots(pp.data, buildSnapshotFrom(data, lastSearched));
-      // Merge in any existing notes for this UID
-      let map = { ...(pp.notes || {}) } as Record<string, Note[]>;
-      try {
-        const raw = localStorage.getItem(`uidNotes:${lastSearched}`);
-        const arr = raw ? JSON.parse(raw) : [];
-        if (Array.isArray(arr) && arr.length) {
-          const existing = map[lastSearched] || [];
-          const seen = new Set(existing.map(x => x.id));
-          const mergedNotes = [...arr.filter((x: any) => x && x.id && !seen.has(x.id)), ...existing];
-          map[lastSearched] = mergedNotes;
-        }
-      } catch {}
-      return { ...pp, data: merged, notes: map };
+      return { ...pp, data: merged, notes: { ...(pp.notes || {}) } };
     }));
     setActiveProjectId(targetId);
   };
@@ -912,18 +878,7 @@ export default function UIDLookup() {
       setProjects(prev => prev.map(pp => {
         if (pp.id !== targetId) return pp;
         const merged = mergeSnapshots(pp.data, buildSnapshotFrom(data, lastSearched));
-        let map = { ...(pp.notes || {}) } as Record<string, Note[]>;
-        try {
-          const raw = localStorage.getItem(`uidNotes:${lastSearched}`);
-          const arr = raw ? JSON.parse(raw) : [];
-          if (Array.isArray(arr) && arr.length) {
-            const existing = map[lastSearched] || [];
-            const seen = new Set(existing.map(x => x.id));
-            const mergedNotes = [...arr.filter((x: any) => x && x.id && !seen.has(x.id)), ...existing];
-            map[lastSearched] = mergedNotes;
-          }
-        } catch {}
-        return { ...pp, data: merged, notes: map };
+        return { ...pp, data: merged, notes: { ...(pp.notes || {}) } };
       }));
       setActiveProjectId(targetId);
       closeModal();

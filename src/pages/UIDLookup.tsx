@@ -17,6 +17,7 @@ import {
 } from '@fluentui/react';
 import ThemedProgressBar from "../components/ThemedProgressBar";
 import UIDSummaryPanel from "../components/UIDSummaryPanel";
+import UIDComments from "../components/UIDComments";
 import UIDStatusPanel from "../components/UIDStatusPanel";
 import CapacityCircle from "../components/CapacityCircle";
 import deriveLineForC0 from "../data/mappedlines";
@@ -399,14 +400,43 @@ export default function UIDLookup() {
         title: "UID Comment",
         description: text,
         owner: alias || email || "",
-      }).then(async () => {
-        // After save, refresh from server to get authoritative IDs (rowKey)
+      }).then(async (resultText) => {
+        let savedNote: Note | null = null;
+        try {
+          const parsed = JSON.parse(resultText);
+          const entity = (parsed?.entity || parsed?.Entity) as NoteEntity | undefined;
+          if (entity) {
+            savedNote = mapEntityToNote(uidKey, entity);
+            // Replace the optimistic entry with the canonical server entity
+            setNotes(prev => {
+              const idx = prev.findIndex(entry => entry.id === n.id);
+              if (idx === -1) return prev;
+              const next = [...prev];
+              next[idx] = savedNote as Note;
+              persistNotes(uidKey, next);
+              return next;
+            });
+          }
+        } catch {
+          savedNote = null;
+        }
+
+        // Delay refresh slightly so the Function has time to persist to Table Storage
+        await new Promise<void>(resolve => setTimeout(resolve, 1500));
+
         try {
           const items = await getNotesForUid(uidKey, NOTES_ENDPOINT);
           const mapped: Note[] = items.map(e => mapEntityToNote(uidKey, e)).sort((a,b)=>b.ts-a.ts);
-          setNotes(mapped);
-          persistNotes(uidKey, mapped);
-        } catch {}
+          setNotes(prev => {
+            const remoteIds = new Set(mapped.map(item => item.id));
+            const leftovers = prev.filter(item => !remoteIds.has(item.id));
+            const next = [...mapped, ...leftovers];
+            persistNotes(uidKey, next);
+            return next;
+          });
+        } catch {
+          // Keep optimistic notes if refresh fails; they'll sync on next load
+        }
       }).catch((e) => {
         // eslint-disable-next-line no-console
         console.warn("Server-side save failed (comment kept locally):", e?.body || e?.message || e);
@@ -423,9 +453,10 @@ export default function UIDLookup() {
     const target = notes.find(n => n.id === id);
     if (!target) return;
     const pk = target._pk || `UID_${uidKey}`;
-    const rk = target._rk || target.id;
     try {
-      await deleteNoteApi(pk, rk);
+      if (target._rk) {
+        await deleteNoteApi(pk, target._rk, NOTES_ENDPOINT);
+      }
       // Refresh notes from server after successful delete
       const items = await getNotesForUid(uidKey, NOTES_ENDPOINT);
       const mapped: Note[] = items.map(e => mapEntityToNote(uidKey, e)).sort((a,b)=>b.ts-a.ts);
@@ -2754,13 +2785,6 @@ export default function UIDLookup() {
                   }}
                   rows={3}
                 />
-                <div style={{ display: 'flex', alignItems: 'flex-end', paddingLeft: 8 }}>
-                  <PrimaryButton
-                    text="Add note"
-                    onClick={addNote}
-                    disabled={!noteText.trim()}
-                  />
-                </div>
                 <div className="notes-user-hint">
                   {(() => {
                     const email = getEmail();
@@ -2819,6 +2843,16 @@ export default function UIDLookup() {
                   ))
                 )}
               </div>
+            </div>
+          )}
+
+          {/* Legacy Table Comments (edit/delete) */}
+          {lastSearched && !activeProjectId && (
+            <div className="notes-card">
+              <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
+                <Text className="section-title">Comments</Text>
+              </Stack>
+              <UIDComments uid={lastSearched} />
             </div>
           )}
 

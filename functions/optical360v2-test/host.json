@@ -13,7 +13,7 @@
       "routePrefix": "api",
       "cors": {
         "allowedOrigins": ["*"],
-        "allowedMethods": ["GET", "POST", "OPTIONS"],
+        "allowedMethods": ["GET", "POST", "DELETE", "OPTIONS"],
         "allowedHeaders": ["*"],
         "supportCredentials": false
       }

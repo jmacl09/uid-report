@@ -17,7 +17,6 @@ import {
 } from '@fluentui/react';
 import ThemedProgressBar from "../components/ThemedProgressBar";
 import UIDSummaryPanel from "../components/UIDSummaryPanel";
-import UIDComments from "../components/UIDComments";
 import UIDStatusPanel from "../components/UIDStatusPanel";
 import CapacityCircle from "../components/CapacityCircle";
 import deriveLineForC0 from "../data/mappedlines";
@@ -30,16 +29,22 @@ type Note = { id: string; uid: string; authorEmail?: string; authorAlias?: strin
 // Map a table entity from Notes table to local Note type
 const mapEntityToNote = (uidKey: string, e: NoteEntity): Note => {
   const authorAlias = (e.User || e.user || e.Owner || '').toString() || undefined;
-  const created = (e.CreatedAt || e.createdAt || e.rowKey || e.timestamp || '') as string;
-  const ts = (() => { const d = Date.parse(created); return Number.isFinite(d) ? d : Date.now(); })();
+  const rowKey = (e.rowKey || (e as any)?.RowKey || '').toString();
+  const partitionKey = (e.partitionKey || (e as any)?.PartitionKey || '').toString();
+  const savedAt =
+    (e.savedAt || e.timestamp || (e as any)?.Timestamp || rowKey || new Date().toISOString()) as string;
+  const ts = (() => {
+    const d = Date.parse(savedAt);
+    return Number.isFinite(d) ? d : Date.now();
+  })();
   return {
-    id: String(e.rowKey || `${Date.now()}`),
+    id: rowKey || `${Date.now()}`,
     uid: uidKey,
     authorAlias,
     text: String(e.Comment || e.comment || e.Description || e.description || e.Title || ''),
     ts,
-    _pk: String(e.partitionKey || ''),
-    _rk: String(e.rowKey || ''),
+    _pk: partitionKey,
+    _rk: rowKey,
   };
 };
 
@@ -225,6 +230,7 @@ export default function UIDLookup() {
   const [noteText, setNoteText] = useState<string>("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingText, setEditingText] = useState<string>("");
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
   // Project notes compose state
   const [projNoteText, setProjNoteText] = useState<string>("");
   const [projTargetUid, setProjTargetUid] = useState<string | null>(null);
@@ -453,6 +459,7 @@ export default function UIDLookup() {
     const target = notes.find(n => n.id === id);
     if (!target) return;
     const pk = target._pk || `UID_${uidKey}`;
+    setDeletingNoteId(id);
     try {
       if (target._rk) {
         await deleteNoteApi(pk, target._rk, NOTES_ENDPOINT);
@@ -470,6 +477,8 @@ export default function UIDLookup() {
       const next = notes.filter(n => n.id !== id);
       setNotes(next);
       persistNotes(uidKey, next);
+    } finally {
+      setDeletingNoteId(current => (current === id ? null : current));
     }
   };
   const startEdit = (n: Note) => {
@@ -2811,9 +2820,9 @@ export default function UIDLookup() {
                           <span className="note-dot">·</span>
                           <span className="note-time">{new Date(n.ts).toLocaleString()}</span>
                         </div>
-                        {canModify(n) && (
-                          <div className="note-controls">
-                            {editingId === n.id ? (
+                        <div className="note-controls" style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {canModify(n) && (
+                            editingId === n.id ? (
                               <>
                                 <button className="note-btn save" onClick={saveEdit}>Save</button>
                                 <button className="note-btn" onClick={cancelEdit}>Cancel</button>
@@ -2821,11 +2830,18 @@ export default function UIDLookup() {
                             ) : (
                               <>
                                 <button className="note-btn" onClick={() => startEdit(n)}>Edit</button>
-                                <button className="note-btn danger" onClick={() => removeNote(n.id)}>Delete</button>
                               </>
-                            )}
-                          </div>
-                        )}
+                            )
+                          )}
+                          <button
+                            className="note-btn danger"
+                            onClick={() => removeNote(n.id)}
+                            disabled={!n._rk || deletingNoteId === n.id}
+                            title={n._rk ? undefined : 'Still syncing to server; try again in a moment'}
+                          >
+                            {deletingNoteId === n.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </div>
                       </div>
                       <div className="note-body">
                         {editingId === n.id ? (
@@ -2843,16 +2859,6 @@ export default function UIDLookup() {
                   ))
                 )}
               </div>
-            </div>
-          )}
-
-          {/* Legacy Table Comments (edit/delete) */}
-          {lastSearched && !activeProjectId && (
-            <div className="notes-card">
-              <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
-                <Text className="section-title">Comments</Text>
-              </Stack>
-              <UIDComments uid={lastSearched} />
             </div>
           )}
 

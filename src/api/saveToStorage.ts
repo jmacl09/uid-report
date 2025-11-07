@@ -6,10 +6,15 @@ export interface SaveInput {
   category: StorageCategory; // Logical grouping (e.g. Comments, Notes, Projects)
   uid: string;               // The UID being annotated
   title: string;             // Short title for the entry
-  description: string;       // Longer free‑form text
+  description: string;       // Longer free-form text
   owner: string;             // Person saving the record
   // Optional timestamp override; when omitted current time is used.
   timestamp?: string | Date;
+  /**
+   * Optional row key for updates. When provided the backend will upsert the existing
+   * entity instead of creating a new row (used for comment edits).
+   */
+  rowKey?: string;
   /**
    * (Advanced) Override the target Azure Function route. Defaults to 'HttpTrigger1'
    * which is the new optical360v2-test function that persists to Table Storage.
@@ -66,6 +71,7 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
     description: input.description,
     owner: input.owner,
     timestamp,
+    ...(input.rowKey ? { rowKey: input.rowKey } : {}),
     // compatibility (some backends expect PascalCase or alternative names)
     Category: input.category,
     UID: input.uid,
@@ -73,6 +79,7 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
     Description: input.description,
     Owner: input.owner,
     Timestamp: timestamp,
+    ...(input.rowKey ? { RowKey: input.rowKey } : {}),
   } as Record<string, unknown>;
 
   let res: Response;

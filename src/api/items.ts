@@ -108,14 +108,44 @@ export async function saveNote(
 }
 
 /**
- * Delete a note (disabled until DeleteItem function is re-added).
+ * Delete a note by partition/row key via the HttpTrigger1 function.
  */
 export async function deleteNote(
   partitionKey: string,
-  rowKey: string
+  rowKey: string,
+  endpoint?: string
 ): Promise<void> {
-  console.warn(
-    `[deleteNote] Called for ${partitionKey}/${rowKey}, but DeleteItem endpoint is not implemented.`
-  );
-  return;
+  const rawEndpoint = endpoint || 'HttpTrigger1';
+  const isAbsolute = /^https?:\/\//i.test(rawEndpoint);
+  const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
+  const url = base;
+  const body: Record<string, string> = {
+    partitionKey,
+    rowKey,
+  };
+  const uidMatch = /^UID_(.+)$/i.exec(partitionKey || '');
+  if (uidMatch && uidMatch[1]) body.uid = uidMatch[1];
+
+  const isCrossOrigin = (() => {
+    if (isAbsolute) return true;
+    try {
+      if (typeof window === 'undefined') return false;
+      const target = new URL(url, window.location.href);
+      return target.origin !== window.location.origin;
+    } catch {
+      return false;
+    }
+  })();
+
+  const res = await fetch(url, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    credentials: isCrossOrigin ? 'omit' : 'include',
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`deleteNote failed ${res.status}: ${text}`);
+  }
 }

@@ -41,7 +41,7 @@ function getTableClient(tableName) {
 }
 
 app.http('HttpTrigger1', {
-    methods: ['GET', 'POST', 'OPTIONS'],
+    methods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
     authLevel: 'anonymous',
     handler: async (request, context) => {
         context.log(`Http function processed request for url "${request.url}"`);
@@ -49,7 +49,7 @@ app.http('HttpTrigger1', {
         // ✅ Basic CORS handling
         const corsHeaders = {
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+            'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
             'Access-Control-Allow-Headers': '*',
         };
 
@@ -103,6 +103,54 @@ app.http('HttpTrigger1', {
             }
         }
 
+        if (request.method === 'DELETE') {
+            try {
+                const url = new URL(request.url);
+                let payload = {};
+                try {
+                    const txt = await request.text();
+                    payload = txt ? JSON.parse(txt) : {};
+                } catch { payload = {}; }
+
+                const uid = payload.uid || payload.UID || url.searchParams.get('uid');
+                const partitionKey = payload.partitionKey || payload.PartitionKey || (uid ? `UID_${uid}` : null);
+                const rowKey = payload.rowKey || payload.RowKey || url.searchParams.get('rowKey');
+
+                if (!partitionKey || !rowKey) {
+                    return {
+                        status: 400,
+                        headers: corsHeaders,
+                        jsonBody: { ok: false, error: 'Missing partitionKey and rowKey for delete.' },
+                    };
+                }
+
+                const tableName = process.env.TABLES_TABLE_NAME || 'Projects';
+                const { client, ensureTable } = getTableClient(tableName);
+                await ensureTable();
+
+                try {
+                    await client.deleteEntity(partitionKey, rowKey);
+                } catch (err) {
+                    if (err && err.statusCode === 404) {
+                        return {
+                            status: 404,
+                            headers: corsHeaders,
+                            jsonBody: { ok: false, error: 'Entity not found', partitionKey, rowKey },
+                        };
+                    }
+                    throw err;
+                }
+
+                return {
+                    status: 200,
+                    headers: corsHeaders,
+                    jsonBody: { ok: true, message: `Deleted ${rowKey}`, partitionKey, rowKey },
+                };
+            } catch (e) {
+                return { status: 500, headers: corsHeaders, jsonBody: { ok: false, error: String(e?.message || e) } };
+            }
+        }
+
         // ✅ Parse JSON input
         let payload;
         try {
@@ -112,7 +160,7 @@ app.http('HttpTrigger1', {
             return { status: 400, headers: corsHeaders, jsonBody: { ok: false, error: 'Invalid JSON body', received: txt?.slice(0, 200) } };
         }
 
-        const { category, uid, title, description, owner, timestamp } = payload || {};
+        const { category, uid, title, description, owner, timestamp, rowKey } = payload || {};
         if (!uid || !category || !title) {
             return { status: 400, headers: corsHeaders, jsonBody: { ok: false, error: 'Missing required fields: uid, category, title' } };
         }
@@ -126,10 +174,14 @@ app.http('HttpTrigger1', {
                 try { return timestamp ? (new Date(timestamp)).toISOString() : new Date().toISOString(); }
                 catch { return new Date().toISOString(); }
             })();
+            const resolvedRowKey = (() => {
+                if (rowKey && typeof rowKey === 'string' && rowKey.trim()) return rowKey.trim();
+                return nowIso;
+            })();
 
             const entity = {
                 partitionKey: `UID_${uid}`,
-                rowKey: nowIso,
+                rowKey: resolvedRowKey,
                 category,
                 title,
                 description: description || '',

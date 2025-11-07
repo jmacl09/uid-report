@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { saveToStorage, SaveError } from "../api/saveToStorage";
-import { getCommentsForUid } from "../api/items";
+import { saveToStorage, SaveError, type StorageCategory } from "../api/saveToStorage";
+import { getCommentsForUid, deleteNote as deleteTableEntity } from "../api/items";
 
 interface Props {
   uid: string;
@@ -15,6 +15,14 @@ type CommentItem = {
   rowKey?: string;
 };
 
+const STORAGE_CATEGORIES = ["Comments", "Notes", "Projects", "Troubleshooting", "Calendar"] as const;
+const toStorageCategory = (value?: string | null): StorageCategory => {
+  if (!value) return "Comments";
+  const normalized = value.trim().toLowerCase();
+  const match = STORAGE_CATEGORIES.find(cat => cat.toLowerCase() === normalized);
+  return match ?? "Comments";
+};
+
 const storageKeyFor = (uid: string) => `uid-comments:${uid}`;
 const COMMENTS_ENDPOINT =
   "https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1";
@@ -26,6 +34,14 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<CommentItem[]>([]);
+  const [editingRowKey, setEditingRowKey] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
+
+  const persistItems = (data: CommentItem[]) => {
+    try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(data)); } catch {}
+  };
 
   const mergeComments = (existing: CommentItem[], incoming: CommentItem[]) => {
     const seen = new Set(existing.map(i => i.rowKey || i.savedAt + i.owner + i.description));
@@ -52,7 +68,7 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
         }));
         setItems(prev => {
           const next = mergeComments(prev, mapped);
-          try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(next)); } catch {}
+          persistItems(next);
           return next;
         });
       }
@@ -62,6 +78,9 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
   };
 
   useEffect(() => {
+    setEditingRowKey(null);
+    setEditingText("");
+    setDeletingKey(null);
     let cancelled = false;
     const load = async () => {
       try {
@@ -92,7 +111,7 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
     // Show it immediately
     setItems(prev => {
       const next = [newComment, ...prev];
-      try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(next)); } catch {}
+      persistItems(next);
       return next;
     });
     setComment("");
@@ -137,6 +156,114 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
     }
   };
 
+  const startEdit = (item: CommentItem) => {
+    if (!item.rowKey) {
+      setError("Please wait for this comment to finish syncing before editing.");
+      return;
+    }
+    setError(null);
+    setEditingRowKey(item.rowKey);
+    setEditingText(item.description);
+  };
+
+  const cancelEdit = () => {
+    if (editSaving) return;
+    setEditingRowKey(null);
+    setEditingText("");
+  };
+
+  const saveEdit = async () => {
+    if (!editingRowKey) return;
+    const nextText = editingText.trim();
+    if (!nextText) return;
+    const target = items.find(it => it.rowKey === editingRowKey);
+    if (!target) return;
+    setEditSaving(true);
+    setError(null);
+    let snapshot: CommentItem[] = [];
+    setItems(prev => {
+      snapshot = prev;
+      const next = prev.map(it => it.rowKey === editingRowKey ? { ...it, description: nextText } : it);
+      persistItems(next);
+      return next;
+    });
+    try {
+      const result = await saveToStorage({
+        endpoint: COMMENTS_ENDPOINT,
+        category: toStorageCategory(target.category),
+        uid,
+        title: target.title || "General comment",
+        description: nextText,
+        owner: target.owner,
+        rowKey: editingRowKey,
+      });
+      try {
+        const parsed = JSON.parse(result);
+        const entity = parsed?.entity ?? parsed?.Entity;
+        if (entity?.RowKey) {
+          setItems(prev => {
+            const next = prev.map(it => {
+              if (it.rowKey !== entity.RowKey) return it;
+              return {
+                ...it,
+                description: entity.Description || entity.description || nextText,
+                owner: entity.Owner || entity.owner || it.owner,
+                savedAt: entity.Timestamp || entity.savedAt || new Date().toISOString(),
+                title: entity.Title || entity.title || it.title,
+              };
+            });
+            persistItems(next);
+            return next;
+          });
+        }
+      } catch {}
+      setLastSaved(new Date().toLocaleTimeString());
+      await refresh();
+    } catch (e: any) {
+      setItems(() => {
+        persistItems(snapshot);
+        return snapshot;
+      });
+      const se: SaveError | undefined = e instanceof SaveError ? e : undefined;
+      setError(se?.body || se?.message || String(e));
+    } finally {
+      setEditSaving(false);
+      setEditingRowKey(null);
+      setEditingText("");
+    }
+  };
+
+  const handleDelete = async (item: CommentItem, index: number) => {
+    setError(null);
+    const localKey = item.rowKey || `${item.savedAt}-${index}`;
+    setDeletingKey(localKey);
+    if (editingRowKey && editingRowKey === item.rowKey) {
+      setEditingRowKey(null);
+      setEditingText("");
+    }
+    let snapshot: CommentItem[] = [];
+    setItems(prev => {
+      snapshot = prev;
+      const next = prev.filter((_, idx) => idx !== index);
+      persistItems(next);
+      return next;
+    });
+    try {
+      if (item.rowKey) {
+        await deleteTableEntity(`UID_${uid}`, item.rowKey, COMMENTS_ENDPOINT);
+      }
+      await refresh();
+    } catch (e: any) {
+      setItems(() => {
+        persistItems(snapshot);
+        return snapshot;
+      });
+      setError(e?.message || String(e));
+    } finally {
+      setDeletingKey(null);
+    }
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: 'column', gap: 8, alignItems: "flex-start", maxWidth: 500 }}>
       <label style={{ width: '100%' }}>
@@ -163,7 +290,7 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
       </label>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <button onClick={handleSave} disabled={saving || !comment.trim()}>
-          {saving ? 'Saving…' : 'Save Comment'}
+          {saving ? 'Saving...' : 'Save Comment'}
         </button>
         {lastSaved && !error && (
           <span style={{ fontSize: 12, color: '#2d7' }}>Last saved {lastSaved}</span>
@@ -176,14 +303,62 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
         <div style={{ marginTop: 8, width: '100%' }}>
           <div style={{ fontWeight: 600, marginBottom: 4 }}>Recent comments</div>
           <ul style={{ paddingLeft: 16, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {items.map((it, idx) => (
-              <li key={it.rowKey || `${it.savedAt}-${idx}`} style={{ listStyle: 'disc' }}>
-                <div style={{ whiteSpace: 'pre-wrap' }}>{it.description}</div>
-                <div style={{ fontSize: 12, color: '#666' }}>
-                  by {it.owner} • {new Date(it.savedAt).toLocaleString()}
-                </div>
-              </li>
-            ))}
+            {items.map((it, idx) => {
+              const localKey = it.rowKey || `${it.savedAt}-${idx}`;
+              const isEditing = !!it.rowKey && editingRowKey === it.rowKey;
+              const isDeleting = deletingKey === localKey;
+              const editDisabled = !it.rowKey || (!!editingRowKey && editingRowKey !== it.rowKey) || editSaving || isDeleting;
+              const deleteDisabled = isDeleting || (editingRowKey === it.rowKey && editSaving);
+              return (
+                <li key={localKey} style={{ listStyle: 'disc' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {isEditing ? (
+                      <>
+                        <textarea
+                          value={editingText}
+                          onChange={(e) => setEditingText(e.target.value)}
+                          rows={3}
+                          disabled={editSaving}
+                          style={{ width: '100%', resize: 'vertical', fontFamily: 'inherit', fontSize: 14 }}
+                        />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button type="button" onClick={saveEdit} disabled={editSaving || !editingText.trim()}>
+                            {editSaving ? 'Saving...' : 'Save'}
+                          </button>
+                          <button type="button" onClick={cancelEdit} disabled={editSaving}>
+                            Cancel
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ whiteSpace: 'pre-wrap' }}>{it.description}</div>
+                        <div style={{ fontSize: 12, color: '#666' }}>
+                          by {it.owner} - {new Date(it.savedAt).toLocaleString()}
+                        </div>
+                      </>
+                    )}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={() => startEdit(it)}
+                        disabled={editDisabled}
+                        title={it.rowKey ? 'Edit comment' : 'Awaiting server sync before editing'}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(it, idx)}
+                        disabled={deleteDisabled}
+                      >
+                        {isDeleting ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

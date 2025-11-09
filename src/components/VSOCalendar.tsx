@@ -114,58 +114,36 @@ const VSOCalendar: React.FC<Props> = ({ events, onEventClick, date, onNavigate }
 
   // default to current month when not controlled
   const defaultDate = useMemo(() => new Date(), []);
-  const [testStatus, setTestStatus] = useState<string>('');
-
   // When the calendar receives events, attempt to persist any new events to server-side storage.
-  // Behavior:
-  // - Determine a UID to save under by checking localStorage key 'vsoCalendarUid'. If not present,
-  //   prompt the user once and persist the choice.
-  // - Maintain a per-UID map of saved event ids in localStorage under 'vsoSaved_<uid>' to avoid
-  //   re-saving the same event multiple times.
+  // Saves all events under a fixed logical UID so they are written to the VsoCalendar table.
   useEffect(() => {
     let cancelled = false;
 
-    const ensureUid = async (): Promise<string | null> => {
+    const loadSavedMap = (): Record<string, string> => {
       try {
-        const cached = localStorage.getItem('vsoCalendarUid');
-        if (cached && cached.trim()) return cached;
-      } catch (e) {}
-      // Prompt the user for a UID to associate calendar saves with. Store for future runs.
-      try {
-        const u = window.prompt('Enter UID to save calendar entries under (e.g. 12345678901)');
-        if (!u) return null;
-        localStorage.setItem('vsoCalendarUid', u);
-        return u;
-      } catch (e) { return null; }
-    };
-
-    const loadSavedMap = (uid: string): Record<string, string> => {
-      try {
-        const raw = localStorage.getItem(`vsoSaved_${uid}`);
+        const raw = localStorage.getItem('vsoSaved');
         if (!raw) return {};
         return JSON.parse(raw || '{}') as Record<string,string>;
       } catch (e) { return {}; }
     };
 
-    const saveSavedMap = (uid: string, map: Record<string,string>) => {
-      try { localStorage.setItem(`vsoSaved_${uid}`, JSON.stringify(map)); } catch (e) {}
+    const saveSavedMap = (map: Record<string,string>) => {
+      try { localStorage.setItem('vsoSaved', JSON.stringify(map)); } catch (e) {}
     };
 
     const doSave = async () => {
       if (!events || !events.length) return;
-      const uid = await ensureUid();
-      if (!uid) return;
+      // Use a fixed UID so entries go to the VsoCalendar table. The backend will write
+      // partitionKey `UID_VsoCalendar` which is acceptable for grouping calendar entries.
+      const uid = 'VsoCalendar';
 
-      const map = loadSavedMap(uid);
-
-      // Find events that are not recorded in the saved map
+      const map = loadSavedMap();
       const toSave = events.filter((ev) => ev && ev.id && !map[ev.id]);
       if (!toSave.length) return;
 
       for (const ev of toSave) {
         if (cancelled) return;
         try {
-          // Build a friendly description containing useful fields
           const description = [
             ev.summary || ev.maintenanceReason || '',
             ev.subject || '',
@@ -187,22 +165,17 @@ const VSOCalendar: React.FC<Props> = ({ events, onEventClick, date, onNavigate }
             timestamp: ev.start || new Date(),
           });
 
-          // backend returns JSON text with entity.rowKey; try to parse and record it
           try {
             const parsed = JSON.parse(resText || '{}');
             const entity = parsed?.entity || parsed?.Entity || null;
             const rowKey = entity?.rowKey || entity?.RowKey || parsed?.rowKey || null;
-            // Record mapping of event id -> rowKey (or timestamp) so we don't re-save
             map[ev.id] = rowKey || (new Date()).toISOString();
-            saveSavedMap(uid, map);
+            saveSavedMap(map);
           } catch (e) {
-            // If parse fails, still mark as saved to avoid repeated tries
             map[ev.id] = new Date().toISOString();
-            saveSavedMap(uid, map);
+            saveSavedMap(map);
           }
         } catch (e) {
-          // Fail silently: we don't want to break the UI if server save fails.
-          // Optionally log to console for debugging.
           // eslint-disable-next-line no-console
           console.warn('[VSOCalendar] Failed to save event to server', e);
         }
@@ -239,34 +212,7 @@ const VSOCalendar: React.FC<Props> = ({ events, onEventClick, date, onNavigate }
         <span className="legend-item"><span className="legend-dot approved" /> Approved</span>
         <span className="legend-item"><span className="legend-dot rejected" /> Rejected</span>
       </div>
-          {/* Test save button for debugging server-side save behavior. Prompts for a UID to save under. */}
-          <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={async () => {
-                // Prompt for UID so the tester can use a real UID from the app
-                const uid = window.prompt('Enter UID to test save (e.g. CUST-12345)');
-                if (!uid) return;
-                try {
-                  setTestStatus('Saving...');
-                  const res = await saveToStorage({
-                    category: 'Calendar',
-                    uid,
-                    title: `Calendar test save ${new Date().toISOString()}`,
-                    description: 'Test entry saved from VSOCalendar UI',
-                    owner: 'VSO Test Button',
-                  });
-                  setTestStatus(`Saved: ${String(res).slice(0, 200)}`);
-                } catch (err: any) {
-                  setTestStatus(`Error: ${err?.message || String(err)}`);
-                }
-              }}
-            >
-              Test save to server
-            </button>
-            <span style={{ color: '#678', fontSize: 12 }} aria-live="polite">{testStatus}</span>
-          </div>
+      
     </div>
   );
 };

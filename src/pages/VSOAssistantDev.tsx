@@ -25,6 +25,7 @@ import "../Theme.css";
 import datacenterOptions from "../data/datacenterOptions";
 import { getRackElevationUrl } from "../data/MappedREs";
 import VSOCalendar, { VsoCalendarEvent } from "../components/VSOCalendar";
+import { getCalendarEntries } from "../api/items";
 import { API_BASE } from "../api/config";
 
 interface SpanData {
@@ -93,6 +94,49 @@ const VSOAssistantDev: React.FC = () => {
   // Calendar state
   const [vsoEvents, setVsoEvents] = useState<VsoCalendarEvent[]>([]);
   const [calendarDate, setCalendarDate] = useState<Date | null>(null);
+
+  // Load persisted calendar entries from server so everyone sees the same calendar
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const items = await getCalendarEntries('VsoCalendar');
+        const mapped: VsoCalendarEvent[] = (items || []).map((it: any) => {
+          const title = it.title || it.Title || '';
+          const desc = it.description || it.Description || '';
+          const savedAt = it.savedAt || it.SavedAt || it.rowKey || it.RowKey || null;
+          const startMatch = /Start:\s*([0-9TZ:\-\.\+]+)\b/i.exec(desc);
+          const endMatch = /End:\s*([0-9TZ:\-\.\+]+)\b/i.exec(desc);
+          const parseDate = (s: string | null) => { try { return s ? new Date(s) : null; } catch { return null; } };
+          const start = startMatch ? parseDate(startMatch[1]) : (savedAt ? parseDate(savedAt) : null) || new Date();
+          const _start = start || new Date();
+          const end = endMatch ? parseDate(endMatch[1]) : new Date(_start.getFullYear(), _start.getMonth(), _start.getDate() + 1);
+          const spansMatch = /Spans:\s*([^\n\r]+)/i.exec(desc);
+          const spans = spansMatch ? spansMatch[1].split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+          return {
+            id: it.rowKey || it.RowKey || `${title}-${savedAt || Math.random().toString(36).slice(2,6)}`,
+            title: title,
+            start: start as Date,
+            end: end as Date,
+            status: 'Draft',
+            summary: desc ? String(desc).slice(0, 160) : undefined,
+            dcCode: undefined,
+            spans,
+            subject: undefined,
+            notificationType: undefined,
+            location: undefined,
+            maintenanceReason: desc || undefined,
+          } as VsoCalendarEvent;
+        });
+        if (mounted) setVsoEvents((prev) => [...(mapped || []), ...prev]);
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('Failed to load calendar entries', e);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, []);
 
   // Types/validation
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});

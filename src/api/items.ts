@@ -64,6 +64,28 @@ export async function getCommentsForUid(uid: string, endpoint?: string): Promise
 }
 
 /**
+ * Fetch calendar entries saved under a given UID. If no UID provided, callers may pass
+ * the logical UID used by calendar saves (e.g. 'VsoCalendar'). Returns raw NoteEntity list.
+ */
+export async function getCalendarEntries(uid: string, endpoint?: string): Promise<NoteEntity[]> {
+  const rawEndpoint = endpoint || 'HttpTrigger1';
+  const isAbsolute = /^https?:\/\//i.test(rawEndpoint);
+  const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
+  const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Calendar')}`;
+
+  const res = await fetch(url, { method: 'GET' });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`getCalendarEntries failed ${res.status}: ${text}`);
+  try {
+    const data = JSON.parse(text);
+    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Save a new note for a UID.
  * This uses the Azure Function routed as /api/projects (POST).
  */

@@ -105,8 +105,8 @@ const VSOAssistantDev: React.FC = () => {
           const title = it.title || it.Title || '';
           const desc = it.description || it.Description || '';
           const savedAt = it.savedAt || it.SavedAt || it.rowKey || it.RowKey || null;
-          const startMatch = /Start:\s*([\dTZ:+.\-]+)\b/i.exec(desc);
-          const endMatch = /End:\s*([\dTZ:+.\-]+)\b/i.exec(desc);
+          const startMatch = /Start:\s*([\dTZ:+.\u002D]+)\b/i.exec(desc);
+          const endMatch = /End:\s*([\dTZ:+.\u002D]+)\b/i.exec(desc);
           const parseDate = (s: string | null) => { try { return s ? new Date(s) : null; } catch { return null; } };
           const start = startMatch ? parseDate(startMatch[1]) : (savedAt ? parseDate(savedAt) : null) || new Date();
           const _start = start || new Date();

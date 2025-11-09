@@ -432,7 +432,7 @@ const VSOAssistant: React.FC = () => {
         );
     // Remove explicit (None); clicking selected option will now deselect
     return items;
-  }, [dcSearch, facilityCodeA, facilityCodeZ]);
+  }, [dcSearch, facilityCodeA, facilityCodeZ, showAllOptions]);
 
   const filteredDcOptionsZ: IComboBoxOption[] = useMemo(() => {
     // include a blank option at the top so users can clear selection
@@ -465,7 +465,7 @@ const VSOAssistant: React.FC = () => {
             opt.text.toString().toLowerCase().includes(search)
         );
     return items;
-  }, [dcSearchZ, facilityCodeA, facilityCodeZ]);
+  }, [dcSearchZ, facilityCodeA, facilityCodeZ, showAllOptions]);
 
   // === Submit ===
   const handleSubmit = async (alreadyAttemptedOpposite: boolean = false) => {
@@ -910,7 +910,7 @@ const VSOAssistant: React.FC = () => {
       !!maintenanceReason &&
       !!(cc && cc.trim())
     );
-  }, [selectedSpans.length, subject, startDate, startTime, endDate, endTime, location, tags, impactExpected, maintenanceReason, cc]);
+  }, [selectedSpans.length, subject, startDate, startTime, endDate, endTime, location, impactExpected, maintenanceReason, cc]);
 
   // Validate compose fields and return the first invalid field key (or null if valid)
   const validateCompose = (): string | null => {

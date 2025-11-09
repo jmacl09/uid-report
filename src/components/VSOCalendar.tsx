@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { saveToStorage } from "../api/saveToStorage";
 import { Calendar, dateFnsLocalizer, Views } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay } from "date-fns";
@@ -63,7 +63,7 @@ const EventItem: React.FC<any> = ({ event }) => {
     `${event.title}`,
     event.dcCode ? `DC: ${event.dcCode}` : "",
     spansPreview ? `Spans: ${spansPreview}` : "",
-    event.startTimeUtc && event.endTimeUtc ? `UTC: ${event.startTimeUtc} - ${event.endTimeUtc}` : "",
+  event.startTimeUtc && event.endTimeUtc ? `${event.startTimeUtc} - ${event.endTimeUtc}` : "",
     event.summary ? `Notes: ${event.summary}` : "",
   ]
     .filter(Boolean)
@@ -114,6 +114,7 @@ const VSOCalendar: React.FC<Props> = ({ events, onEventClick, date, onNavigate }
 
   // default to current month when not controlled
   const defaultDate = useMemo(() => new Date(), []);
+  const [testStatus, setTestStatus] = useState<string>('');
 
   return (
     <div className="calendar-panel table-container" style={{ width: "80%", maxWidth: 1200, margin: "22px auto" }}>
@@ -140,6 +141,34 @@ const VSOCalendar: React.FC<Props> = ({ events, onEventClick, date, onNavigate }
         <span className="legend-item"><span className="legend-dot approved" /> Approved</span>
         <span className="legend-item"><span className="legend-dot rejected" /> Rejected</span>
       </div>
+          {/* Test save button for debugging server-side save behavior. Prompts for a UID to save under. */}
+          <div style={{ marginTop: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={async () => {
+                // Prompt for UID so the tester can use a real UID from the app
+                const uid = window.prompt('Enter UID to test save (e.g. CUST-12345)');
+                if (!uid) return;
+                try {
+                  setTestStatus('Saving...');
+                  const res = await saveToStorage({
+                    category: 'Calendar',
+                    uid,
+                    title: `Calendar test save ${new Date().toISOString()}`,
+                    description: 'Test entry saved from VSOCalendar UI',
+                    owner: 'VSO Test Button',
+                  });
+                  setTestStatus(`Saved: ${String(res).slice(0, 200)}`);
+                } catch (err: any) {
+                  setTestStatus(`Error: ${err?.message || String(err)}`);
+                }
+              }}
+            >
+              Test save to server
+            </button>
+            <span style={{ color: '#678', fontSize: 12 }} aria-live="polite">{testStatus}</span>
+          </div>
     </div>
   );
 };

@@ -1170,7 +1170,7 @@ const VSOAssistant: React.FC = () => {
         </div>
 
         {!composeOpen && (
-          <React.Fragment key={formKey}>
+          <div key={formKey}>
         {/* Facility Code A / Z - always visible. Selecting one disables the other. */}
         <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
           {!facilityCodeZ && (
@@ -1416,7 +1416,7 @@ const VSOAssistant: React.FC = () => {
         )}
 
         {!loading && !error && searchDone && result.length === 0 && (
-          <>
+          <div>
             {oppositePrompt.show ? (
               <MessageBar
                 messageBarType={MessageBarType.info}
@@ -1457,7 +1457,7 @@ const VSOAssistant: React.FC = () => {
                   : 'There were no results for the selections you made. Try adjusting your search.'}
               </MessageBar>
             )}
-          </>
+          </div>
         )}
 
         {result.length > 0 && (
@@ -1726,7 +1726,7 @@ const VSOAssistant: React.FC = () => {
             </div>
           </div>
         )}
-          </React.Fragment>
+          </div>
         )}
 
         {/* === Compose Section === */}

@@ -3,6 +3,7 @@
   "Values": {
     "FUNCTIONS_WORKER_RUNTIME": "node",
     "TABLES_ACCOUNT_URL": "http://127.0.0.1:10002/devstoreaccount1",
-    "TABLES_TABLE_NAME": "Projects"
+    "TABLES_TABLE_NAME": "Projects",
+    "TABLES_TABLE_NAME_VSO": "VsoCalendar"
   }
 }

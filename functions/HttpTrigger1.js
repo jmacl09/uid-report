@@ -7,13 +7,17 @@ try { ({ DefaultAzureCredential } = require('@azure/identity')); } catch { /* op
 function getTableClient(tableName) {
     const conn = process.env.TABLES_CONNECTION_STRING || process.env.AzureWebJobsStorage || '';
     const accountUrl = process.env.TABLES_ACCOUNT_URL || '';
+    // Prefer Managed Identity + account URL only for HTTPS endpoints.
+    // Azurite/local endpoints use http:// and will reject bearer tokens; ensure we only
+    // attempt DefaultAzureCredential when the accountUrl uses TLS (https://).
+    const usesHttpsAccountUrl = typeof accountUrl === 'string' && accountUrl.toLowerCase().startsWith('https://');
 
-    // 1️⃣ Prefer Managed Identity + account URL
-    if (accountUrl && DefaultAzureCredential) {
+    if (usesHttpsAccountUrl && DefaultAzureCredential) {
         const cred = new DefaultAzureCredential();
         const client = new TableClient(accountUrl, tableName, cred);
         return {
             client,
+            auth: 'ManagedIdentity',
             ensureTable: async () => {
                 try {
                     await client.createTable(); // create if not exists
@@ -24,12 +28,13 @@ function getTableClient(tableName) {
         };
     }
 
-    // 2️⃣ Fallback to connection string (local dev or Azurite)
-    if (!conn) throw new Error('Missing Azure Table configuration. Provide TABLES_CONNECTION_STRING or TABLES_ACCOUNT_URL.');
+    // Fallback to connection string (local dev or Azurite) when Managed Identity is not suitable.
+    if (!conn) throw new Error('Missing Azure Table configuration. Provide TABLES_CONNECTION_STRING or TABLES_ACCOUNT_URL (https) or AzureWebJobsStorage.');
 
     const client = TableClient.fromConnectionString(conn, tableName);
     return {
         client,
+        auth: 'ConnectionString',
         ensureTable: async () => {
             try {
                 await client.createTable();
@@ -71,8 +76,18 @@ app.http('HttpTrigger1', {
                     };
                 }
 
-                const tableName = process.env.TABLES_TABLE_NAME || 'Projects';
-                const { client, ensureTable } = getTableClient(tableName);
+                // Choose table based on category. Calendar entries go to VsoCalendar
+                const tableName = (function(category) {
+                    try {
+                        if (category && String(category).toLowerCase() === 'calendar') {
+                            return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
+                        }
+                    } catch {}
+                    return process.env.TABLES_TABLE_NAME || 'Projects';
+                })(category);
+                const { client, ensureTable, auth } = getTableClient(tableName);
+                // Log which auth path and table is being used for easier debugging
+                context.log && context.log(`[Table] GET -> table=${tableName} auth=${auth} accountUrl=${process.env.TABLES_ACCOUNT_URL ? process.env.TABLES_ACCOUNT_URL : '(using connection string)'} `);
                 await ensureTable();
 
                 const filters = [`PartitionKey eq 'UID_${uid}'`];
@@ -124,8 +139,17 @@ app.http('HttpTrigger1', {
                     };
                 }
 
-                const tableName = process.env.TABLES_TABLE_NAME || 'Projects';
-                const { client, ensureTable } = getTableClient(tableName);
+                // DELETE: use special VSO table for Calendar deletes when requested
+                const tableName = (function(category) {
+                    try {
+                        if (category && String(category).toLowerCase() === 'calendar') {
+                            return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
+                        }
+                    } catch {}
+                    return process.env.TABLES_TABLE_NAME || 'Projects';
+                })(payload.category || payload.Category || url.searchParams.get('category'));
+                const { client, ensureTable, auth } = getTableClient(tableName);
+                context.log && context.log(`[Table] DELETE -> table=${tableName} auth=${auth} accountUrl=${process.env.TABLES_ACCOUNT_URL ? process.env.TABLES_ACCOUNT_URL : '(using connection string)'} `);
                 await ensureTable();
 
                 try {
@@ -166,8 +190,17 @@ app.http('HttpTrigger1', {
         }
 
         try {
-            const tableName = process.env.TABLES_TABLE_NAME || 'Projects';
-            const { client, ensureTable } = getTableClient(tableName);
+            // POST (save): route Calendar category to the VSO-specific table name
+            const tableName = (function(category) {
+                try {
+                    if (category && String(category).toLowerCase() === 'calendar') {
+                        return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
+                    }
+                } catch {}
+                return process.env.TABLES_TABLE_NAME || 'Projects';
+            })(category);
+            const { client, ensureTable, auth } = getTableClient(tableName);
+            context.log && context.log(`[Table] POST -> table=${tableName} auth=${auth} accountUrl=${process.env.TABLES_ACCOUNT_URL ? process.env.TABLES_ACCOUNT_URL : '(using connection string)'} `);
             await ensureTable();
 
             const nowIso = (() => {

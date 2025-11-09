@@ -1287,6 +1287,21 @@ export default function UIDLookup() {
     const dataNow = getViewData();
     if (!dataNow || !(uid || (projects.find(p=>p.id===activeProjectId)?.name))) return;
     const wb = XLSX.utils.book_new();
+    // First sheet: a consolidated "All Details" text export (one line per row)
+    try {
+      const all = buildAllText();
+      if (all) {
+        const lines = String(all).split(/\r?\n/).map(l => ({ Line: l }));
+        if (lines.length) {
+          const wsAll = XLSX.utils.json_to_sheet(lines);
+          XLSX.utils.book_append_sheet(wb, wsAll, 'All Details'.slice(0, 31));
+        }
+      }
+    } catch (e) {
+      // Do not block the rest of the export if building the All Details sheet fails
+      // eslint-disable-next-line no-console
+      console.warn('Failed to build All Details sheet for Excel export:', e);
+    }
     // include Details and Tools sheets as well
     const detailsRow = [
       {
@@ -1971,7 +1986,7 @@ export default function UIDLookup() {
   };
 
   return (
-    <Stack style={{ position: 'relative' }}>
+    <Stack className="main" style={{ position: 'relative' }}>
       <Dialog
         hidden={!showCancelDialog}
         onDismiss={() => setShowCancelDialog(false)}

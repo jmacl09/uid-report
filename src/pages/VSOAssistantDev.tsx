@@ -184,12 +184,12 @@ const VSOAssistantDev: React.FC = () => {
   const formatUtcString = (date: Date | null, time: string) => {
     if (!date) return "";
     const [hh, mm] = time.split(":").map((s) => parseInt(s, 10));
-    const y = date.getUTCFullYear();
-    const m = (date.getUTCMonth() + 1).toString().padStart(2, "0");
-    const d = date.getUTCDate().toString().padStart(2, "0");
+    const y = date.getFullYear();
+    const m = (date.getMonth() + 1).toString().padStart(2, "0");
+    const d = date.getDate().toString().padStart(2, "0");
     const H = (isNaN(hh) ? 0 : hh).toString().padStart(2, "0");
     const M = (isNaN(mm) ? 0 : mm).toString().padStart(2, "0");
-    return `${m}/${d}/${y} ${H}:${M} UTC`;
+    return `${m}/${d}/${y} ${H}:${M}`;
   };
 
   // GET /.auth/me to prefill user email for CC
@@ -232,7 +232,10 @@ const VSOAssistantDev: React.FC = () => {
         throw new Error(`Backend did not return JSON (HTTP ${response.status}). Body: ${raw.slice(0, 240)}`);
       }
       if (!response.ok) throw new Error(((data as any)?.error || `HTTP ${response.status}`) + (raw ? ` - ${raw.slice(0, 120)}` : ""));
-      setResult(data?.Spans || []);
+  // Coerce Spans into an array so UI logic can always treat `result` as an array
+  const spans = Array.isArray(data?.Spans) ? data.Spans : (data?.Spans ? [data.Spans] : []);
+  if (data?.Spans && !Array.isArray(data.Spans)) console.warn('Dev Logic App returned non-array Spans, coercing to array', data.Spans);
+  setResult(spans as any);
       const dc = data?.DataCenter || facilityCodeA;
       setRackDC(dc);
       setRackUrl(getRackElevationUrl(dc));
@@ -504,19 +507,19 @@ const VSOAssistantDev: React.FC = () => {
 
                 <div className="compose-datetime-row">
                   <div className="dt-field">
-                    <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date (UTC)</Text>
-                    <DatePicker placeholder="Select start date" value={startDate || undefined} onSelectDate={(d) => setStartDate(d || null)} styles={datePickerStyles} isRequired aria-label="Start Date (UTC)" />
+                    <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date</Text>
+                    <DatePicker placeholder="Select start date" value={startDate || undefined} onSelectDate={(d) => setStartDate(d || null)} styles={datePickerStyles} isRequired aria-label="Start Date" />
                   </div>
                   <div className="dt-time">
-                    <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time (UTC)</Text>
+                    <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time</Text>
                     <Dropdown options={timeOptions} selectedKey={startTime} onChange={(_, opt) => opt && setStartTime(opt.key.toString())} styles={timeDropdownStyles} required errorMessage={showValidation ? fieldErrors.startTime : undefined} />
                   </div>
                   <div className="dt-field">
-                    <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date (UTC)</Text>
-                    <DatePicker placeholder="Select end date" value={endDate || undefined} onSelectDate={(d) => setEndDate(d || null)} styles={datePickerStyles} isRequired aria-label="End Date (UTC)" />
+                    <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date</Text>
+                    <DatePicker placeholder="Select end date" value={endDate || undefined} onSelectDate={(d) => setEndDate(d || null)} styles={datePickerStyles} isRequired aria-label="End Date" />
                   </div>
                   <div className="dt-time">
-                    <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time (UTC)</Text>
+                    <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time</Text>
                     <Dropdown options={timeOptions} selectedKey={endTime} onChange={(_, opt) => opt && setEndTime(opt.key.toString())} styles={timeDropdownStyles} required errorMessage={showValidation ? fieldErrors.endTime : undefined} />
                   </div>
                   <div className="dt-actions">
@@ -527,19 +530,19 @@ const VSOAssistantDev: React.FC = () => {
                 {additionalWindows.map((w, i) => (
                   <div key={i} className="compose-datetime-row additional-window">
                     <div className="dt-field">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date (UTC)</Text>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date</Text>
                       <DatePicker placeholder="Select start date" value={w.startDate || undefined} onSelectDate={(d) => setAdditionalWindows((arr) => { const next = [...arr]; next[i] = { ...next[i], startDate: d || null }; return next; })} styles={datePickerStyles} />
                     </div>
                     <div className="dt-time">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time (UTC)</Text>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time</Text>
                       <Dropdown options={timeOptions} selectedKey={w.startTime} onChange={(_, opt) => opt && setAdditionalWindows((arr) => { const next = [...arr]; next[i] = { ...next[i], startTime: opt.key.toString() }; return next; })} styles={timeDropdownStyles} />
                     </div>
                     <div className="dt-field">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date (UTC)</Text>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date</Text>
                       <DatePicker placeholder="Select end date" value={w.endDate || undefined} onSelectDate={(d) => setAdditionalWindows((arr) => { const next = [...arr]; next[i] = { ...next[i], endDate: d || null }; return next; })} styles={datePickerStyles} />
                     </div>
                     <div className="dt-time">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time (UTC)</Text>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time</Text>
                       <Dropdown options={timeOptions} selectedKey={w.endTime} onChange={(_, opt) => opt && setAdditionalWindows((arr) => { const next = [...arr]; next[i] = { ...next[i], endTime: opt.key.toString() }; return next; })} styles={timeDropdownStyles} />
                     </div>
                     <div className="dt-actions">

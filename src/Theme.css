@@ -431,13 +431,12 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
 
 /* User status in sticky row (top-right within scrolling main content) */
 .user-status-sticky-row {
-  position: fixed;
-  top: 40px;
-  right: 30px;
+  position: sticky;
+  top: 0;
   z-index: 12000; /* keep above main content */
   display: flex;
   justify-content: flex-end;
-  padding: 12px 28px 0 0; /* maintain visual offset inside the fixed area */
+  padding: 12px 28px 0 0; /* vertical offset + right spacing */
   background: transparent;
   pointer-events: none; /* let child control interaction */
 }

@@ -1700,8 +1700,8 @@ const VSOAssistant: React.FC = () => {
                             whiteSpace: 'nowrap',
                             fontWeight: 500,
                             // Use even percentage widths for detailed view so columns fit; keep small fixed widths for certain keys
-                            // tighter fixed widths for early identifier columns, then percent for others; give Status slightly larger share
-                            width: (c.key === 'SpanID') ? '10ch' : (c.key === 'FacilityCodeA' ? '6ch' : (c.key === 'FacilityCodeZ' ? '6ch' : (c.key === 'IDF_A' ? '5ch' : (c.key === 'Status' ? '8%' : `${colWidthPercent}%`)))),
+                            // Give Diversity a bit more space so the colored pill doesn't get clipped.
+                            width: (c.key === 'SpanID') ? '10ch' : (c.key === 'Diversity' ? '8%' : (c.key === 'FacilityCodeA' ? '6ch' : (c.key === 'FacilityCodeZ' ? '6ch' : (c.key === 'IDF_A' ? '5ch' : (c.key === 'Status' ? '8%' : `${colWidthPercent}%`))))),
                             ...(c.key === 'Diversity' ? { paddingLeft: 10 } : {}),
                             ...(c.key === 'SpanID' ? { textAlign: 'center' as const } : {})
                           }}
@@ -1744,6 +1744,20 @@ const VSOAssistant: React.FC = () => {
                             }
 
                             // Width tweaks: shrink Span/Facility A/Z; otherwise use the computed percent so columns fit evenly
+                            const truncateSplice = (val: string) => {
+                              if (!val) return val;
+                              const s = String(val);
+                              if (s.length <= 10) return s;
+                              if (s.includes('-')) {
+                                const parts = s.split('-');
+                                if (parts.length >= 2) {
+                                  const after = parts[1] ? parts[1].slice(0, 1) : '';
+                                  return `${parts[0]}-${after}...`;
+                                }
+                              }
+                              return s.slice(0, 8) + '...';
+                            };
+
                             const baseStyle: React.CSSProperties = {
                               // reduce horizontal padding so content shifts left and gives more room for status pills
                               padding: '4px 4px',
@@ -1752,7 +1766,7 @@ const VSOAssistant: React.FC = () => {
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
                               // keep small fixed widths for id columns; otherwise use percent. Use small maxWidth to compress.
-                              width: (c.key === 'SpanID') ? '10ch' : (c.key === 'FacilityCodeA' ? '6ch' : (c.key === 'FacilityCodeZ' ? '6ch' : (c.key === 'IDF_A' ? '5ch' : (c.key === 'Status' ? '8%' : `${colWidthPercent}%`)))),
+                              width: (c.key === 'SpanID') ? '10ch' : (c.key === 'Diversity' ? '8%' : (c.key === 'FacilityCodeA' ? '6ch' : (c.key === 'FacilityCodeZ' ? '6ch' : (c.key === 'IDF_A' ? '5ch' : (c.key === 'Status' ? '8%' : `${colWidthPercent}%`))))),
                               maxWidth: (c.key === 'SpanID') ? '10ch' : (c.key === 'FacilityCodeA' ? '6ch' : (c.key === 'FacilityCodeZ' ? '6ch' : (c.key === 'IDF_A' ? '5ch' : '10ch'))),
                               ...(c.key === 'Diversity' ? { paddingLeft: 10 } : {}),
                               ...(c.key === 'SpanID' ? { textAlign: 'center' as const } : {})
@@ -1763,7 +1777,8 @@ const VSOAssistant: React.FC = () => {
                                 style={baseStyle}
                                 title={typeof rawValue === 'string' && (c.key !== 'Status' && c.key !== 'Diversity') ? rawValue : undefined}
                               >
-                                {displayValue}
+                                {/* For splice/rack columns, apply a short readable truncation so values like "ZRH21-1..." appear */}
+                                {((c.key === 'SpliceRackA_Unit' || c.key === 'SpliceRackA' || c.key === 'SpliceRackZ' || c.key === 'SpliceRackZ_Unit') && typeof displayValue === 'string') ? truncateSplice(displayValue) : displayValue}
                               </td>
                             );
                           })}

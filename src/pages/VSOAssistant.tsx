@@ -153,8 +153,8 @@ const VSOAssistant: React.FC = () => {
           const desc = it.description || it.Description || '';
           const savedAt = it.savedAt || it.SavedAt || it.rowKey || it.RowKey || null;
           // try parse Start:/End: ISO timestamps from description
-          const startMatch = /Start:\s*([0-9TZ:\-\.\+]+)\b/i.exec(desc);
-          const endMatch = /End:\s*([0-9TZ:\-\.\+]+)\b/i.exec(desc);
+          const startMatch = /Start:\s*([\dTZ:+.\-]+)\b/i.exec(desc);
+          const endMatch = /End:\s*([\dTZ:+.\-]+)\b/i.exec(desc);
           const parseDate = (s: string | null) => {
             try { return s ? new Date(s) : null; } catch { return null; }
           };

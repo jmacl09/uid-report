@@ -765,6 +765,8 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
   padding: 6px 12px;
   color: #eee;
   white-space: nowrap; /* prevent wrapping */
+  overflow: hidden; /* clip long content and avoid overlap */
+  text-overflow: ellipsis; /* show trailing dots for clipped content */
 }
 
 /* Draw the horizontal separators on the table rows instead so the line is continuous
@@ -821,13 +823,17 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
 /* === STATUS LABELS === */
 .status-label {
   display: inline-block;
-  padding: 2px 8px;
+  padding: 2px 6px; /* slightly smaller padding to reduce width */
   border-radius: 5px;
   font-size: 12px;
   font-weight: 600;
   text-transform: capitalize;
   text-align: center;
-  min-width: 90px;
+  min-width: 64px; /* smaller min width so status pills don't push into neighboring columns */
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .status-label.good {
   background: #002b00;

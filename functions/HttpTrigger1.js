@@ -212,6 +212,8 @@ app.http('HttpTrigger1', {
                 return nowIso;
             })();
 
+            // Build entity with canonical fields and also copy any additional payload keys
+            // so callers can persist extra metadata (e.g., Status, dcCode, spans, etc.).
             const entity = {
                 partitionKey: `UID_${uid}`,
                 rowKey: resolvedRowKey,
@@ -221,6 +223,16 @@ app.http('HttpTrigger1', {
                 owner: owner || 'Unknown',
                 savedAt: nowIso,
             };
+
+            // Copy any other payload properties to the entity (excluding core fields)
+            const coreKeys = new Set(['uid','UID','category','Category','title','Title','description','Description','owner','Owner','timestamp','Timestamp','rowKey','RowKey']);
+            for (const k of Object.keys(payload || {})) {
+                if (coreKeys.has(k)) continue;
+                try {
+                    // sanitize key names: ensure they are strings and not prototypes
+                    if (typeof k === 'string' && k.trim()) entity[k] = payload[k];
+                } catch (e) {}
+            }
 
             await client.upsertEntity(entity, 'Merge');
 

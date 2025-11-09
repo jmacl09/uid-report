@@ -30,6 +30,7 @@ import { getRackElevationUrl } from "../data/MappedREs";
 import VSOCalendar, { VsoCalendarEvent } from "../components/VSOCalendar";
 import { getCalendarEntries } from "../api/items";
 import { computeScopeStage } from "./utils/scope";
+import { saveToStorage } from "../api/saveToStorage";
 
 interface SpanData {
   SpanID: string;
@@ -145,10 +146,8 @@ const VSOAssistant: React.FC = () => {
   // Load persisted calendar entries from server so all users see the same events.
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
-      try {
-        const items = await getCalendarEntries('VsoCalendar');
-        const mapped: VsoCalendarEvent[] = (items || []).map((it: any) => {
+    let timer: any = null;
+    const mapItems = (items: any[]): VsoCalendarEvent[] => (items || []).map((it: any) => {
           const title = it.title || it.Title || '';
           const desc = it.description || it.Description || '';
           const savedAt = it.savedAt || it.SavedAt || it.rowKey || it.RowKey || null;
@@ -168,7 +167,8 @@ const VSOAssistant: React.FC = () => {
             title: title,
             start: start as Date,
             end: end as Date,
-            status: 'Draft',
+            // Prefer explicit Status field if present
+            status: (it.Status || it.status || 'Draft') as any,
             summary: desc ? String(desc).slice(0, 160) : undefined,
             dcCode: undefined,
             spans,
@@ -177,15 +177,29 @@ const VSOAssistant: React.FC = () => {
             location: undefined,
             maintenanceReason: desc || undefined,
           } as VsoCalendarEvent;
+    });
+
+    const loadOnce = async () => {
+      try {
+        const items = await getCalendarEntries('VsoCalendar');
+        const mapped = mapItems(items);
+        if (!mounted) return;
+        setVsoEvents((prev) => {
+          const byId = new Map(prev.map((p) => [p.id, p]));
+          for (const s of mapped) byId.set(s.id, s);
+          return Array.from(byId.values());
         });
-        if (mounted) setVsoEvents((prev) => ensureUnique([...(mapped || []), ...prev]));
       } catch (e) {
         // eslint-disable-next-line no-console
         console.warn('Failed to load calendar entries', e);
       }
     };
-    load();
-    return () => { mounted = false; };
+
+    // initial load
+    loadOnce();
+    // poll every 30s for updates so status changes propagate to other users
+    timer = setInterval(loadOnce, 30_000);
+    return () => { mounted = false; if (timer) clearInterval(timer); };
   }, []);
 
   // Ensure unique IDs across sessions
@@ -1734,9 +1748,9 @@ const VSOAssistant: React.FC = () => {
                               // reduce horizontal padding so content shifts left and gives more room for status pills
                               padding: '4px 4px',
                               whiteSpace: 'nowrap',
-                              // Avoid clipping pills for Status/Diversity
-                              overflow: (c.key === 'Status' || c.key === 'Diversity') ? 'visible' : 'hidden',
-                              textOverflow: (c.key === 'Status' || c.key === 'Diversity') ? 'clip' : 'ellipsis',
+                              // Always clip overflow and use ellipsis to avoid overlapping adjacent columns
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
                               // keep small fixed widths for id columns; otherwise use percent. Use small maxWidth to compress.
                               width: (c.key === 'SpanID') ? '10ch' : (c.key === 'FacilityCodeA' ? '6ch' : (c.key === 'FacilityCodeZ' ? '6ch' : (c.key === 'IDF_A' ? '5ch' : (c.key === 'Status' ? '8%' : `${colWidthPercent}%`)))),
                               maxWidth: (c.key === 'SpanID') ? '10ch' : (c.key === 'FacilityCodeA' ? '6ch' : (c.key === 'FacilityCodeZ' ? '6ch' : (c.key === 'IDF_A' ? '5ch' : '10ch'))),
@@ -2229,6 +2243,25 @@ const VSOAssistant: React.FC = () => {
                       if (!opt) return;
                       const next = opt.key.toString() as any;
                       setVsoEvents((arr) => arr.map((x) => (x.id === ev.id ? { ...x, status: next } : x)));
+                      // Persist status change to server so all users see it
+                      (async () => {
+                        try {
+                          const owner = (() => { try { return localStorage.getItem('loggedInEmail') || 'VSO Calendar'; } catch { return 'VSO Calendar'; } })();
+                          await saveToStorage({
+                            category: 'Calendar',
+                            uid: 'VsoCalendar',
+                            title: ev.title || 'VSO Event',
+                            description: ev.maintenanceReason || ev.summary || '',
+                            owner,
+                            timestamp: ev.start || new Date(),
+                            rowKey: ev.id,
+                            extras: { Status: next },
+                          });
+                        } catch (e) {
+                          // eslint-disable-next-line no-console
+                          console.warn('Failed to persist calendar status change', e);
+                        }
+                      })();
                     }}
                     styles={{
                       ...dropdownStyles,

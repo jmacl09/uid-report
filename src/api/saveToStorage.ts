@@ -22,6 +22,8 @@ export interface SaveInput {
    * while new comment saves can explicitly hit the new function.
    */
   endpoint?: string;
+  /** Optional extra properties to include when saving (e.g., Status, dcCode). */
+  extras?: Record<string, unknown>;
 }
 
 export interface SaveOptions {
@@ -80,6 +82,8 @@ export async function saveToStorage(input: SaveInput, options: SaveOptions = {})
     Owner: input.owner,
     Timestamp: timestamp,
     ...(input.rowKey ? { RowKey: input.rowKey } : {}),
+    // spread any extra properties provided by the caller
+    ...(input.extras || {}),
   } as Record<string, unknown>;
 
   let res: Response;

@@ -1971,7 +1971,7 @@ export default function UIDLookup() {
   };
 
   return (
-  <Stack className="main" style={{ position: 'relative' }}>
+    <Stack style={{ position: 'relative' }}>
       <Dialog
         hidden={!showCancelDialog}
         onDismiss={() => setShowCancelDialog(false)}

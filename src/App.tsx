@@ -388,29 +388,30 @@ function App() {
         <SidebarNav />
 
         {/* Main Content */}
-        <div
-          className="main"
-          style={{
-            flex: 1,
-            backgroundColor: "#111",
-            overflowY: "auto",
-            padding: "40px 30px 30px 260px",
-            boxSizing: "border-box",
-          }}
-        >
+        <div style={{ flex: 1, backgroundColor: "#111", position: "relative" }}>
           <div className="user-status-sticky-row">
             <UserStatus />
           </div>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/uid" element={<UIDLookup />} />
-            <Route path="/vso" element={<VSOAssistant />} />
-            <Route path="/vso2" element={<VSOAssistantDev />} />
-            <Route path="/dcat" element={<DCATAssistant />} />
-            <Route path="/wirecheck" element={<WirecheckAutomation />} />
-            <Route path="/suggestions" element={<SuggestionsPageInline />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
+          <div
+            className="main"
+            style={{
+              height: "100%",
+              overflowY: "auto",
+              padding: "96px 30px 30px 260px",
+              boxSizing: "border-box",
+            }}
+          >
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/uid" element={<UIDLookup />} />
+              <Route path="/vso" element={<VSOAssistant />} />
+              <Route path="/vso2" element={<VSOAssistantDev />} />
+              <Route path="/dcat" element={<DCATAssistant />} />
+              <Route path="/wirecheck" element={<WirecheckAutomation />} />
+              <Route path="/suggestions" element={<SuggestionsPageInline />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Routes>
+          </div>
         </div>
       </div>
     </Router>

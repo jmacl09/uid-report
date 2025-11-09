@@ -6,9 +6,12 @@ import {
   IComboBoxOption,
   Dropdown,
   IDropdownOption,
+  TagPicker,
+  ITag,
   PrimaryButton,
   IconButton,
   Checkbox,
+  Toggle,
   Spinner,
   SpinnerSize,
   MessageBar,
@@ -21,21 +24,31 @@ import {
   Text,
   DatePicker,
   initializeIcons,
+  TooltipHost,
 } from "@fluentui/react";
 import "../Theme.css";
 import datacenterOptions from "../data/datacenterOptions";
 import { getRackElevationUrl } from "../data/MappedREs";
 import VSOCalendar, { VsoCalendarEvent } from "../components/VSOCalendar";
+import { computeScopeStage } from "./utils/scope";
 
 interface SpanData {
   SpanID: string;
-  Diversity: string;
-  IDF_A: string;
-  SpliceRackA: string;
-  WiringScope: string;
   Status: string;
   Color: string;
+  Diversity?: string;
+  IDF_A?: string;
+  SpliceRackA?: string;
+  WiringScope?: string;
   OpticalLink?: string;
+  FacilityCodeA?: string;
+  FacilityCodeZ?: string;
+  SpliceRackA_Unit?: string;
+  SpliceRackZ_Unit?: string;
+  OpticalDeviceA?: string;
+  OpticalRackA_Unit?: string;
+  OpticalDeviceZ?: string;
+  OpticalRackZ_Unit?: string;
 }
 
 interface LogicAppResponse {
@@ -57,8 +70,10 @@ const VSOAssistant: React.FC = () => {
     try { initializeIcons(); } catch {}
   }, []);
   const [facilityCodeA, setFacilityCodeA] = useState<string>("");
+  const [facilityCodeZ, setFacilityCodeZ] = useState<string>("");
   const [diversity, setDiversity] = useState<string>();
   const [spliceRackA, setSpliceRackA] = useState<string>();
+  const [spliceRackZ, setSpliceRackZ] = useState<string>();
   const [loading, setLoading] = useState<boolean>(false);
   const [result, setResult] = useState<SpanData[]>([]);
   const [selectedSpans, setSelectedSpans] = useState<string[]>([]);
@@ -67,14 +82,28 @@ const VSOAssistant: React.FC = () => {
   const [rackUrl, setRackUrl] = useState<string>();
   const [rackDC, setRackDC] = useState<string>();
   const [dcSearch, setDcSearch] = useState<string>("");
+  const [dcSearchZ, setDcSearchZ] = useState<string>("");
   const dcComboRef = React.useRef<IComboBox | null>(null);
+  const dcComboRefZ = React.useRef<IComboBox | null>(null);
 
   // Track whether a search was completed to show no-results banner
   const [searchDone, setSearchDone] = useState<boolean>(false);
+  const [oppositePrompt, setOppositePrompt] = useState<{ show: boolean; from: 'A' | 'Z' | null }>({ show: false, from: null });
+  const [oppositePromptUsed, setOppositePromptUsed] = useState<boolean>(false);
+  const [triedSides, setTriedSides] = useState<{ A: boolean; Z: boolean }>({ A: false, Z: false });
+  const [triedBothNoResults, setTriedBothNoResults] = useState<boolean>(false);
+  // When true, ignore the A/Z exclusivity filtering so all options are visible again
+  const [showAllOptions, setShowAllOptions] = useState<boolean>(false);
+  // Simplified vs Details view for results table. Default to detailed (simplified=false).
+  const [simplifiedView, setSimplifiedView] = useState<boolean>(false);
+  // Key to force remount of the search form controls so internal component state (e.g. ComboBox freeform text)
+  // is fully reset when the user hits Reset.
+  const [formKey, setFormKey] = useState<number>(0);
 
   // Sorting state for results table
   const [sortBy, setSortBy] = useState<string>("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  // Removed per-column filters in favor of simple clickable sort
 
   // === Stage 2: Compose Email state ===
   const [composeOpen, setComposeOpen] = useState<boolean>(false);
@@ -85,8 +114,8 @@ const VSOAssistant: React.FC = () => {
   const [location, setLocation] = useState<string>("");
   const [lat, setLat] = useState<string>("");
   const [lng, setLng] = useState<string>("");
-  const [isp, setIsp] = useState<string>("");
-  const [ispTicket, setIspTicket] = useState<string>("");
+  // Tags: selected tag keys (strings). We'll use a themed multi-select Dropdown (no freeform entries).
+  const [tags, setTags] = useState<string[]>([]);
   const [maintenanceReason, setMaintenanceReason] = useState<string>("");
   const [impactExpected, setImpactExpected] = useState<boolean>(true);
   const [startDate, setStartDate] = useState<Date | null>(null);
@@ -99,6 +128,16 @@ const VSOAssistant: React.FC = () => {
   const [additionalWindows, setAdditionalWindows] = useState<MaintenanceWindow[]>([]);
   const [userEmail, setUserEmail] = useState<string>("");
   const [cc, setCc] = useState<string>("");
+
+  // Refs for compose inputs so we can focus/scroll to the first invalid field on submit
+  const subjectRef = React.useRef<any>(null);
+  const startDateRef = React.useRef<any>(null);
+  const startTimeRef = React.useRef<any>(null);
+  const endDateRef = React.useRef<any>(null);
+  const endTimeRef = React.useRef<any>(null);
+  const locationRef = React.useRef<any>(null);
+  const maintenanceReasonRef = React.useRef<any>(null);
+  const ccRef = React.useRef<any>(null);
 
   // === Calendar state (persisted locally) ===
   const [vsoEvents, setVsoEvents] = useState<VsoCalendarEvent[]>([]);
@@ -216,6 +255,20 @@ const VSOAssistant: React.FC = () => {
     fetchUserEmail();
   }, []);
 
+  // When the user edits any search input, clear the temporary "show all options" state
+  // and reset prompt/exhaustion flags so they can get fresh prompts on a new search.
+  useEffect(() => {
+    // If the UI is currently showing all options because of a previous opposite retry, clear that
+    if (showAllOptions) setShowAllOptions(false);
+    // Allow the opposite-prompt to be shown again for new searches
+    if (oppositePromptUsed) setOppositePromptUsed(false);
+    // Reset tried/both flags so a new search flow starts fresh
+    if (triedBothNoResults) setTriedBothNoResults(false);
+    setOppositePrompt({ show: false, from: null });
+    setTriedSides({ A: false, Z: false });
+    // Intentionally do not clear search results or the no-results banner here; keep that visible until the user re-submits.
+  }, [facilityCodeA, facilityCodeZ, spliceRackA, spliceRackZ, diversity]);
+
   // Persist calendar events whenever they change
   useEffect(() => {
     try {
@@ -289,8 +342,8 @@ const VSOAssistant: React.FC = () => {
     setLocation("");
     setLat("");
     setLng("");
-    setIsp("");
-    setIspTicket("");
+  // clear tags
+  setTags([]);
     setMaintenanceReason("");
     setImpactExpected(true);
     setStartDate(null);
@@ -313,8 +366,10 @@ const VSOAssistant: React.FC = () => {
     resetForm();
     // Clear search and results
     setFacilityCodeA("");
+    setFacilityCodeZ("");
     setDiversity(undefined);
     setSpliceRackA(undefined);
+    setSpliceRackZ(undefined);
     setLoading(false);
     setResult([]);
     setSelectedSpans([]);
@@ -323,10 +378,16 @@ const VSOAssistant: React.FC = () => {
     setRackUrl(undefined);
     setRackDC(undefined);
     setDcSearch("");
+    setDcSearchZ("");
     setSearchDone(false);
     setSortBy("");
     setSortDir("asc");
+  // Ensure detailed view is the default when resetting
+  setSimplifiedView(false);
+  // no-op (filters removed)
     setComposeOpen(false);
+    // Force remount of the search form so any uncontrolled/internal component state is cleared
+    setFormKey((f) => f + 1);
   };
 
   // === Diversity options ===
@@ -343,8 +404,28 @@ const VSOAssistant: React.FC = () => {
 
   // === Filter DCs based on input ===
   const filteredDcOptions: IComboBoxOption[] = useMemo(() => {
-    const base = datacenterOptions.map((d) => ({ key: d.key, text: d.text }));
+    // include a blank option at the top so users can clear selection
+    let base = [{ key: "", text: "" }, ...datacenterOptions.map((d) => ({ key: d.key, text: d.text }))];
     const search = dcSearch.toLowerCase().trim();
+
+    // Respect showAllOptions: when true, skip exclusivity filtering so user can see all choices again
+    if (!showAllOptions) {
+      // If the user has already chosen Facility Code Z, keep only the blank option for A (A choices hidden)
+      if (facilityCodeZ) {
+        base = base.filter((o) => o.key === "");
+      }
+
+      // If the user has chosen Facility Code A, remove any options that include 'z' in key/text so Z-related DCs disappear
+      if (facilityCodeA) {
+        base = base.filter((opt) => {
+          if (opt.key === "") return true;
+          const k = (opt.key || "").toString().toLowerCase();
+          const t = (opt.text || "").toString().toLowerCase();
+          return !(k.includes('z') || t.includes('z')) || opt.key === facilityCodeA;
+        });
+      }
+    }
+
     const items = !search
       ? base
       : base.filter(
@@ -354,16 +435,66 @@ const VSOAssistant: React.FC = () => {
         );
     // Remove explicit (None); clicking selected option will now deselect
     return items;
-  }, [dcSearch]);
+  }, [dcSearch, facilityCodeA, facilityCodeZ]);
+
+  const filteredDcOptionsZ: IComboBoxOption[] = useMemo(() => {
+    // include a blank option at the top so users can clear selection
+    let base = [{ key: "", text: "" }, ...datacenterOptions.map((d) => ({ key: d.key, text: d.text }))];
+    const search = dcSearchZ.toLowerCase().trim();
+
+    // Respect showAllOptions: when true, skip exclusivity filtering so user can see all choices again
+    if (!showAllOptions) {
+      // If the user has already chosen Facility Code A, keep only the blank option for Z (Z choices hidden)
+      if (facilityCodeA) {
+        base = base.filter((o) => o.key === "");
+      }
+
+      // If the user has chosen Facility Code Z, remove any options that include 'a' in key/text so A-related DCs disappear
+      if (facilityCodeZ) {
+        base = base.filter((opt) => {
+          if (opt.key === "") return true;
+          const k = (opt.key || "").toString().toLowerCase();
+          const t = (opt.text || "").toString().toLowerCase();
+          return !(k.includes('a') || t.includes('a')) || opt.key === facilityCodeZ;
+        });
+      }
+    }
+
+    const items = !search
+      ? base
+      : base.filter(
+          (opt) =>
+            opt.key.toString().toLowerCase().includes(search) ||
+            opt.text.toString().toLowerCase().includes(search)
+        );
+    return items;
+  }, [dcSearchZ, facilityCodeA, facilityCodeZ]);
 
   // === Submit ===
-  const handleSubmit = async () => {
-    if (!facilityCodeA) {
-      alert("Please select a valid Data Center first.");
+  const handleSubmit = async (alreadyAttemptedOpposite: boolean = false) => {
+    // Require exactly one facility code (A or Z). Selecting one disables the other in the UI.
+    const hasA = !!facilityCodeA;
+    const hasZ = !!facilityCodeZ;
+    if ((hasA && hasZ) || (!hasA && !hasZ)) {
+      alert("Please select either Facility Code A or Facility Code Z (choose one).");
       return;
     }
 
-    setLoading(true);
+  // Track which side(s) we're searching this request.
+  // Use functional update to avoid races with previous state updates.
+  const searchingA = !!facilityCodeA || !!spliceRackA;
+  const searchingZ = !!facilityCodeZ || !!spliceRackZ;
+  // Compute and update triedSides in a functional manner so concurrent updates don't lose data
+  let computedNext: { A: boolean; Z: boolean } = { A: false, Z: false };
+  setTriedSides((prev) => {
+    const next = { A: prev.A || searchingA, Z: prev.Z || searchingZ };
+    computedNext = next;
+    return next;
+  });
+  // reset both-no-results flag for a fresh search unless we've already exhausted both
+  if (!(computedNext.A && computedNext.Z)) setTriedBothNoResults(false);
+
+  setLoading(true);
     setError(null);
     setResult([]);
     setSearchDone(false);
@@ -372,20 +503,27 @@ const VSOAssistant: React.FC = () => {
       const logicAppUrl =
         "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net:443/api/VSO/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=6ViXNM-TmW5F7Qd9_e4fz3IhRNqmNzKwovWvcmuNJto";
 
-      const payload = {
-        FacilityCodeA: facilityCodeA,
-        Diversity:
-          (() => {
-            const raw = (diversity || "").toString();
-            if (!raw) return "N";
-            // Take the part before any comma, trim spaces, and strip stray punctuation like trailing commas
-            const parsed = raw.split(",")[0].trim().replace(/,$/, "");
-            // Fallback to alphanumeric-only label if needed
-            return parsed.replace(/[^A-Za-z0-9 ]/g, "").trim() || "N";
-          })(),
-        SpliceRackA: spliceRackA || "N",
-        Stage: "1",
+      const diversityValue = (() => {
+        const raw = (diversity || "").toString();
+        if (!raw) return "N";
+        const parsed = raw.split(",")[0].trim().replace(/,$/, "");
+        return parsed.replace(/[^A-Za-z0-9 ]/g, "").trim() || "N";
+      })();
+      const stage = computeScopeStage({
+        facilityA: facilityCodeA,
+        facilityZ: facilityCodeZ,
+        diversity: diversityValue === "N" ? "" : diversityValue,
+        spliceA: spliceRackA,
+        spliceZ: spliceRackZ,
+      });
+      const payload: any = {
+        Diversity: diversityValue,
+        Stage: stage,
       };
+      if (facilityCodeA) payload.FacilityCodeA = facilityCodeA;
+      if (facilityCodeZ) payload.FacilityCodeZ = facilityCodeZ;
+      if (spliceRackA) payload.SpliceRackA = spliceRackA;
+      if (spliceRackZ) payload.SpliceRackZ = spliceRackZ;
 
       const response = await fetch(logicAppUrl, {
         method: "POST",
@@ -396,9 +534,37 @@ const VSOAssistant: React.FC = () => {
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
       const data: LogicAppResponse = await response.json();
 
-      if (data?.Spans) setResult(data.Spans);
+      if (data?.Spans) {
+        // Ensure we always store an array in `result` even if the Logic App
+        // returns a single object for Spans. This prevents runtime errors
+        // like "result.filter is not a function" when callers assume an array.
+        const spans = Array.isArray(data.Spans) ? data.Spans : [data.Spans];
+        if (!Array.isArray(data.Spans)) console.warn('Logic App returned a non-array Spans payload, coercing to array', data.Spans);
+        setResult(spans as any);
+      }
       if (data?.RackElevationUrl) setRackUrl(data.RackElevationUrl);
       if (data?.DataCenter) setRackDC(data.DataCenter);
+      // If no results and user searched by a splice rack, offer to try from the opposite splice side
+      const noSpans = !data?.Spans || (Array.isArray(data.Spans) && data.Spans.length === 0);
+      if (noSpans) {
+        // If we've now tried both A and Z, show the 'adjust search' message instead of prompting
+        if (computedNext.A && computedNext.Z) {
+          setOppositePrompt({ show: false, from: null });
+          setTriedBothNoResults(true);
+          // Make all search options visible again so user can adjust selections
+          setShowAllOptions(true);
+        } else if (!oppositePromptUsed && !alreadyAttemptedOpposite) {
+          // Only offer the opposite-side prompt if we haven't already used it for this action.
+          if (spliceRackA) {
+            setOppositePrompt({ show: true, from: 'A' });
+          } else if (spliceRackZ) {
+            setOppositePrompt({ show: true, from: 'Z' });
+          }
+        } else {
+          // If we didn't prompt because this was already an opposite-side retry, show all options so user can edit
+          if (alreadyAttemptedOpposite) setShowAllOptions(true);
+        }
+      }
     } catch (err: any) {
       setError(err.message || "Unknown error occurred.");
     } finally {
@@ -407,38 +573,61 @@ const VSOAssistant: React.FC = () => {
     }
   };
 
+  const handleOppositeSearch = async (from: 'A' | 'Z') => {
+    // Prevent repeated prompting
+    setOppositePromptUsed(true);
+    setOppositePrompt({ show: false, from: null });
+
+    // Copy facility/diversity and splice rack into the opposite side and clear the original side
+    if (from === 'A') {
+      // Search from Z using the same inputs entered on A
+      const origFacility = facilityCodeA;
+      const origDiversity = diversity;
+      const origSplice = spliceRackA;
+      // Clear A side and set Z side values
+      setFacilityCodeA("");
+      setSpliceRackA(undefined);
+      setFacilityCodeZ(origFacility || "");
+      setSpliceRackZ(origSplice || undefined);
+      setDiversity(origDiversity);
+    } else {
+      // Search from A using the same inputs entered on Z
+      const origFacility = facilityCodeZ;
+      const origDiversity = diversity;
+      const origSplice = spliceRackZ;
+      setFacilityCodeZ("");
+      setSpliceRackZ(undefined);
+      setFacilityCodeA(origFacility || "");
+      setSpliceRackA(origSplice || undefined);
+      setDiversity(origDiversity);
+    }
+
+    // Trigger a search after the state updates. Small timeout to ensure state is applied.
+    // Pass `true` to indicate this submit is the opposite-side retry so we don't re-prompt.
+    setTimeout(() => {
+      handleSubmit(true);
+    }, 50);
+  };
+
   const toggleSelectSpan = (spanId: string) => {
     setSelectedSpans((prev) =>
       prev.includes(spanId) ? prev.filter((id) => id !== spanId) : [...prev, spanId]
     );
   };
 
-  const filteredResults = showAll
+  const filteredResultsBase = showAll
     ? result
-    : result.filter((r) => r.Status.toLowerCase() === "inproduction");
+    : result.filter((r) => ((r && (r.Status || "")).toString().toLowerCase() === "inproduction"));
 
   // Accessor for sorting
   const getSortValue = (row: SpanData, key: string): string | number => {
-    switch (key) {
-      case "diversity":
-        return row.Diversity || "";
-      case "span":
-        return row.SpanID || "";
-      case "idf":
-        return row.IDF_A || "";
-      case "splice":
-        return row.SpliceRackA || "";
-      case "scope":
-        return row.WiringScope || "";
-      case "status":
-        return row.Status || "";
-      default:
-        return "";
-    }
+    const v = (row as any)[key];
+    if (v === undefined || v === null) return "";
+    return v as any;
   };
 
   const sortedResults = useMemo(() => {
-    const rows = [...filteredResults];
+    const rows = [...filteredResultsBase];
     if (!sortBy) return rows;
     rows.sort((a, b) => {
       const av = getSortValue(a, sortBy);
@@ -457,7 +646,7 @@ const VSOAssistant: React.FC = () => {
     });
     if (sortDir === "desc") rows.reverse();
     return rows;
-  }, [filteredResults, sortBy, sortDir]);
+  }, [filteredResultsBase, sortBy, sortDir]);
 
   const handleSort = (key: string) => {
     if (sortBy === key) {
@@ -542,6 +731,22 @@ const VSOAssistant: React.FC = () => {
     dayPicker: { root: { background: '#181818', color: '#fff' }, monthPickerVisible: {}, showWeekNumbers: {} },
   };
 
+  // Unique DC codes present in the current result set (Facility A/Z columns)
+  const availableDcOptions: IDropdownOption[] = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of result || []) {
+      if (!r || typeof r !== 'object') continue;
+      const a = (r as any).FacilityCodeA;
+      const z = (r as any).FacilityCodeZ;
+      if (a && typeof a === 'string' && a.trim()) set.add(a.trim());
+      if (z && typeof z === 'string' && z.trim()) set.add(z.trim());
+    }
+    // Convert to sorted options
+    return Array.from(set)
+      .sort()
+      .map((d) => ({ key: d, text: d }));
+  }, [result]);
+
   // Build 30-min interval time options in 24h format
   const timeOptions: IDropdownOption[] = useMemo(() => {
     const opts: IDropdownOption[] = [];
@@ -556,18 +761,49 @@ const VSOAssistant: React.FC = () => {
     return opts;
   }, []);
 
+  // Tag options for the themed multi-select Dropdown (no freeform creation)
+  const tagOptions: IDropdownOption[] = [
+    { key: "1st Party Maintenance", text: "1st Party Maintenance" },
+    { key: "3rd Party Maintenance", text: "3rd Party Maintenance" },
+    { key: "50%Impact", text: "50%Impact" },
+    { key: "AXENT", text: "AXENT" },
+    { key: "AznetIDC: WAN", text: "AznetIDC: WAN" },
+    { key: "Beanfield", text: "Beanfield" },
+    { key: "Colt Technology Services", text: "Colt Technology Services" },
+    { key: "CORE", text: "CORE" },
+    { key: "drain", text: "drain" },
+    { key: "East-West Spans", text: "East-West Spans" },
+    { key: "euNetworks", text: "euNetworks" },
+    { key: "FIber_Activity_Core", text: "FIber_Activity_Core" },
+    { key: "LTIM_Optical", text: "LTIM_Optical" },
+    { key: "Microsoft", text: "Microsoft" },
+    { key: "no WAN links", text: "no WAN links" },
+    { key: "nodrain", text: "nodrain" },
+    { key: "npa-im", text: "npa-im" },
+    { key: "Open Fiber", text: "Open Fiber" },
+    { key: "Open Fiber S.p.A.", text: "Open Fiber S.p.A." },
+    { key: "Optical", text: "Optical" },
+    { key: "pass-fm", text: "pass-fm" },
+    { key: "peering", text: "peering" },
+    { key: "Sipartech", text: "Sipartech" },
+    { key: "WAN", text: "WAN" },
+    { key: "WANOKR-Ga", text: "WANOKR-Ga" },
+    { key: "WanOptical", text: "WanOptical" },
+    { key: "Zayo", text: "Zayo" },
+  ];
+
   const spansComma = useMemo(() => selectedSpans.join(","), [selectedSpans]);
 
   const formatUtcString = (date: Date | null, time: string) => {
     if (!date) return "";
-    // Treat selected date + time as UTC and format as MM/DD/YYYY HH:MM UTC
+    // Format selected date + time as MM/DD/YYYY HH:MM (local time)
     const [hh, mm] = time.split(":").map((s) => parseInt(s, 10));
-    const y = date.getUTCFullYear();
-    const m = (date.getUTCMonth() + 1).toString().padStart(2, "0");
-    const d = date.getUTCDate().toString().padStart(2, "0");
+    const y = date.getFullYear();
+    const m = (date.getMonth() + 1).toString().padStart(2, "0");
+    const d = date.getDate().toString().padStart(2, "0");
     const H = (isNaN(hh) ? 0 : hh).toString().padStart(2, "0");
     const M = (isNaN(mm) ? 0 : mm).toString().padStart(2, "0");
-    return `${m}/${d}/${y} ${H}:${M} UTC`;
+    return `${m}/${d}/${y} ${H}:${M}`;
   };
 
   const isWithinDays = (date: Date | null, days: number) => {
@@ -585,10 +821,12 @@ const VSOAssistant: React.FC = () => {
   useEffect(() => {
     if (!composeOpen) return;
     if (!subject || subject.trim().length === 0) {
-      const region = rackDC || facilityCodeA || "Region";
-      setSubject(`[${region}] Maintenance scheduled in <${region}> Contractor:  Lead Engineer:`);
+      // Prefer FacilityCodeA (user requested) but fall back to rackDC or FacilityCodeZ if needed
+      const dc = facilityCodeA || rackDC || facilityCodeZ || "Region";
+      const spansPart = (selectedSpans && selectedSpans.length > 0) ? selectedSpans.join(", ") : "<Enter Spans here>";
+      setSubject(`Fiber Maintenance scheduled in ${dc} for Spans ${spansPart}`);
     }
-  }, [composeOpen, subject, rackDC, facilityCodeA]);
+  }, [composeOpen, subject, rackDC, facilityCodeA, facilityCodeZ, selectedSpans]);
 
   const latLongCombined = useMemo(() => (lat && lng ? `${lat},${lng}` : ""), [lat, lng]);
 
@@ -656,13 +894,12 @@ const VSOAssistant: React.FC = () => {
       `NotificationType: ${notificationType}`,
       `MaintenanceReason: ${maintenanceReason}`,
       `Location: ${location}`,
-      `ISP: ${isp}`,
-      `ISPTicket: ${ispTicket}`,
+    `Tags: ${tags && tags.length ? tags.join('; ') : ''}`,
       `ImpactExpected: ${impactStr}`,
     );
 
     return parts.map((p) => p || "").join("\n");
-  }, [EMAIL_TO, subject, spansComma, startUtc, endUtc, notificationType, location, maintenanceReason, isp, ispTicket, impactExpected, additionalWindows, cc]);
+  }, [EMAIL_TO, subject, spansComma, startUtc, endUtc, notificationType, location, maintenanceReason, tags, impactExpected, additionalWindows, cc]);
 
   const canSend = useMemo(() => {
     return (
@@ -671,28 +908,43 @@ const VSOAssistant: React.FC = () => {
       !!startDate && !!startTime &&
       !!endDate && !!endTime &&
       !!location &&
-      !!isp &&
-      !!ispTicket &&
+  // Tags are optional now; do not require ISP / ISP Ticket
       (impactExpected === true || impactExpected === false) &&
       !!maintenanceReason &&
       !!(cc && cc.trim())
     );
-  }, [selectedSpans.length, subject, startDate, startTime, endDate, endTime, location, isp, ispTicket, impactExpected, maintenanceReason, cc]);
+  }, [selectedSpans.length, subject, startDate, startTime, endDate, endTime, location, tags, impactExpected, maintenanceReason, cc]);
 
-  const validateCompose = (): boolean => {
+  // Validate compose fields and return the first invalid field key (or null if valid)
+  const validateCompose = (): string | null => {
     const errors: Record<string, string> = {};
+    if (!subject || !subject.trim()) errors.subject = "Required";
     if (!startDate) errors.startDate = "Required";
     if (!startTime) errors.startTime = "Required";
     if (!endDate) errors.endDate = "Required";
     if (!endTime) errors.endTime = "Required";
     if (!location?.trim()) errors.location = "Required";
-    if (!isp?.trim()) errors.isp = "Required";
-    if (!ispTicket?.trim()) errors.ispTicket = "Required";
+    // Tags are optional; no ISP / ISP Ticket validation
     if (!(impactExpected === true || impactExpected === false)) errors.impactExpected = "Required";
     if (!maintenanceReason?.trim()) errors.maintenanceReason = "Required";
     if (!cc?.trim()) errors.cc = "Required";
     setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
+
+    // Decide first invalid field in desired order
+    const order = [
+      'subject',
+      'startDate',
+      'startTime',
+      'endDate',
+      'endTime',
+      'location',
+      'maintenanceReason',
+      'cc',
+    ];
+    for (const k of order) {
+      if (errors[k]) return k;
+    }
+    return null;
   };
 
   const friendlyFieldNames: Record<string, string> = {
@@ -701,8 +953,6 @@ const VSOAssistant: React.FC = () => {
     endDate: "End Date",
     endTime: "End Time",
     location: "Location",
-    isp: "ISP",
-    ispTicket: "ISP Ticket",
     impactExpected: "Impact Expected",
     maintenanceReason: "Maintenance Reason",
     cc: "CC",
@@ -712,9 +962,39 @@ const VSOAssistant: React.FC = () => {
   const handleSend = async () => {
     // Enable showing validation UI once the user attempts to send
     setShowValidation(true);
-    if (!validateCompose()) {
-      // scroll to top so the validation summary is visible
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    const firstInvalid = validateCompose();
+    if (firstInvalid) {
+      // Scroll/focus the first invalid field so user can correct it
+      const refMap: Record<string, React.RefObject<any>> = {
+        subject: subjectRef,
+        startDate: startDateRef,
+        startTime: startTimeRef,
+        endDate: endDateRef,
+        endTime: endTimeRef,
+        location: locationRef,
+        maintenanceReason: maintenanceReasonRef,
+        cc: ccRef,
+      };
+      const r = refMap[firstInvalid];
+      try {
+        if (r && r.current) {
+          // Try to focus the control; many Fluent controls expose focus() via componentRef
+          if (typeof r.current.focus === 'function') r.current.focus();
+          // If the componentRef wraps the native input, try to scroll into view
+          if (r.current && typeof r.current.scrollIntoView === 'function') {
+            r.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else if (r.current && r.current.rootElement && typeof r.current.rootElement.scrollIntoView === 'function') {
+            r.current.rootElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else {
+            // fallback: scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        } else {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+      } catch (e) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
       return;
     }
     // Clear validation UI if passed
@@ -745,7 +1025,7 @@ const VSOAssistant: React.FC = () => {
             return parsed.replace(/[^A-Za-z0-9 ]/g, "").trim() || "";
           })(),
         SpliceRackA: spliceRackA || "",
-        Stage: "2",
+        Stage: "9",
         CC: cc || "",
         Subject: subject || "",
         CircuitIds: spansComma || "",
@@ -755,8 +1035,7 @@ const VSOAssistant: React.FC = () => {
         NotificationType: notificationType || "",
         MaintenanceReason: maintenanceReason || "",
         Location: location || "",
-        ISP: isp || "",
-        ISPTicket: ispTicket || "",
+  Tags: tags && tags.length ? tags.join('; ') : "",
         ImpactExpected: impactExpected ? "True" : "False",
       };
 
@@ -807,16 +1086,15 @@ const VSOAssistant: React.FC = () => {
           subject,
           notificationType,
           location,
-          isp,
-          ispTicket,
+          tags: tags && tags.length ? tags : [],
           impactExpected,
-        });
+        } as any);
       }
       // Additional windows
       additionalWindows.forEach((w, i) => {
         const r = makeAllDayRange(w.startDate);
         if (!r) return;
-        newEvents.push({
+  newEvents.push({
           id: `vso-${Date.now()}-${i + 1}-${Math.random().toString(36).slice(2,6)}`,
           title,
           start: r.start,
@@ -831,10 +1109,9 @@ const VSOAssistant: React.FC = () => {
           subject,
           notificationType,
           location,
-          isp,
-          ispTicket,
+          tags: tags && tags.length ? tags : [],
           impactExpected,
-        });
+  } as any);
       });
       setVsoEvents((prev) => ensureUnique([...prev, ...newEvents]));
       // Focus calendar on the first window's month so users see it after reload
@@ -885,60 +1162,147 @@ const VSOAssistant: React.FC = () => {
 
   return (
     <div className="main-content fade-in">
-      <div className="vso-form-container glow" style={{ width: "80%", maxWidth: 1000 }}>
+  {/* Increased container width (~30%) to allow more horizontal room for table/content */}
+  <div className="vso-form-container glow" style={{ width: "92%", maxWidth: 1300 }}>
         <div className="banner-title">
           <span className="title-text">Fiber VSO Assistant</span>
           <span className="title-sub">Simplifying Span Lookup and VSO Creation.</span>
         </div>
 
         {!composeOpen && (
-          <>
-        {/* === Data Center ComboBox === */}
-          <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500 } }}>
-            Data Center <span style={{ color: "#ff4d4d" }}>*</span>
-          </Text>
+          <React.Fragment key={formKey}>
+        {/* Facility Code A / Z - always visible. Selecting one disables the other. */}
+        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+          {!facilityCodeZ && (
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500 } }}>
+                  Facility Code A <span style={{ color: "#ff4d4d" }}>*</span>
+                </Text>
+                <TooltipHost content="You can only select one Facility Code at a time. Choosing A hides Z options.">
+                  <IconButton iconProps={{ iconName: 'Info' }} title="Facility selection info" styles={{ root: { color: '#a6b7c6', height: 20, width: 20 } }} />
+                </TooltipHost>
+              </div>
+            <ComboBox
+              placeholder="Type or select Facility Code A"
+              options={filteredDcOptions}
+              selectedKey={facilityCodeA || undefined}
+              allowFreeform={true}
+              autoComplete="on"
+              useComboBoxAsMenuWidth
+              calloutProps={{ className: 'combo-dark-callout' }}
+              componentRef={dcComboRef}
+              onClick={() => dcComboRef.current?.focus(true)}
+              onFocus={() => dcComboRef.current?.focus(true)}
+              styles={comboBoxStyles}
+              disabled={!!facilityCodeZ}
+              onChange={(_, option, index, value) => {
+                const typed = (value || "").toString().toLowerCase();
+                const found = datacenterOptions.find((d) => {
+                  const keyStr = d.key?.toString().toLowerCase();
+                  const textStr = d.text?.toString().toLowerCase();
+                  return textStr === typed || keyStr === typed;
+                });
 
-        <ComboBox
-          placeholder="Type or select a Data Center"
-          options={filteredDcOptions}
-          selectedKey={facilityCodeA || undefined}
-          allowFreeform={true}
-          autoComplete="on"
-          useComboBoxAsMenuWidth
-          calloutProps={{ className: 'combo-dark-callout' }}
-          componentRef={dcComboRef}
-          onClick={() => dcComboRef.current?.focus(true)}
-          onFocus={() => dcComboRef.current?.focus(true)}
-          styles={comboBoxStyles}
-          onChange={(_, option, index, value) => {
-            // value is typed text, only commit if matches a valid key
-            const typed = (value || "").toString().toLowerCase();
-            const found = datacenterOptions.find((d) => {
-              const keyStr = d.key?.toString().toLowerCase();
-              const textStr = d.text?.toString().toLowerCase();
-              return textStr === typed || keyStr === typed;
-            });
+                if (option) {
+                  const selectedKey = option.key?.toString() ?? "";
+                  // selecting the blank option ("") clears the selection
+                  if (selectedKey === "") {
+                    setFacilityCodeA("");
+                    return;
+                  }
+                  // Toggle off if the selected option is clicked again
+                  if (selectedKey === facilityCodeA) {
+                    setFacilityCodeA("");
+                  } else {
+                    setFacilityCodeA(selectedKey);
+                    // Enforce mutual exclusivity: clear Z selections when A chosen
+                    setFacilityCodeZ("");
+                    setSpliceRackZ(undefined);
+                  }
+                } else if (found) {
+                  setFacilityCodeA(found.key.toString());
+                  setFacilityCodeZ("");
+                  setSpliceRackZ(undefined);
+                } else {
+                  // reset if invalid typed text
+                  setFacilityCodeA("");
+                }
+              }}
+              onPendingValueChanged={(option, index, value) => {
+                setDcSearch(value || "");
+              }}
+              onMenuDismiss={() => setDcSearch("")}
+            />
+          </div>
+          )}
 
-            if (option) {
-              const selectedKey = option.key?.toString() ?? "";
-              // Toggle off if the selected option is clicked again
-              if (selectedKey === facilityCodeA) {
-                setFacilityCodeA("");
-              } else {
-                setFacilityCodeA(selectedKey);
-              }
-            } else if (found) {
-              setFacilityCodeA(found.key.toString());
-            } else {
-              // reset if invalid typed text
-              setFacilityCodeA("");
-            }
-          }}
-          onPendingValueChanged={(option, index, value) => {
-            setDcSearch(value || "");
-          }}
-          onMenuDismiss={() => setDcSearch("")}
-        />
+          {!facilityCodeA && (
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500, marginTop: 0 } }}>
+                Facility Code Z
+              </Text>
+              <TooltipHost content="You can only select one Facility Code at a time. Choosing Z hides A options.">
+                <IconButton iconProps={{ iconName: 'Info' }} title="Facility selection info" styles={{ root: { color: '#a6b7c6', height: 20, width: 20 } }} />
+              </TooltipHost>
+            </div>
+            <ComboBox
+              placeholder="Type or select Facility Code Z"
+              options={filteredDcOptionsZ}
+              selectedKey={facilityCodeZ || undefined}
+              allowFreeform={true}
+              autoComplete="on"
+              useComboBoxAsMenuWidth
+              calloutProps={{ className: 'combo-dark-callout' }}
+              componentRef={dcComboRefZ}
+              onClick={() => dcComboRefZ.current?.focus(true)}
+              onFocus={() => dcComboRefZ.current?.focus(true)}
+              styles={comboBoxStyles}
+              disabled={!!facilityCodeA}
+              onChange={(_, option, index, value) => {
+                const typed = (value || "").toString().toLowerCase();
+                const found = datacenterOptions.find((d) => {
+                  const keyStr = d.key?.toString().toLowerCase();
+                  const textStr = d.text?.toString().toLowerCase();
+                  return textStr === typed || keyStr === typed;
+                });
+
+                if (option) {
+                  const selectedKey = option.key?.toString() ?? "";
+                  if (selectedKey === "") {
+                    setFacilityCodeZ("");
+                    return;
+                  }
+                  if (selectedKey === facilityCodeZ) {
+                    setFacilityCodeZ("");
+                  } else {
+                    setFacilityCodeZ(selectedKey);
+                    // Enforce mutual exclusivity: clear A selections when Z chosen
+                    setFacilityCodeA("");
+                    setSpliceRackA(undefined);
+                  }
+                } else if (found) {
+                  setFacilityCodeZ(found.key.toString());
+                  setFacilityCodeA("");
+                  setSpliceRackA(undefined);
+                } else {
+                  setFacilityCodeZ("");
+                }
+              }}
+              onPendingValueChanged={(option, index, value) => {
+                setDcSearchZ(value || "");
+              }}
+              onMenuDismiss={() => setDcSearchZ("")}
+            />
+            {(facilityCodeA && facilityCodeZ) && (
+              <MessageBar messageBarType={MessageBarType.warning} isMultiline={false}>
+                Only one Facility Code may be selected at a time.
+              </MessageBar>
+            )}
+          </div>
+          )}
+        </div>
 
         {/* === Diversity Dropdown === */}
         <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500, marginTop: 10 } }}>
@@ -967,17 +1331,80 @@ const VSOAssistant: React.FC = () => {
           }}
         />
 
-        <TextField
-          label="Splice Rack A (Optional)"
-          placeholder="e.g. AM111"
-          onChange={(_, value) => setSpliceRackA(value)}
-          styles={textFieldStyles}
-        />
+        {/* Splice Rack A/Z - conditionally shown; selecting one hides the other */}
+        <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+          {!facilityCodeZ && (
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500 } }}>Splice Rack A (Optional)</Text>
+                <TooltipHost content="Only one Splice Rack may be selected at a time. Choosing A hides Z.">
+                  <IconButton iconProps={{ iconName: 'Info' }} title="Splice Rack selection info" styles={{ root: { color: '#a6b7c6', height: 18, width: 18 } }} />
+                </TooltipHost>
+              </div>
+              <TextField
+                placeholder="e.g. AM111"
+                onChange={(_, value) => {
+                  const v = value || undefined;
+                  setSpliceRackA(v);
+                  if (v) {
+                    // enforce exclusivity: clear Z-side selections when A splice entered
+                    setSpliceRackZ(undefined);
+                    setFacilityCodeZ("");
+                  }
+                }}
+                styles={textFieldStyles}
+                disabled={!!spliceRackZ}
+              />
+            </div>
+          )}
+
+          {!facilityCodeA && (
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500 } }}>Splice Rack Z (Optional)</Text>
+                <TooltipHost content="Only one Splice Rack may be selected at a time. Choosing Z hides A.">
+                  <IconButton iconProps={{ iconName: 'Info' }} title="Splice Rack selection info" styles={{ root: { color: '#a6b7c6', height: 18, width: 18 } }} />
+                </TooltipHost>
+              </div>
+              <TextField
+                placeholder="e.g. AJ1508"
+                onChange={(_, value) => {
+                  const v = value || undefined;
+                  setSpliceRackZ(v);
+                  if (v) {
+                    setSpliceRackA(undefined);
+                    setFacilityCodeA("");
+                  }
+                }}
+                styles={textFieldStyles}
+                disabled={!!spliceRackA}
+              />
+            </div>
+          )}
+        </div>
+        {(spliceRackA && spliceRackZ) && (
+          <MessageBar messageBarType={MessageBarType.warning} isMultiline={false}>
+            Only one Splice Rack may be selected at a time.
+          </MessageBar>
+        )}
 
         <div className="form-buttons" style={{ marginTop: 16 }}>
-          <button className="submit-btn" onClick={handleSubmit}>
-            Submit
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="submit-btn" onClick={() => handleSubmit()}>
+              Submit
+            </button>
+            {searchDone && (
+              <button
+                className="sleek-btn danger"
+                onClick={() => resetAll()}
+                title="Reset search and form"
+                aria-label="Reset"
+                style={{ minWidth: 96 }}
+              >
+                Reset
+              </button>
+            )}
+          </div>
         </div>
 
         {loading && <Spinner label="Loading results..." size={SpinnerSize.medium} styles={{ root: { marginTop: 15 } }} />}
@@ -989,97 +1416,306 @@ const VSOAssistant: React.FC = () => {
         )}
 
         {!loading && !error && searchDone && result.length === 0 && (
-          <div className="notice-banner warning">
-            <span className="banner-icon">!</span>
-            <div className="banner-text">
-              There were no results for the selections you made. Try adjusting your search.
-            </div>
-          </div>
+          <>
+            {oppositePrompt.show ? (
+              <MessageBar
+                messageBarType={MessageBarType.info}
+                isMultiline={false}
+                styles={{
+                  root: {
+                    marginTop: 8,
+                    background: '#141414',
+                    color: '#dfefff',
+                    border: '1px solid #333',
+                    borderRadius: 8,
+                    padding: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  },
+                  content: { display: 'flex', alignItems: 'center', gap: 12 },
+                }}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, marginRight: 16 }}>
+                  <div style={{ marginBottom: 14 }}>
+                    <span style={{ fontWeight: 600, whiteSpace: 'normal' }}>{`No results were found for that search. Would you like to try searching from Splice Rack ${oppositePrompt.from === 'A' ? 'Z' : 'A'} instead?`}</span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <PrimaryButton text={`Yes`} onClick={() => handleOppositeSearch(oppositePrompt.from || 'A')} />
+                    <DefaultButton text="No" onClick={() => setOppositePrompt({ show: false, from: null })} />
+                  </div>
+                </div>
+              </MessageBar>
+            ) : (
+              <MessageBar
+                messageBarType={MessageBarType.info}
+                isMultiline={false}
+                styles={{ root: { marginTop: 8, background: '#141414', color: '#dfefff', border: '1px solid #333', borderRadius: 8, padding: 12 } }}
+              >
+                {triedBothNoResults
+                  ? 'No results were found searching both Splice Rack A and Z. Please adjust your search criteria.'
+                  : 'There were no results for the selections you made. Try adjusting your search.'}
+              </MessageBar>
+            )}
+          </>
         )}
 
         {result.length > 0 && (
-          <div className="table-container" style={{ marginTop: 14 }}>
-            <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 8 }}>
-              {(() => {
-                const resolvedDC = rackDC || facilityCodeA;
-                const href = rackUrl || getRackElevationUrl(resolvedDC);
-                return href ? (
-                  <div style={{ textAlign: "center", flex: 1 }}>
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="rack-btn slim"
-                      style={{ display: "inline-block", minWidth: 320 }}
-                    >
-                      {`View Rack Elevation - ${resolvedDC}`}
-                    </a>
-                  </div>
-                ) : null;
-              })()}
-              <div style={{ textAlign: "right" }}>
-                <button className="sleek-btn optical" onClick={() => setShowAll(!showAll)}>
+          // Prevent horizontal scrollbar by hiding overflow and forcing tighter column widths
+          <div className="table-container" style={{ marginTop: 14, overflowX: 'hidden' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
+              {/* Left: spans summary */}
+              <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start' }}>
+                {(() => {
+                  const totalSpans = result.length;
+                  const productionCount = result.filter(r => (r.Status || '').toString().toLowerCase() === 'inproduction').length;
+                  return (
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <div style={{ background: '#071821', border: '1px solid #20343f', padding: '8px 12px', borderRadius: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: '#dfefff' }}>{totalSpans}</div>
+                          <div style={{ fontSize: 11, color: '#9fb3c6' }}>Total Spans</div>
+                        </div>
+                        <div style={{ width: 1, height: 34, background: '#23343c', margin: '0 6px' }} />
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: '#8fe3a3' }}>{productionCount}</div>
+                          <div style={{ fontSize: 11, color: '#9fb3c6' }}>In Production</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Center: slim rack elevation dropdown */}
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: 220 }}>
+                {(() => {
+                  const resolvedDC = rackDC || facilityCodeA || facilityCodeZ;
+                  const otherOptions = availableDcOptions.filter(o => o.key !== resolvedDC);
+                  const options = resolvedDC ? [{ key: resolvedDC, text: resolvedDC }, ...otherOptions] : otherOptions;
+
+                  const headerDropdownStyles = {
+                    ...dropdownStyles,
+                    root: { width: 180 },
+                    title: { ...dropdownStyles.title, background: '#003b6f', color: '#fff', height: 32, borderRadius: 6, fontSize: 13 },
+                    dropdownItem: { background: 'transparent', color: '#fff' },
+                    dropdownItemSelected: { background: '#004b8a', color: '#fff' },
+                    callout: { background: '#181818' },
+                  } as const;
+
+                  return (
+                    <div style={{ minWidth: 160 }}>
+                      <Dropdown
+                        placeholder="GNS Rack Elevations"
+                        options={options}
+                        styles={headerDropdownStyles}
+                        onChange={(_, opt) => {
+                          if (!opt) return;
+                          const key = opt.key?.toString();
+                          if (!key) return;
+                          const url = getRackElevationUrl(key);
+                          if (url) window.open(url, '_blank');
+                          else alert(`No rack elevation URL available for ${opt.text}`);
+                        }}
+                        disabled={options.length === 0}
+                      />
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Right: controls */}
+              <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: 12, alignItems: 'center' }}>
+                <button className="rack-btn slim" onClick={() => setShowAll(!showAll)}>
                   {showAll ? "Show Only Production" : "Show All Spans"}
                 </button>
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <Toggle
+                    label="Simplified view"
+                    inlineLabel
+                    onText="On"
+                    offText="Off"
+                    checked={simplifiedView}
+                    onChange={(_, v) => setSimplifiedView(!!v)}
+                  />
+                </div>
               </div>
             </div>
 
-            <table className="data-table compact">
-              <thead>
-                <tr>
-                  <th></th>
-                  <th onClick={() => handleSort("diversity")}>
-                    Diversity {sortBy === "diversity" && (sortDir === "asc" ? "▲" : "▼")}
-                  </th>
-                  <th onClick={() => handleSort("span")}>Span ID {sortBy === "span" && (sortDir === "asc" ? "▲" : "▼")}</th>
-                  <th onClick={() => handleSort("idf")}>IDF {sortBy === "idf" && (sortDir === "asc" ? "▲" : "▼")}</th>
-                  <th onClick={() => handleSort("splice")}>
-                    Splice Rack {sortBy === "splice" && (sortDir === "asc" ? "▲" : "▼")}
-                  </th>
-                  <th onClick={() => handleSort("scope")}>Scope {sortBy === "scope" && (sortDir === "asc" ? "▲" : "▼")}</th>
-                  <th onClick={() => handleSort("status")}>Status {sortBy === "status" && (sortDir === "asc" ? "▲" : "▼")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedResults.map((row, i) => (
-                  <tr
-                    key={i}
-                    className={selectedSpans.includes(row.SpanID) ? "highlight-row" : ""}
-                    onClick={() => toggleSelectSpan(row.SpanID)}
-                    style={{ cursor: "pointer" }}
+            {(() => {
+              const hasValue = (key: string) => filteredResultsBase.some((r: SpanData) => {
+                const v = (r as any)[key];
+                if (v === undefined || v === null) return false;
+                const s = String(v).trim();
+                return s.length > 0;
+              });
+              const candidate = [
+                { key: 'Diversity', label: 'Diversity', render: (row: SpanData) => (
+                  <span
+                    className={`status-label ${getDiversityClass(row.Diversity)}`}
+                    style={{ display: 'inline-block', padding: '1px 6px', whiteSpace: 'nowrap', marginRight: 14 }}
+                    title={row.Diversity}
                   >
-                    <td>
-                      <Checkbox
-                        checked={selectedSpans.includes(row.SpanID)}
-                        onChange={() => toggleSelectSpan(row.SpanID)}
-                      />
-                    </td>
-                    <td>
-                      <span className={`status-label ${getDiversityClass(row.Diversity)}`}>
-                        {row.Diversity}
-                      </span>
-                    </td>
-                    <td>
-                      <a
-                        href={row.OpticalLink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="uid-click"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {row.SpanID}
-                      </a>
-                    </td>
-                    <td>{row.IDF_A}</td>
-                    <td>{row.SpliceRackA}</td>
-                    <td>{row.WiringScope}</td>
-                    <td>
-                      <span className={`status-label ${getStatusClass(row.Status)}`}>{row.Status}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    {row.Diversity}
+                  </span>
+                ) },
+                { key: 'SpanID', label: 'SpanID', render: (row: SpanData) => (
+                  <a
+                    href={row.OpticalLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="uid-click"
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ fontSize: 14, fontWeight: 600 }}
+                  >
+                    {row.SpanID}
+                  </a>
+                ) },
+                { key: 'FacilityCodeA', label: 'Facility A' },
+                { key: 'FacilityCodeZ', label: 'Facility Z' },
+                { key: 'IDF_A', label: 'IDF A' },
+                { key: 'SpliceRackA', label: 'Splice A' },
+                { key: 'SpliceRackA_Unit', label: 'Splice Rack A' },
+                { key: 'SpliceRackZ_Unit', label: 'Splice Rack Z' },
+                { key: 'OpticalDeviceA', label: 'Optical A' },
+                { key: 'OpticalRackA_Unit', label: 'Rack A' },
+                { key: 'OpticalDeviceZ', label: 'Optical Z' },
+                { key: 'OpticalRackZ_Unit', label: 'Rack Z' },
+                { key: 'WiringScope', label: 'Scope' },
+                { key: 'Status', label: 'Status', render: (row: SpanData) => (
+                  <span
+                    className={`status-label ${getStatusClass(row.Status)}`}
+                    style={{ display: 'inline-block', padding: '1px 6px', whiteSpace: 'nowrap' }}
+                    title={row.Status}
+                  >
+                    {row.Status}
+                  </span>
+                ) },
+              ];
+              // Determine which columns to show depending on simplifiedView
+              // Prefer the unit-level splice column when the user searched by Facility Code A
+              // Logic app returns a SpliceRackA_Unit field; show that when Facility Code A is used.
+              const splicePreferredKey = facilityCodeA
+                ? 'SpliceRackA_Unit'
+                : spliceRackA
+                ? 'SpliceRackA'
+                : 'SpliceRackZ';
+
+              const getCandidate = (k: string) => candidate.find(c => c.key === k);
+
+              let dynamicCols: any[];
+              if (simplifiedView) {
+                const simplifiedKeys = ['Diversity', 'SpanID', splicePreferredKey, 'WiringScope', 'Status'];
+                dynamicCols = simplifiedKeys.map((k) => {
+                  const found = getCandidate(k);
+                  if (found) return found;
+                  // Provide a fallback for SpliceRackZ which might be returned as SpliceRackZ or SpliceRackZ_Unit
+                  if (k === 'SpliceRackZ') {
+                    return {
+                      key: 'SpliceRackZ',
+                      label: 'Splice Z',
+                      render: (row: SpanData) => ((row as any).SpliceRackZ || (row as any).SpliceRackZ_Unit || ''),
+                    };
+                  }
+                  return { key: k, label: k, render: (row: SpanData) => ((row as any)[k] ?? '') };
+                });
+              } else {
+                dynamicCols = candidate.filter(c => c.key === 'SpanID' || hasValue(c.key));
+              }
+              // Compute a fair percent width per column for the detailed view so columns fit evenly
+              // Use more aggressive compression: allow as small as 4% per column when many columns present
+              const colWidthPercent = dynamicCols && dynamicCols.length ? Math.max(4, Math.floor(100 / dynamicCols.length)) : 12;
+
+              return (
+                <table className="data-table compact" style={{ fontSize: 12, tableLayout: 'fixed', width: '100%', borderCollapse: 'collapse', marginLeft: -6 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 30, padding: '2px 4px' }}></th>
+                      {dynamicCols.map(c => (
+                        <th
+                          key={c.key}
+                          onClick={() => handleSort(c.key)}
+                          style={{
+                            // reduce horizontal padding so content shifts left and leaves more room to the right
+                            padding: '4px 4px',
+                            cursor: 'pointer',
+                            whiteSpace: 'nowrap',
+                            fontWeight: 500,
+                            // Use even percentage widths for detailed view so columns fit; keep small fixed widths for certain keys
+                            // tighter fixed widths for early identifier columns, then percent for others; give Status slightly larger share
+                            width: (c.key === 'SpanID') ? '10ch' : (c.key === 'FacilityCodeA' ? '6ch' : (c.key === 'FacilityCodeZ' ? '6ch' : (c.key === 'IDF_A' ? '5ch' : (c.key === 'Status' ? '8%' : `${colWidthPercent}%`)))),
+                            ...(c.key === 'Diversity' ? { paddingLeft: 10 } : {}),
+                            ...(c.key === 'SpanID' ? { textAlign: 'center' as const } : {})
+                          }}
+                        >
+                          {c.label} {sortBy === c.key && (sortDir === 'asc' ? '▲' : '▼')}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedResults.map((row, i) => {
+                      const isSelected = selectedSpans.includes(row.SpanID);
+                      const bg = isSelected ? '#10324a' : (i % 2 === 0 ? '#0f0f0f' : '#121212');
+                      return (
+                        <tr
+                          key={i}
+                          className={isSelected ? 'highlight-row' : ''}
+                          onClick={() => toggleSelectSpan(row.SpanID)}
+                          style={{ cursor: 'pointer', background: bg }}
+                        >
+                          <td style={{ padding: '2px 4px', width: 38, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+                            <Checkbox
+                              checked={isSelected}
+                              onChange={() => toggleSelectSpan(row.SpanID)}
+                              styles={{ root: { margin: 0, padding: 0, display: 'block' } } as any}
+                            />
+                          </td>
+                          {dynamicCols.map(c => {
+                            const rawValue = c.render ? c.render(row) : ((row as any)[c.key] ?? '');
+                            // Prepare displayValue: for detailed view, truncate long OpticalDevice columns to keep table compact
+                            let displayValue: any = rawValue;
+                            // Aggressively truncate long device/splice identifiers in detailed view to avoid horizontal scrolling
+                            if (!simplifiedView) {
+                              if (c.key === 'OpticalDeviceA' || c.key === 'OpticalDeviceZ') {
+                                if (typeof rawValue === 'string' && rawValue.length > 8) displayValue = rawValue.slice(0, 8) + '...';
+                              }
+                              if (c.key === 'SpliceRackA_Unit' || c.key === 'SpliceRackA' || c.key === 'SpliceRackZ') {
+                                if (typeof rawValue === 'string' && rawValue.length > 8) displayValue = rawValue.slice(0, 8) + '...';
+                              }
+                            }
+
+                            // Width tweaks: shrink Span/Facility A/Z; otherwise use the computed percent so columns fit evenly
+                            const baseStyle: React.CSSProperties = {
+                              // reduce horizontal padding so content shifts left and gives more room for status pills
+                              padding: '4px 4px',
+                              whiteSpace: 'nowrap',
+                              // Avoid clipping pills for Status/Diversity
+                              overflow: (c.key === 'Status' || c.key === 'Diversity') ? 'visible' : 'hidden',
+                              textOverflow: (c.key === 'Status' || c.key === 'Diversity') ? 'clip' : 'ellipsis',
+                              // keep small fixed widths for id columns; otherwise use percent. Use small maxWidth to compress.
+                              width: (c.key === 'SpanID') ? '10ch' : (c.key === 'FacilityCodeA' ? '6ch' : (c.key === 'FacilityCodeZ' ? '6ch' : (c.key === 'IDF_A' ? '5ch' : (c.key === 'Status' ? '8%' : `${colWidthPercent}%`)))),
+                              maxWidth: (c.key === 'SpanID') ? '10ch' : (c.key === 'FacilityCodeA' ? '6ch' : (c.key === 'FacilityCodeZ' ? '6ch' : (c.key === 'IDF_A' ? '5ch' : '10ch'))),
+                              ...(c.key === 'Diversity' ? { paddingLeft: 10 } : {}),
+                              ...(c.key === 'SpanID' ? { textAlign: 'center' as const } : {})
+                            };
+                            return (
+                              <td
+                                key={`${i}-${c.key}`}
+                                style={baseStyle}
+                                title={typeof rawValue === 'string' && (c.key !== 'Status' && c.key !== 'Diversity') ? rawValue : undefined}
+                              >
+                                {displayValue}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              );
+            })()}
 
             <div style={{ textAlign: "center", marginTop: 12 }}>
               <PrimaryButton
@@ -1090,7 +1726,7 @@ const VSOAssistant: React.FC = () => {
             </div>
           </div>
         )}
-          </>
+          </React.Fragment>
         )}
 
         {/* === Compose Section === */}
@@ -1179,8 +1815,9 @@ const VSOAssistant: React.FC = () => {
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                   <div style={{ flex: 2 }}>
                     <TextField
+                      componentRef={subjectRef}
                       label="Subject"
-                      placeholder="[region] Maintenance scheduled in <region> Contractor:  Lead Engineer:"
+                      placeholder="Fiber Maintenance scheduled in <FacilityCode> for Spans <Enter Spans here>"
                       value={subject}
                       onChange={(_, v) => setSubject(v || "")}
                       styles={textFieldStyles}
@@ -1190,6 +1827,7 @@ const VSOAssistant: React.FC = () => {
                   </div>
                   <div style={{ flex: 1 }}>
                     <TextField
+                      componentRef={ccRef}
                       label="CC"
                       placeholder="name@contoso.com"
                       value={cc}
@@ -1218,8 +1856,14 @@ const VSOAssistant: React.FC = () => {
 
                 <div className="compose-datetime-row">
                     <div className="dt-field">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date (UTC)</Text>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date</Text>
+                        <TooltipHost content={"Times shown are in your local time and will be converted automatically when the VSO is created."}>
+                          <IconButton iconProps={{ iconName: 'Info' }} title="Time conversion info" styles={{ root: { color: '#a6b7c6', height: 18, width: 18 } }} />
+                        </TooltipHost>
+                      </div>
                       <DatePicker
+                        componentRef={startDateRef}
                         placeholder="Select start date"
                         value={startDate || undefined}
                         onSelectDate={(d) => {
@@ -1240,7 +1884,7 @@ const VSOAssistant: React.FC = () => {
                         }}
                         styles={datePickerStyles}
                         isRequired
-                        aria-label="Start Date (UTC)"
+                        aria-label="Start Date"
                       />
                       {showValidation && fieldErrors.startDate ? (
                         <Text styles={{ root: { color: '#a80000', fontSize: 12 } }}>Required</Text>
@@ -1248,8 +1892,9 @@ const VSOAssistant: React.FC = () => {
                     </div>
 
                     <div className="dt-time">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time (UTC)</Text>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time</Text>
                       <Dropdown
+                        componentRef={startTimeRef}
                         options={timeOptions}
                         selectedKey={startTime}
                         onChange={(_, opt) => opt && setStartTime(opt.key.toString())}
@@ -1260,14 +1905,15 @@ const VSOAssistant: React.FC = () => {
                     </div>
 
                     <div className="dt-field">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date (UTC)</Text>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date</Text>
                       <DatePicker
+                        componentRef={endDateRef}
                         placeholder="Select end date"
                         value={endDate || undefined}
                         onSelectDate={(d) => setEndDate(d || null)}
                         styles={datePickerStyles}
                         isRequired
-                        aria-label="End Date (UTC)"
+                        aria-label="End Date"
                       />
                       {showValidation && fieldErrors.endDate ? (
                         <Text styles={{ root: { color: '#a80000', fontSize: 12 } }}>Required</Text>
@@ -1275,8 +1921,9 @@ const VSOAssistant: React.FC = () => {
                     </div>
 
                     <div className="dt-time">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time (UTC)</Text>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time</Text>
                       <Dropdown
+                        componentRef={endTimeRef}
                         options={timeOptions}
                         selectedKey={endTime}
                         onChange={(_, opt) => opt && setEndTime(opt.key.toString())}
@@ -1298,7 +1945,7 @@ const VSOAssistant: React.FC = () => {
                 {additionalWindows.map((w, i) => (
                   <div key={i} className="compose-datetime-row additional-window">
                     <div className="dt-field">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date (UTC)</Text>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date</Text>
                       <DatePicker
                         placeholder="Select start date"
                         value={w.startDate || undefined}
@@ -1330,7 +1977,7 @@ const VSOAssistant: React.FC = () => {
                       />
                     </div>
                     <div className="dt-time">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time (UTC)</Text>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time</Text>
                       <Dropdown
                         options={timeOptions}
                         selectedKey={w.startTime}
@@ -1343,7 +1990,7 @@ const VSOAssistant: React.FC = () => {
                       />
                     </div>
                     <div className="dt-field">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date (UTC)</Text>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date</Text>
                       <DatePicker
                         placeholder="Select end date"
                         value={w.endDate || undefined}
@@ -1358,7 +2005,7 @@ const VSOAssistant: React.FC = () => {
                       />
                     </div>
                     <div className="dt-time">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time (UTC)</Text>
+                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time</Text>
                       <Dropdown
                         options={timeOptions}
                         selectedKey={w.endTime}
@@ -1382,7 +2029,7 @@ const VSOAssistant: React.FC = () => {
 
                 <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
                 <div style={{ flex: 1 }}>
-                  <TextField label="Location" value={location} onChange={(_, v) => setLocation(v || "")} styles={textFieldStyles} required errorMessage={showValidation ? fieldErrors.location : undefined} />
+                  <TextField componentRef={locationRef} label="Location" value={location} onChange={(_, v) => setLocation(v || "")} styles={textFieldStyles} required errorMessage={showValidation ? fieldErrors.location : undefined} />
                 </div>
                 <div style={{ flex: 1 }}>
                   <TextField label="Latitude" value={lat} onChange={(_, v) => setLat((v || '').trim())} styles={textFieldStyles} />
@@ -1393,12 +2040,33 @@ const VSOAssistant: React.FC = () => {
               </div>
 
                 <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'flex-end' }}>
-                  <div style={{ flex: 1 }}>
-                    <TextField label="ISP" value={isp} onChange={(_, v) => setIsp(v || "")} styles={textFieldStyles} required errorMessage={showValidation ? fieldErrors.isp : undefined} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <TextField label="ISP Ticket / Change ID" value={ispTicket} onChange={(_, v) => setIspTicket(v || "")} styles={textFieldStyles} required errorMessage={showValidation ? fieldErrors.ispTicket : undefined} />
-                  </div>
+                    <div style={{ width: 200 }}>
+                      <Text styles={{ root: { color: '#ccc', fontSize: 14, fontWeight: 600, marginBottom: 6 } }}>Tags</Text>
+                      <Dropdown
+                        placeholder="Select tags"
+                        multiSelect
+                        options={tagOptions}
+                        selectedKeys={tags}
+                        onChange={(_, option) => {
+                          if (!option) return;
+                          const key = option.key?.toString() || '';
+                          if ((option as any).selected) {
+                            setTags((prev) => (prev.includes(key) ? prev : [...prev, key]));
+                          } else {
+                            setTags((prev) => prev.filter((k) => k !== key));
+                          }
+                        }}
+                        styles={{
+                          // match the theme and ensure selected/hovered items keep readable text
+                          ...dropdownStyles,
+                          root: { width: 200 },
+                          dropdownItem: { background: 'transparent', color: '#fff', selectors: { ':hover': { background: '#004b8a', color: '#fff' } } },
+                          dropdownItemSelected: { background: '#004b8a', color: '#fff', selectors: { ':hover': { background: '#003b6f', color: '#fff' } } },
+                          callout: { background: '#181818' },
+                          title: { ...dropdownStyles.title, height: 42 },
+                        }}
+                      />
+                    </div>
                   <div style={{ width: 200 }}>
                     <Dropdown
                       label="Impact Expected"
@@ -1424,6 +2092,7 @@ const VSOAssistant: React.FC = () => {
               {/* Reason wrapper with counter */}
               <div className="reason-wrapper" style={{ position: 'relative' }}>
                 <TextField
+                  componentRef={maintenanceReasonRef}
                   className="reason-field"
                   label="Reason for Maintenance"
                   multiline
@@ -1530,7 +2199,7 @@ const VSOAssistant: React.FC = () => {
                   <table className="data-table compact details-table">
                     <tbody>
                       <tr><td>Day</td><td>{ev.start.toLocaleDateString()}</td></tr>
-                      <tr><td>Time (UTC)</td><td>{ev.startTimeUtc || '--'} - {ev.endTimeUtc || '--'}</td></tr>
+                      <tr><td>Time</td><td>{ev.startTimeUtc || '--'} - {ev.endTimeUtc || '--'}</td></tr>
                     </tbody>
                   </table>
                 </div>

@@ -431,12 +431,13 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
 
 /* User status in sticky row (top-right within scrolling main content) */
 .user-status-sticky-row {
-  position: sticky;
-  top: 0;
+  position: fixed;
+  top: 40px;
+  right: 30px;
   z-index: 12000; /* keep above main content */
   display: flex;
   justify-content: flex-end;
-  padding: 12px 28px 0 0; /* vertical offset + right spacing */
+  padding: 12px 28px 0 0; /* maintain visual offset inside the fixed area */
   background: transparent;
   pointer-events: none; /* let child control interaction */
 }
@@ -733,7 +734,9 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
   border-collapse: collapse;
   margin-top: 6px;
   font-size: 13px;
-  width: 100%;
+  /* make the table bleed to the edges of the container so row separators span full width */
+  width: calc(100% + 24px);
+  margin-left: -12px; /* compensate for .table-container horizontal padding (12px each side) */
 }
 
 /* Specific tweak: Details and Link Summary often have very few rows — keep them compact */
@@ -758,10 +761,20 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
   background: #0a64ad;
 }
 .data-table td {
-  border-bottom: 1px solid #2b2b2b;
+  /* remove per-cell bottom borders so we can draw a continuous row border across the container */
+  border-bottom: none;
   padding: 6px 12px;
   color: #eee;
   white-space: nowrap; /* prevent wrapping */
+}
+
+/* Draw the horizontal separators on the table rows instead so the line is continuous
+   left-to-right across the container (table is bleeded to container edges above). */
+.data-table tbody tr {
+  border-bottom: 1px solid #2b2b2b;
+}
+.data-table tbody tr:last-child {
+  border-bottom: none;
 }
 .data-table tr:nth-child(even) {
   background: #151515;
@@ -772,6 +785,15 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
 .highlight-row {
   background: #003b3b !important;
   box-shadow: inset 0 0 10px rgba(0, 130, 114, 0.8);
+  /* Make the separator line match the highlight so no visible gap appears */
+  border-bottom: 1px solid #003b3b !important;
+}
+
+/* Ensure highlighted rows cover the full width and their cells don't show the underlying
+   separator color — inherit the row background and remove cell-level borders */
+.data-table tbody tr.highlight-row td {
+  background: transparent !important;
+  border-bottom: none !important;
 }
 
 /* Equal-height helper for side-by-side tables */
@@ -1460,6 +1482,27 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
 .combo-dark-callout .ms-Callout-beakCurtain {
   background: #181818 !important;
   border-color: #333 !important;
+}
+
+/* Make the dropdown/callout border visually continuous with the control by hiding the beak
+   and nudging the callout up so its border meets the control's bottom border. This avoids
+   a visible gap or double-border between the control and its list. */
+.combo-dark-callout .ms-Callout-beak,
+.combo-dark-callout .ms-Callout-beakCurtain {
+  display: none !important;
+}
+.combo-dark-callout .ms-Callout-main,
+.ms-ComboBox-Callout .ms-Callout-main,
+.ms-Dropdown-callout {
+  margin-top: -1px !important; /* overlap the 1px borders so they appear continuous */
+  border-top-left-radius: 0 !important;
+  border-top-right-radius: 0 !important;
+}
+/* Remove the bottom radius from the control so the callout joins seamlessly */
+.vso-form-container .ms-ComboBox,
+.vso-form-container .ms-Dropdown-title {
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
 }
 
 /* === BUTTONS === */

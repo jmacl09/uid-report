@@ -6,8 +6,6 @@ import {
   IComboBoxOption,
   Dropdown,
   IDropdownOption,
-  TagPicker,
-  ITag,
   PrimaryButton,
   IconButton,
   Checkbox,
@@ -79,7 +77,7 @@ const VSOAssistant: React.FC = () => {
   const [selectedSpans, setSelectedSpans] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState<boolean>(false);
-  const [rackUrl, setRackUrl] = useState<string>();
+  const [, setRackUrl] = useState<string>();
   const [rackDC, setRackDC] = useState<string>();
   const [dcSearch, setDcSearch] = useState<string>("");
   const [dcSearchZ, setDcSearchZ] = useState<string>("");
@@ -90,7 +88,7 @@ const VSOAssistant: React.FC = () => {
   const [searchDone, setSearchDone] = useState<boolean>(false);
   const [oppositePrompt, setOppositePrompt] = useState<{ show: boolean; from: 'A' | 'Z' | null }>({ show: false, from: null });
   const [oppositePromptUsed, setOppositePromptUsed] = useState<boolean>(false);
-  const [triedSides, setTriedSides] = useState<{ A: boolean; Z: boolean }>({ A: false, Z: false });
+  const [, setTriedSides] = useState<{ A: boolean; Z: boolean }>({ A: false, Z: false });
   const [triedBothNoResults, setTriedBothNoResults] = useState<boolean>(false);
   // When true, ignore the A/Z exclusivity filtering so all options are visible again
   const [showAllOptions, setShowAllOptions] = useState<boolean>(false);
@@ -258,12 +256,11 @@ const VSOAssistant: React.FC = () => {
   // When the user edits any search input, clear the temporary "show all options" state
   // and reset prompt/exhaustion flags so they can get fresh prompts on a new search.
   useEffect(() => {
-    // If the UI is currently showing all options because of a previous opposite retry, clear that
-    if (showAllOptions) setShowAllOptions(false);
-    // Allow the opposite-prompt to be shown again for new searches
-    if (oppositePromptUsed) setOppositePromptUsed(false);
-    // Reset tried/both flags so a new search flow starts fresh
-    if (triedBothNoResults) setTriedBothNoResults(false);
+    // Clear any temporary 'show all' or prompt/exhaustion flags when the user edits search inputs.
+    // We explicitly set values rather than reading them to avoid stale-read dependency issues.
+    setShowAllOptions(false);
+    setOppositePromptUsed(false);
+    setTriedBothNoResults(false);
     setOppositePrompt({ show: false, from: null });
     setTriedSides({ A: false, Z: false });
     // Intentionally do not clear search results or the no-results banner here; keep that visible until the user re-submits.

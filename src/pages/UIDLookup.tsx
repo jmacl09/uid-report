@@ -1032,18 +1032,235 @@ export default function UIDLookup() {
   } catch { /* ignore parse errors */ }
   // Stable sorts for consistent UI
   result.OLSLinks?.sort((a: any, b: any) => naturalSort(a.APort, b.APort));
-  result.MGFXA?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
-  result.MGFXZ?.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
-      if (Array.isArray(result.AssociatedUIDs)) {
-        // Sort Associated UIDs in ascending order by UID (numeric-aware)
-        result.AssociatedUIDs.sort((a: any, b: any) => {
+
+  // The Logic App now returns the UID payload under `OtherData`. Prefer that as the
+  // view model so the UI remains unchanged. Also provide a fallback for MGFX
+  // information: if the A/Z arrays are missing or empty in OtherData, try to
+  // use `MGFXbySLS` (several naming variants supported) and normalise its rows
+  // to the same shape the UI expects.
+  const normalizeMgfxRows = (rows: any[] | undefined) => {
+    if (!Array.isArray(rows)) return [];
+    return rows.map((r: any) => ({
+      XOMT: r.XOMT ?? r.xomt ?? r.XomT ?? r['XOMT'] ?? '',
+      // preserve original keys where present; downstream mapping functions
+      // also accept many variants so we keep a permissive mapping here
+      'C0 Device': r['C0 Device'] ?? r.C0Device ?? r['C0_Device'] ?? r.c0Device ?? '',
+      'C0 Port': r['C0 Port'] ?? r.C0Port ?? r['C0_Port'] ?? r.c0Port ?? '',
+      StartHardwareSku: r.StartHardwareSku ?? r.HardwareSku ?? r.SKU ?? r.sku ?? '',
+      'M0 Device': r['M0 Device'] ?? r.M0Device ?? r['M0_Device'] ?? r.m0Device ?? '',
+      'M0 Port': r['M0 Port'] ?? r.M0Port ?? r['M0_Port'] ?? r.m0Port ?? '',
+      'C0 DIFF': r['C0 DIFF'] ?? r.C0_DIFF ?? r.C0Diff ?? '',
+      'M0 DIFF': r['M0 DIFF'] ?? r.M0_DIFF ?? r.M0Diff ?? '',
+    }));
+  };
+
+  // Build the primary view object: prefer OtherData when present.
+  // Some Logic App responses wrap the payload in a `body` property, so
+  // prefer that when present.
+  const topPayload = (result && typeof result === 'object' && result.body && typeof result.body === 'object') ? result.body : result;
+  let normalized: any = topPayload;
+  if (topPayload?.OtherData && typeof topPayload.OtherData === 'object') {
+    normalized = { ...topPayload.OtherData };
+    // carry useful top-level pieces across if they aren't present inside OtherData
+    if (!normalized.KQLData && topPayload.KQLData) normalized.KQLData = topPayload.KQLData;
+    if (!normalized.OLSLinks && topPayload.OLSLinks) normalized.OLSLinks = topPayload.OLSLinks;
+    if (!normalized.AssociatedUIDs && topPayload.AssociatedUIDs) normalized.AssociatedUIDs = topPayload.AssociatedUIDs;
+    if (!normalized.GDCOTickets && topPayload.GDCOTickets) normalized.GDCOTickets = topPayload.GDCOTickets;
+    if (!normalized.MGFXA && topPayload.MGFXA) normalized.MGFXA = topPayload.MGFXA;
+    if (!normalized.MGFXZ && topPayload.MGFXZ) normalized.MGFXZ = topPayload.MGFXZ;
+    // copy the attached workflow maps if present
+    if ((topPayload as any).__AllWorkflowStatus) {
+      try { Object.defineProperty(normalized, '__AllWorkflowStatus', { value: (topPayload as any).__AllWorkflowStatus, enumerable: false }); } catch { (normalized as any).__AllWorkflowStatus = (topPayload as any).__AllWorkflowStatus; }
+    }
+    if ((topPayload as any).__WFStatusByUid) {
+      try { Object.defineProperty(normalized, '__WFStatusByUid', { value: (topPayload as any).__WFStatusByUid, enumerable: false }); } catch { (normalized as any).__WFStatusByUid = (topPayload as any).__WFStatusByUid; }
+    }
+  }
+
+  // Prefer MGFXbySLS as the primary MGFX source when present (topPayload variants supported).
+  // If MGFXbySLS is present, it will populate/overwrite normalized.MGFXA and normalized.MGFXZ.
+  const candidate = (topPayload?.MGFXbySLS || topPayload?.MGFXBySLS || topPayload?.MGFX_by_SLS || topPayload?.MgfxBySLS || topPayload?.MGFXBY_SLS) || null;
+  if (candidate) {
+    // If candidate is an object with explicit A/Z arrays, use them directly
+    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+      const aSrc = candidate.A || candidate.Aside || candidate.MGFXA || candidate.mgfxA || candidate['MGFXA'];
+      const zSrc = candidate.Z || candidate.Zside || candidate.MGFXZ || candidate.mgfxZ || candidate['MGFXZ'];
+      if (Array.isArray(aSrc)) normalized.MGFXA = normalizeMgfxRows(aSrc);
+      if (Array.isArray(zSrc)) normalized.MGFXZ = normalizeMgfxRows(zSrc);
+    }
+
+    // If candidate is an array, attempt to parse common MGFX-by-SLS shapes.
+    if (Array.isArray(candidate)) {
+      const arr = candidate as any[];
+      // If rows look like StartDevice/EndDevice pairs, group by StartDevice (XOMT)
+      const looksLikePairs = arr.some(it => it && (it.StartDevice || it.StartPort || it.EndDevice || it.EndPort));
+      if (looksLikePairs) {
+        const groups = new Map<string, any[]>();
+        for (const it of arr) {
+          if (!it) continue;
+          const start = String(it.StartDevice ?? it.StartDeviceName ?? it['StartDevice'] ?? '').trim();
+          const end = String(it.EndDevice ?? it.EndDeviceName ?? it['EndDevice'] ?? '').trim();
+          const startPort = String(it.StartPort ?? it.StartPortName ?? it['StartPort'] ?? it.StartPort ?? '').trim();
+          const endPort = String(it.EndPort ?? it.EndPortName ?? it['EndPort'] ?? it.EndPort ?? '').trim();
+          if (!start || !end) continue;
+          // ignore entries where either device is an OLT (per instruction)
+          const endsWithOlt = (s: string) => /olt$/i.test(s);
+          if (endsWithOlt(start) || endsWithOlt(end)) continue;
+          const endSkuVal = String(it.EndSku ?? it.endSku ?? it.EndHardwareSku ?? it.EndHardware ?? it.endHardware ?? '').trim();
+          const list = groups.get(start) || [];
+          list.push({ start, startPort, end, endPort, endSku: endSkuVal });
+          groups.set(start, list);
+        }
+
+        const aRows: any[] = [];
+        const zRows: any[] = [];
+        const siteAraw = String(normalized?.KQLData?.SiteA || normalized?.SiteA || '').toLowerCase();
+        const siteZraw = String(normalized?.KQLData?.SiteZ || normalized?.SiteZ || '').toLowerCase();
+
+        const makeDiffLink = (hostname: string) => `https://phynet.trafficmanager.net/ConfigMon/ConfigDiff?Hostname=${encodeURIComponent(hostname)}&DiffGroups=&Timestamp`;
+
+        for (const [xomt, items] of Array.from(groups.entries())) {
+          // Determine side by matching site codes if possible
+          const low = String(xomt || '').toLowerCase();
+          const isA = siteAraw && low.includes(siteAraw.toLowerCase());
+          const isZ = siteZraw && low.includes(siteZraw.toLowerCase());
+          // prefer SiteA match -> A, else SiteZ -> Z, else default to A
+          const target = isA ? aRows : isZ ? zRows : aRows;
+
+          // find c0 and m0 entries in the group, and capture any EndSku available
+          let c0Dev = '';
+          let c0Port = '';
+          let c0Sku = '';
+          let m0Dev = '';
+          let m0Port = '';
+          for (const it of items) {
+            const e = (it.end || '').toLowerCase();
+            const endSku = String(it.endSku ?? it.EndSku ?? it.EndHardwareSku ?? it.EndHardware ?? it.endHardware ?? '').trim();
+            if (/\bc0\b|c0$/i.test(e) || /-c0/i.test(e)) {
+              c0Dev = it.end;
+              c0Port = it.endPort || c0Port;
+              if (endSku) c0Sku = endSku;
+            } else if (/\bm0\b|m0$/i.test(e) || /-m0/i.test(e)) {
+              m0Dev = it.end;
+              m0Port = it.endPort || m0Port;
+            } else {
+              // If we can't detect, attempt heuristics: devices containing 'c0' -> c0, 'm0' -> m0
+              if (it.end.toLowerCase().includes('c0') && !c0Dev) { c0Dev = it.end; c0Port = it.endPort || c0Port; if (endSku) c0Sku = endSku; }
+              if (it.end.toLowerCase().includes('m0') && !m0Dev) { m0Dev = it.end; m0Port = it.endPort || m0Port; }
+            }
+          }
+
+          const row: any = {
+            XOMT: xomt,
+            'C0 Device': c0Dev || '',
+            'C0 Port': c0Port || '',
+            'Line': '', // per request: no line calculation for fallback (we set StartHardwareSku so downstream mapping can compute Line)
+            'M0 Device': m0Dev || '',
+            'M0 Port': m0Port || '',
+            'C0 DIFF': c0Dev ? makeDiffLink(c0Dev) : '',
+            'M0 DIFF': m0Dev ? makeDiffLink(m0Dev) : '',
+            StartHardwareSku: c0Sku || '',
+          };
+          target.push(row);
+        }
+
+        if (aRows.length) normalized.MGFXA = aRows;
+        if (zRows.length) normalized.MGFXZ = zRows;
+      } else {
+        // previous behavior: try Side marker split or heuristic half/half
+        const aSide = arr.filter(it => String(it?.Side ?? it?.side ?? '').toLowerCase().includes('a'));
+        const zSide = arr.filter(it => String(it?.Side ?? it?.side ?? '').toLowerCase().includes('z'));
+        if (aSide.length) normalized.MGFXA = normalizeMgfxRows(aSide);
+        if (zSide.length) normalized.MGFXZ = normalizeMgfxRows(zSide);
+        if (!aSide.length && !zSide.length) {
+          const mid = Math.ceil(arr.length / 2);
+          normalized.MGFXA = normalizeMgfxRows(arr.slice(0, mid));
+          normalized.MGFXZ = normalizeMgfxRows(arr.slice(mid));
+        }
+      }
+    }
+  }
+
+  // Ensure stable sorting for MGFX lists
+  normalized.MGFXA?.sort && normalized.MGFXA.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
+  normalized.MGFXZ?.sort && normalized.MGFXZ.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
+
+  // Parse AllWorkflowStatus from whichever place it is present (top-level or inside OtherData)
+  try {
+    let wfList: any[] = [];
+    if (Array.isArray(normalized.AllWorkflowStatus)) wfList = normalized.AllWorkflowStatus;
+    else if (Array.isArray(result.AllWorkflowStatus)) wfList = result.AllWorkflowStatus;
+    else if (typeof normalized.AllWorkflowStatus === 'string') {
+      const s = String(normalized.AllWorkflowStatus || '').trim();
+      if (s.startsWith('[')) wfList = JSON.parse(s);
+    } else if (typeof result.AllWorkflowStatus === 'string') {
+      const s = String(result.AllWorkflowStatus || '').trim();
+      if (s.startsWith('[')) wfList = JSON.parse(s);
+    }
+    if (Array.isArray(wfList) && wfList.length) {
+      const wfMap: Record<string, string> = {};
+      for (const it of wfList) {
+        const uid = String(it?.Uid ?? it?.UID ?? it?.uid ?? '').trim();
+        if (!uid) continue;
+        wfMap[uid] = niceWorkflowStatus(it?.WorkflowStatus);
+      }
+      try { Object.defineProperty(normalized, '__AllWorkflowStatus', { value: wfList, enumerable: false }); } catch { (normalized as any).__AllWorkflowStatus = wfList; }
+      try { Object.defineProperty(normalized, '__WFStatusByUid', { value: wfMap, enumerable: false }); } catch { (normalized as any).__WFStatusByUid = wfMap; }
+    }
+  } catch {
+    // ignore parsing errors
+  }
+
+  // Lightweight normalization for common collection key names so the UI
+  // reliably finds UID rows and link fields even when upstream uses
+  // slightly different casing (e.g., "Uid" vs "UID").
+  try {
+    if (Array.isArray(normalized.AssociatedUIDs)) {
+      normalized.AssociatedUIDs = normalized.AssociatedUIDs.map((r: any) => {
+        const out = { ...(r || {}) };
+        // canonical UID key used across the UI
+        if (!out.UID) out.UID = out.Uid ?? out.uid ?? out.Uid ?? '';
+        // normalise device/port keys for downstream convenience
+        if (!out['Device A']) out['Device A'] = out['DeviceA'] ?? out.DeviceA ?? out.DeviceA ?? out['ADevice'] ?? out.ADevice ?? out.DeviceA ?? '';
+        if (!out['Device Z']) out['Device Z'] = out['DeviceZ'] ?? out.DeviceZ ?? out['ZDevice'] ?? out.ZDevice ?? '';
+        if (!out['Site A']) out['Site A'] = out.SiteA ?? out['ASite'] ?? out.ASite ?? '';
+        if (!out['Site Z']) out['Site Z'] = out.SiteZ ?? out['ZSite'] ?? out.ZSite ?? '';
+        return out;
+      });
+    }
+
+    if (Array.isArray(normalized.OLSLinks)) {
+      normalized.OLSLinks = normalized.OLSLinks.map((r: any) => {
+        const out = { ...(r || {}) };
+        if (!out['A Device']) out['A Device'] = out.ADevice ?? out['ADevice'] ?? out['DeviceA'] ?? out.DeviceA ?? '';
+        if (!out['A Port']) out['A Port'] = out.APort ?? out['APort'] ?? out['PortA'] ?? out.PortA ?? '';
+        if (!out['Z Device']) out['Z Device'] = out.ZDevice ?? out['ZDevice'] ?? out['DeviceZ'] ?? out.DeviceZ ?? '';
+        if (!out['Z Port']) out['Z Port'] = out.ZPort ?? out['ZPort'] ?? out['PortZ'] ?? out.PortZ ?? '';
+        if (!out['A Optical Device']) out['A Optical Device'] = out.AOpticalDevice ?? out['AOpticalDevice'] ?? out['A Optical Device'] ?? '';
+        if (!out['A Optical Port']) out['A Optical Port'] = out.AOpticalPort ?? out['AOpticalPort'] ?? out['A Optical Port'] ?? '';
+        if (!out['Z Optical Device']) out['Z Optical Device'] = out.ZOpticalDevice ?? out['ZOpticalDevice'] ?? out['Z Optical Device'] ?? '';
+        if (!out['Z Optical Port']) out['Z Optical Port'] = out.ZOpticalPort ?? out['ZOpticalPort'] ?? out['Z Optical Port'] ?? '';
+        return out;
+      });
+    }
+  } catch {
+    // non-fatal; if normalization fails, we'll still render raw data as before
+  }
+      // Sort Associated UIDs in the normalized view (numeric-aware)
+      if (Array.isArray(normalized.AssociatedUIDs)) {
+        normalized.AssociatedUIDs.sort((a: any, b: any) => {
           const uidA = String(a?.UID || a?.Uid || a?.uid || "");
           const uidB = String(b?.UID || b?.Uid || b?.uid || "");
           return uidA.localeCompare(uidB, undefined, { numeric: true });
         });
       }
 
-      setData(result);
+      // Ensure OLSLinks are stable-sorted on the normalized object as well
+      if (Array.isArray(normalized.OLSLinks)) {
+        normalized.OLSLinks.sort((a: any, b: any) => naturalSort(a.APort || a?.APort || '', b.APort || b?.APort || ''));
+      }
+
+      setData(normalized);
       setLastSearched(query);
       if (!history.includes(query)) setHistory([query, ...history]);
     } catch (err: any) {

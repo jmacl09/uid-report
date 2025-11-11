@@ -31,7 +31,18 @@ const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
   const autos = useMemo(() => {
     const wfRaw = String(data?.KQLData?.WorkflowStatus ?? "").trim();
     const wfFinished = /wffinished|wf finished|finished/i.test(wfRaw);
-    const tickets: any[] = Array.isArray(data?.GDCOTickets) ? data.GDCOTickets : [];
+    // Accept tickets from ReleatedTickets (Logic App), GDCOTickets (legacy), AssociatedTickets,
+    // or ticket-like rows embedded in AssociatedUIDs.
+    const tickets: any[] = Array.isArray(data?.ReleatedTickets)
+      ? data.ReleatedTickets
+      : Array.isArray(data?.GDCOTickets)
+      ? data.GDCOTickets
+      : Array.isArray(data?.AssociatedTickets)
+      ? data.AssociatedTickets
+      : Array.isArray(data?.AssociatedUIDs)
+      ? // filter for ticket-like rows inside AssociatedUIDs
+        data.AssociatedUIDs.filter((r: any) => r && (r.TicketId || r.CleanTitle || r.TicketLink || r.TicketID || r.DatacenterCode))
+      : [];
     // Consider Circuits QC complete when we see a task "Circuit QC" (case-insensitive) in a resolved state
     // under the GDCO Tickets table. Only act on an explicit "Circuit QC" title (no broad fallbacks).
     const normalize = (s: string) => String(s ?? "").replace(/\s+/g, " ").trim();
@@ -44,10 +55,12 @@ const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
       // Scan keys once and pick best candidates by normalized key
       for (const k of Object.keys(t)) {
         const nk = normKey(k);
-        if (!titleRaw && (nk === 'title' || nk === 'workitemtitle' || nk === 'tickettitle' || nk === 'task' || nk === 'name' || nk === 'taskname' || nk === 'description')) {
+        // Treat any field containing 'title', 'task', 'name' or 'description' as a title candidate
+        if (!titleRaw && (nk.includes('title') || nk.includes('task') || nk.includes('name') || nk.includes('description'))) {
           titleRaw = (t as any)[k];
         }
-        if (!stateRaw && (nk === 'state' || nk === 'status')) {
+        // Treat any field containing 'state' or 'status' as state candidate
+        if (!stateRaw && (nk.includes('state') || nk.includes('status'))) {
           stateRaw = (t as any)[k];
         }
       }
@@ -69,9 +82,9 @@ const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
         const sample = tickets.slice(0, 5).map((t) => {
           const kv: any = {};
           try {
-            Object.keys(t || {}).forEach((k) => {
-              if (/(title|work item title|ticket title|state|status)/i.test(k)) kv[k] = (t as any)[k];
-            });
+              Object.keys(t || {}).forEach((k) => {
+                if (/(title|state|status|task|name|description)/i.test(k)) kv[k] = (t as any)[k];
+              });
           } catch {}
           return kv;
         });
@@ -97,7 +110,11 @@ const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
       };
       const next: PersistShape = { ...defaultState, ...migrated };
       if (autos.wfFinished) next.configPush = "Completed";
-      if (autos.circuitsResolved) next.circuitsQc = "Completed";
+      // If Circuit QC ticket is resolved, mark both Circuits QC and Config Push as Completed
+      if (autos.circuitsResolved) {
+        next.circuitsQc = "Completed";
+        next.configPush = "Completed";
+      }
       setState(next);
     } catch {
       const next = { ...defaultState };
@@ -117,6 +134,7 @@ const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
       }
       if (autos.circuitsResolved) {
         next.circuitsQc = "Completed";
+        next.configPush = "Completed";
       }
       return next;
     });
@@ -194,10 +212,7 @@ const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
         {row(
           "Circuits QC",
           state.circuitsQc,
-          (s) => setField("circuitsQc", s),
-          autos.circuitsResolved ? (
-            <span title="Detected resolved 'Circuit QC' ticket" style={{ color: '#8ef3b7', fontSize: 10, fontWeight: 600 }}>auto</span>
-          ) : null
+          (s) => setField("circuitsQc", s)
         )}
         {/* Expected Delivery: date only (no status) */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>

@@ -743,6 +743,19 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
 .table-container .details-table {
   margin-bottom: 8px; /* reduce extra gap for compact sections */
 }
+/* Specific override: remove the horizontal divider under Details table headers.
+   Inline styles on the table weren't enough because global row separators are
+   drawn on tbody rows. Target the details-table specifically and disable the
+   row separators and any header bottom borders with strong specificity. */
+.table-container .details-table thead th {
+  border-bottom: none !important;
+}
+.table-container .details-table tbody tr {
+  border-bottom: none !important;
+}
+.table-container.details-fit .data-table thead th {
+  border-bottom: none !important;
+}
 .data-table thead tr {
   background: linear-gradient(90deg, #0078d4, #005a9e);
 }

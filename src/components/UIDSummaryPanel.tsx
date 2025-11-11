@@ -50,10 +50,12 @@ const UIDSummaryPanel: React.FC<Props> = ({ data, currentUid, style, bare }) => 
     }
     if (Object.keys(bucket).length === 0) totalGb = null;
 
-  // WF Status presentation: prefer AllWorkflowStatus map for currentUid, fallback to KQLData.WorkflowStatus
+  // WF Status presentation: prefer AssociatedUID row for currentUid, then AllWorkflowStatus map, then KQLData.WorkflowStatus
   const map = (data as any)?.__WFStatusByUid as Record<string, string> | undefined;
+  const assocRowsForWF: any[] = Array.isArray(data?.AssociatedUIDs) ? data.AssociatedUIDs : [];
+  const assocMatchForWF = currentUid ? assocRowsForWF.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(currentUid)) : null;
   const fromMap = currentUid && map ? map[String(currentUid)] : undefined;
-  const rawWF = normalize(fromMap ?? data?.KQLData?.WorkflowStatus).trim();
+  const rawWF = normalize(assocMatchForWF?.WorkflowStatus ?? assocMatchForWF?.Workflow ?? fromMap ?? data?.KQLData?.WorkflowStatus).trim();
     const isCancelled = /cancel|cancelled|canceled/i.test(rawWF);
     const isDecom = /decom/i.test(rawWF);
     const isFinished = /wffinished|wf finished|finished/i.test(rawWF);
@@ -110,10 +112,41 @@ const UIDSummaryPanel: React.FC<Props> = ({ data, currentUid, style, bare }) => 
 
   if (!summary) return null;
 
-  const opticA = normalize((data as any)?.KQLData?.OpticTypeA) || '—';
-  const opticZ = normalize((data as any)?.KQLData?.OpticTypeZ) || '—';
+  // Prefer per-link optics/speed where available (these are merged from Base/Utilization in UIDLookup)
+  const firstLink: any = Array.isArray((data as any)?.OLSLinks) && (data as any).OLSLinks.length ? (data as any).OLSLinks[0] : null;
+  // Prefer associated UID row for optic/speed if it matches currentUid
+  const assocRows: any[] = Array.isArray((data as any)?.AssociatedUIDs) ? (data as any).AssociatedUIDs : [];
+  const assoc = currentUid ? assocRows.find(r => String(((r?.UID ?? r?.Uid ?? r?.uid) || '')) === String(currentUid)) : null;
+    const extractOptic = (link: any, side: 'A' | 'Z') => {
+    if (!link) return null;
+    const dev = link[`${side}OpticalDevice`] ?? link[`${side} Optical Device`] ?? link[`${side}Optical`] ?? link[`${side}OptDev`] ?? link[`AOpticalDevice`];
+    const port = link[`${side}OpticalPort`] ?? link[`${side} Optical Port`] ?? link[`${side}OptPort`] ?? link[`AOpticalPort`];
+    const combined = (String(dev || '').trim() || '') + (port ? (port ? ` / ${String(port).trim()}` : '') : '');
+    return combined || null;
+  };
+  const opticA = normalize((assoc?.OpticTypeA ?? assoc?.OpticA ?? extractOptic(firstLink, 'A') ?? (data as any)?.KQLData?.OpticTypeA)) || '—';
+  const opticZ = normalize((assoc?.OpticTypeZ ?? assoc?.OpticZ ?? extractOptic(firstLink, 'Z') ?? (data as any)?.KQLData?.OpticTypeZ)) || '—';
   const incRaw = normalize((data as any)?.KQLData?.Increment);
-  const speed = (() => {
+    const speed = (() => {
+    // Prefer per-link Speed/OpticalSpeed if present
+      // 1) AssociatedUID increment/speed
+      if (assoc) {
+        const aS = assoc?.Increment ?? assoc?.increment ?? assoc?.OpticalSpeed ?? assoc?.Optical_Speed ?? assoc?.IncrementGb ?? assoc?.OpticalSpeedGb ?? assoc?.Speed ?? null;
+        if (aS != null && String(aS).trim() !== '') {
+          if (!isNaN(Number(aS))) return `${String(Number(aS)).replace(/\.0+$/, '')}G`;
+          const ts = String(aS).toUpperCase();
+          return /G$/.test(ts) ? ts : `${ts}`;
+        }
+      }
+      if (firstLink) {
+      const s = firstLink['Speed'] ?? firstLink['speed'] ?? firstLink['OpticalSpeed'] ?? firstLink['Optical_Speed'] ?? firstLink['OpticalSpeedGb'] ?? null;
+      if (s != null && String(s).trim() !== '') {
+        // If numeric (Gb), format as G
+        if (!isNaN(Number(s))) return `${String(Number(s)).replace(/\.0+$/, '')}G`;
+        const ts = String(s).toUpperCase();
+        return /G$/.test(ts) ? ts : `${ts}`;
+      }
+    }
     if (!incRaw) return '—';
     const n = Number(incRaw);
     if (Number.isFinite(n)) return `${n}G`;

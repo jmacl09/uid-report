@@ -71,12 +71,21 @@ const niceWorkflowStatus = (raw?: any): string => {
 
 const getWFStatusFor = (src: any, uidKey?: string | null): string => {
   try {
-    const map: Record<string, string> | undefined = (src as any)?.__WFStatusByUid;
+    // 1) If an AssociatedUID row matches uidKey and contains WorkflowStatus, prefer that
     const u = (uidKey || '').toString();
+    if (u && Array.isArray(src?.AssociatedUIDs)) {
+      try {
+        const match = (src.AssociatedUIDs as any[]).find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === u);
+        if (match && (match?.WorkflowStatus ?? match?.Workflow ?? match?.WorkflowState)) {
+          return niceWorkflowStatus(match.WorkflowStatus ?? match.Workflow ?? match.WorkflowState);
+        }
+      } catch {}
+    }
+    const map: Record<string, string> | undefined = (src as any)?.__WFStatusByUid;
     if (u && map && map[u]) {
       return niceWorkflowStatus(map[u]);
     }
-    return niceWorkflowStatus(src?.KQLData?.WorkflowStatus);
+    return niceWorkflowStatus(src?.KQLData?.WorkflowStatus ?? src?.WorkflowStatus);
   } catch {
     return niceWorkflowStatus(src?.KQLData?.WorkflowStatus);
   }
@@ -151,10 +160,11 @@ export default function UIDLookup() {
     GDCOTickets: any[];
     MGFXA: any[];
     MGFXZ: any[];
+    LinkWFs?: any[];
   };
   type Project = {
     id: string;
-  name: string; // Computed title e.g., SLS-12345_OSL22 ↔ SVG20, fallback to UID
+    name: string; // Computed title e.g., SLS-12345_OSL22 ↔ SVG20, fallback to UID
     createdAt: number;
     data: Snapshot;
     owners?: string[]; // optional display of owners, each shown on its own line
@@ -172,7 +182,6 @@ export default function UIDLookup() {
   });
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<string>("");
-  // Rail filter and viewer selection
   const COLLAPSED_SECTIONS_KEY = 'uidCollapsedSections';
   const VIEWER_SECTION_KEY = 'uidProjectsViewerSection';
   const [viewerSection, setViewerSection] = useState<string | null>(() => {
@@ -192,16 +201,6 @@ export default function UIDLookup() {
       else localStorage.removeItem(VIEWER_SECTION_KEY);
     } catch {}
   }, [viewerSection]);
-
-  // If the persisted viewerSection no longer has any projects, fall back to showing all
-  useEffect(() => {
-    if (!viewerSection) return;
-    try {
-      const any = projects.some(p => (p.section || '') === viewerSection);
-      if (!any) setViewerSection(null);
-    } catch {}
-  }, [projects, viewerSection]);
-  // Modal for actions (projects and sections)
   type ModalKind = 'rename' | 'owners' | 'section' | 'new-section' | 'delete-section' | 'rename-section' | 'move-section' | 'delete-project' | 'create-project' | 'confirm-merge';
   const [modalType, setModalType] = useState<ModalKind | null>(null);
   const [modalProjectId, setModalProjectId] = useState<string | null>(null);
@@ -515,7 +514,10 @@ export default function UIDLookup() {
     const isCancelled = /cancel|cancelled|canceled/i.test(raw);
     const isDecom = /decom/i.test(raw);
     if (isCancelled || isDecom) {
-      const jobId = data?.KQLData?.JobId;
+      // Prefer JobId from the AssociatedUID matching the UID the user searched; fallback to KQLData.JobId
+      const assocRows: any[] = Array.isArray(data?.AssociatedUIDs) ? data.AssociatedUIDs : [];
+      const assoc = lastSearched ? assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched)) : null;
+      const jobId = assoc?.JobId ?? assoc?.JobID ?? data?.KQLData?.JobId;
       const link = jobId ? `https://azcis.trafficmanager.net/Public/NetworkingOptical/JobDetails/${jobId}` : null;
       setCancelDialogTitle(isCancelled ? 'WF Cancelled' : 'DECOM');
       setCancelDialogMsg(isCancelled ? 'This workflow has been cancelled. Please check the job in CIS below to confirm.' : 'This workflow appears to be decommissioned.');
@@ -595,7 +597,8 @@ export default function UIDLookup() {
       const wfMap: Record<string, string> | undefined = (current as any).__WFStatusByUid;
       const hasInProgress = rows.some((r: any) => {
         const uid = r?.UID ?? r?.Uid ?? r?.uid ?? '';
-        const wf = niceWorkflowStatus(wfMap?.[String(uid)]) || '';
+        const wfRaw = r?.WorkflowStatus ?? r?.Workflow ?? wfMap?.[String(uid)];
+        const wf = niceWorkflowStatus(wfRaw) || '';
         return /in\s*-?\s*progress|running/i.test(wf);
       });
       setShowAllAssociatedWF(!hasInProgress);
@@ -622,6 +625,14 @@ export default function UIDLookup() {
       return null;
     };
     const perLinkGb = (row: any): number | null => {
+      // Prefer an explicit numeric OpticalSpeed on the row (may be provided from Utilization)
+      const explicit = row?.OpticalSpeedGb ?? row?.OpticalSpeedGb ?? row?.OpticalSpeed;
+      if (explicit != null && explicit !== '' && !isNaN(Number(explicit))) {
+        // If OpticalSpeed is provided in Mbps (large numbers like 100000), convert to G
+        const n = Number(explicit);
+        if (n > 1000) return Math.round(n / 1000);
+        return Math.round(n);
+      }
       // Prefer parsing from port names per row
       const fromAPort = parseSpeedFromText(row?.APort);
       if (fromAPort != null) return fromAPort;
@@ -690,6 +701,7 @@ export default function UIDLookup() {
       GDCOTickets: Array.isArray(src?.GDCOTickets) ? sanitizeArrays(src.GDCOTickets) : [],
       MGFXA: Array.isArray(src?.MGFXA) ? stripSide(sanitizeArrays(src.MGFXA)) : [],
       MGFXZ: Array.isArray(src?.MGFXZ) ? stripSide(sanitizeArrays(src.MGFXZ)) : [],
+      LinkWFs: Array.isArray(src?.LinkWFs) ? sanitizeArrays(src.LinkWFs) : [],
     };
     return snap;
   };
@@ -717,6 +729,7 @@ export default function UIDLookup() {
       GDCOTickets: dedupMerge(base.GDCOTickets, add.GDCOTickets),
       MGFXA: dedupMerge(base.MGFXA, add.MGFXA),
       MGFXZ: dedupMerge(base.MGFXZ, add.MGFXZ),
+      LinkWFs: dedupMerge(base.LinkWFs || [], add.LinkWFs || []),
     };
   };
   const getFirstSites = (src: any, uidKey?: string): { a?: string|null; z?: string|null } => {
@@ -755,13 +768,26 @@ export default function UIDLookup() {
     }
   };
 
-  // Get SRLG with fallback: prefer AExpansions.SRLG; else use KQLData.SRLG
-  const getSrlgFrom = (src: any): string | null => {
+  // Get SRLG with fallback: prefer the AssociatedUID matching uidKey (if present),
+  // then AExpansions.SRLG, then KQLData.SRLG.
+  const getSrlgFrom = (src: any, uidKey?: string): string | null => {
     try {
+      // 1) Prefer AssociatedUIDs row matching the entered UID
+      const rows: any[] = Array.isArray(src?.AssociatedUIDs) ? src.AssociatedUIDs : [];
+      if (rows.length) {
+        const match = uidKey ? rows.find(r => String(r?.UID || r?.Uid || r?.uid || '') === String(uidKey)) : null;
+        const r = match || rows[0] || {};
+        const val = r['Srlg'] ?? r['SRLG'] ?? r['SRLGName'] ?? r['SrlgName'] ?? r['SRLG'] ?? '';
+        if (val != null && String(val).trim()) return String(val).trim();
+      }
+
+      // 2) Fallback to AExpansions then KQLData
       const a = src?.AExpansions?.SRLG ?? src?.AExpansions?.Srlg;
+      if (a != null && String(a).trim()) return String(a).trim();
       const k = src?.KQLData?.SRLG ?? src?.KQLData?.Srlg;
-      const val = (a != null && String(a).trim()) ? String(a).trim() : (k != null && String(k).trim() ? String(k).trim() : '');
-      return val || null;
+      if (k != null && String(k).trim()) return String(k).trim();
+
+      return null;
     } catch { return null; }
   };
   const computeProjectTitle = (src: any, uidKey: string): string => {
@@ -1065,9 +1091,17 @@ export default function UIDLookup() {
     if (!normalized.KQLData && topPayload.KQLData) normalized.KQLData = topPayload.KQLData;
     if (!normalized.OLSLinks && topPayload.OLSLinks) normalized.OLSLinks = topPayload.OLSLinks;
     if (!normalized.AssociatedUIDs && topPayload.AssociatedUIDs) normalized.AssociatedUIDs = topPayload.AssociatedUIDs;
-    if (!normalized.GDCOTickets && topPayload.GDCOTickets) normalized.GDCOTickets = topPayload.GDCOTickets;
+  if (!normalized.GDCOTickets && topPayload.GDCOTickets) normalized.GDCOTickets = topPayload.GDCOTickets;
+  // Logic App may return ReleatedTickets (note spelling). Ensure we copy it into normalized so downstream
+  // consumers (getGdcoRows, status panel) can find tickets regardless of wrapper placement.
+  if (!normalized.ReleatedTickets && topPayload.ReleatedTickets) normalized.ReleatedTickets = topPayload.ReleatedTickets;
     if (!normalized.MGFXA && topPayload.MGFXA) normalized.MGFXA = topPayload.MGFXA;
     if (!normalized.MGFXZ && topPayload.MGFXZ) normalized.MGFXZ = topPayload.MGFXZ;
+    if (!normalized.LinkWFs && topPayload.LinkWFs) normalized.LinkWFs = topPayload.LinkWFs;
+    // Carry across WorkflowsString (and common name variants) so the UI can find ordered workflow URLs
+    if (!normalized.WorkflowsString) {
+      normalized.WorkflowsString = topPayload.WorkflowsString ?? topPayload.WorkflowsStringRaw ?? topPayload.Workflows ?? topPayload.WorkflowUrls ?? null;
+    }
     // copy the attached workflow maps if present
     if ((topPayload as any).__AllWorkflowStatus) {
       try { Object.defineProperty(normalized, '__AllWorkflowStatus', { value: (topPayload as any).__AllWorkflowStatus, enumerable: false }); } catch { (normalized as any).__AllWorkflowStatus = (topPayload as any).__AllWorkflowStatus; }
@@ -1076,6 +1110,37 @@ export default function UIDLookup() {
       try { Object.defineProperty(normalized, '__WFStatusByUid', { value: (topPayload as any).__WFStatusByUid, enumerable: false }); } catch { (normalized as any).__WFStatusByUid = (topPayload as any).__WFStatusByUid; }
     }
   }
+
+  // Some Logic App responses return collections wrapped in an object with a
+  // `value` property (e.g. { value: [...] }). Unwrap these into plain arrays so
+  // downstream code can treat them uniformly.
+  const unwrapValueArray = (obj: any, key: string) => {
+    try {
+      const v = obj?.[key];
+      if (!v) return;
+      if (Array.isArray(v)) return;
+      if (v && typeof v === 'object' && Array.isArray(v.value)) obj[key] = v.value;
+    } catch {}
+  };
+  ['AssociatedUIDs', 'OLSLinks', 'MGFXA', 'MGFXZ', 'GDCOTickets', 'ReleatedTickets', 'AssociatedTickets'].forEach(k => unwrapValueArray(normalized, k));
+  // Also unwrap LinkWFs if wrapped under { value: [...] }
+  unwrapValueArray(normalized, 'LinkWFs');
+
+  // Some Logic App payloads use alternative names for the link-summary array.
+  // Map common alternatives into `OLSLinks` so the existing UI logic can render them.
+  try {
+    if ((!normalized.OLSLinks || !Array.isArray(normalized.OLSLinks) || !normalized.OLSLinks.length) && Array.isArray(normalized.Base) && normalized.Base.length) {
+      normalized.OLSLinks = normalized.Base;
+    }
+    // lowercase variants
+    if ((!normalized.OLSLinks || !Array.isArray(normalized.OLSLinks) || !normalized.OLSLinks.length) && Array.isArray(normalized.base) && normalized.base.length) {
+      normalized.OLSLinks = normalized.base;
+    }
+    // other possible names
+    if ((!normalized.OLSLinks || !Array.isArray(normalized.OLSLinks) || !normalized.OLSLinks.length) && Array.isArray(normalized.LinkSummary) && normalized.LinkSummary.length) {
+      normalized.OLSLinks = normalized.LinkSummary;
+    }
+  } catch {}
 
   // Prefer MGFXbySLS as the primary MGFX source when present (topPayload variants supported).
   // If MGFXbySLS is present, it will populate/overwrite normalized.MGFXA and normalized.MGFXZ.
@@ -1114,8 +1179,12 @@ export default function UIDLookup() {
 
         const aRows: any[] = [];
         const zRows: any[] = [];
-        const siteAraw = String(normalized?.KQLData?.SiteA || normalized?.SiteA || '').toLowerCase();
-        const siteZraw = String(normalized?.KQLData?.SiteZ || normalized?.SiteZ || '').toLowerCase();
+  // Prefer site codes from AssociatedUIDs (they tend to be the most reliable
+  // for determining which XOMT prefixes belong to A vs Z). Fall back to
+  // KQLData.SiteA/SiteZ or normalized.SiteA if AssociatedUIDs are absent.
+  const sitesFromAssociated = getFirstSites(normalized, query /* current UID */);
+  const siteAraw = String((sitesFromAssociated.a || normalized?.KQLData?.SiteA || normalized?.SiteA) || '').toLowerCase();
+  const siteZraw = String((sitesFromAssociated.z || normalized?.KQLData?.SiteZ || normalized?.SiteZ) || '').toLowerCase();
 
         const makeDiffLink = (hostname: string) => `https://phynet.trafficmanager.net/ConfigMon/ConfigDiff?Hostname=${encodeURIComponent(hostname)}&DiffGroups=&Timestamp`;
 
@@ -1184,6 +1253,112 @@ export default function UIDLookup() {
   // Ensure stable sorting for MGFX lists
   normalized.MGFXA?.sort && normalized.MGFXA.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
   normalized.MGFXZ?.sort && normalized.MGFXZ.sort((a: any, b: any) => naturalSort(a.XOMT, b.XOMT));
+
+  // Ensure MGFX A/Z each contain placeholders for XOMT 01..06 per base prefix.
+  // For any prefix (e.g. "gvx01-335-") that has some XOMT rows, if any of 01-06
+  // are missing, insert placeholder rows (only XOMT populated) before that group's rows.
+  const insertMissingXomtsForSide = (rows: any[] | undefined) => {
+    if (!Array.isArray(rows) || rows.length === 0) return rows || [];
+    const prefixRegex = /^(.*?)(\d{2})xomt$/i;
+    // Group rows by prefix while preserving encounter order
+    const groups: Array<{ prefix: string | null; items: any[] }> = [];
+    const seenPrefixes = new Set<string>();
+    for (const r of rows) {
+      const xomt = String(r?.XOMT || '');
+      const m = xomt.match(prefixRegex);
+      const prefix = m ? m[1] : null;
+      const key = prefix || '____NO_PREFIX____';
+      if (!seenPrefixes.has(key)) {
+        seenPrefixes.add(key);
+        groups.push({ prefix: prefix, items: [] });
+      }
+      const grp = groups[groups.length - 1];
+      grp.items.push(r);
+    }
+
+    const pad2 = (n: number) => (n < 10 ? '0' + n : String(n));
+    const makePlaceholder = (prefix: string | null, n: number) => {
+      const x = prefix ? `${prefix}${pad2(n)}xomt` : `${pad2(n)}xomt`;
+      return {
+        XOMT: x,
+        'C0 Device': '',
+        'C0 Port': '',
+        StartHardwareSku: '',
+        'M0 Device': '',
+        'M0 Port': '',
+        'C0 DIFF': '',
+        'M0 DIFF': '',
+      };
+    };
+
+    const out: any[] = [];
+    for (const g of groups) {
+      const prefix = g.prefix; // may be null
+      // Determine existing numeric suffixes (only consider 01-06 range)
+      const existing = new Set<number>();
+      for (const it of g.items) {
+        const x = String(it?.XOMT || '');
+        const m = x.match(prefixRegex);
+        if (m) {
+          const num = Number(m[2]);
+          if (!isNaN(num) && num >= 1 && num <= 99) existing.add(num);
+        }
+      }
+      // compute missing in 1..6
+      const missing: number[] = [];
+      for (let n = 1; n <= 6; n++) if (!existing.has(n)) missing.push(n);
+      // If there are missing entries and we have a prefix (i.e., rows look like gvx..NNxomt),
+      // insert placeholders before the group's existing rows. If there's no prefix, don't insert.
+      if (missing.length && prefix) {
+        // insert placeholders in ascending order
+        for (const n of missing) out.push(makePlaceholder(prefix, n));
+      }
+      // then append the original group rows
+      out.push(...g.items);
+    }
+    return out;
+  };
+
+  normalized.MGFXA = insertMissingXomtsForSide(normalized.MGFXA);
+  normalized.MGFXZ = insertMissingXomtsForSide(normalized.MGFXZ);
+
+  // Refined MGFX filtering: previously required a hard-coded "-352-" segment which
+  // caused valid XOMTs (e.g. ams22-53313-01xomt) to be excluded. Now we:
+  // 1) Match rows whose XOMT starts with "<site>-" (case-insensitive)
+  // 2) If that yields zero but site exists, fallback to rows whose XOMT contains the site code
+  // 3) Only apply filtering when we have a site value; otherwise keep original lists
+  try {
+    const sitesForMgfx = getFirstSites(normalized, query /* current UID */);
+    const siteAL = String(sitesForMgfx.a || '').trim().toLowerCase();
+    const siteZL = String(sitesForMgfx.z || '').trim().toLowerCase();
+    const filterBySite = (rows: any[] | undefined, site: string) => {
+      if (!site) return rows || [];
+      const src = Array.isArray(rows) ? rows : [];
+      const primary = src.filter(r => {
+        const x = String(r?.XOMT || r?.xomt || '').toLowerCase();
+        return x.startsWith(site + '-');
+      });
+      if (primary.length) return primary;
+      // fallback: contains site anywhere
+      const alt = src.filter(r => String(r?.XOMT || r?.xomt || '').toLowerCase().includes(site));
+      return alt.length ? alt : src; // if still none, return original to avoid emptying list
+    };
+    if (siteAL) normalized.MGFXA = insertMissingXomtsForSide(filterBySite(normalized.MGFXA, siteAL));
+    if (siteZL) normalized.MGFXZ = insertMissingXomtsForSide(filterBySite(normalized.MGFXZ, siteZL));
+  } catch {
+    // Non-fatal: keep existing MGFX lists if any error arises
+  }
+
+  // Ensure final MGFX lists are sorted ascending by XOMT (numeric-aware),
+  // after any filtering and placeholder insertion.
+  try {
+    if (Array.isArray(normalized.MGFXA)) {
+      normalized.MGFXA.sort((a: any, b: any) => naturalSort(String(a?.XOMT || a?.xomt || ''), String(b?.XOMT || b?.xomt || '')));
+    }
+    if (Array.isArray(normalized.MGFXZ)) {
+      normalized.MGFXZ.sort((a: any, b: any) => naturalSort(String(a?.XOMT || a?.xomt || ''), String(b?.XOMT || b?.xomt || '')));
+    }
+  } catch {}
 
   // Parse AllWorkflowStatus from whichever place it is present (top-level or inside OtherData)
   try {
@@ -1323,6 +1498,103 @@ export default function UIDLookup() {
     return out.trimEnd() + "\n\n";
   };
 
+  // Build WAN Checker and Deployment Validator links on-the-fly
+  const getWanLinkForSide = (src: any, side: 'A' | 'Z'): string | null => {
+    try {
+      if (!src) return null;
+      const links: any[] = Array.isArray(src.OLSLinks) ? src.OLSLinks : [];
+      const device = side === 'A'
+        ? (src?.KQLData?.DeviceA || (links[0]?.['A Device'] ?? links[0]?.ADevice) || '')
+        : (src?.KQLData?.DeviceZ || (links[0]?.['Z Device'] ?? links[0]?.ZDevice) || '');
+      const dev = String(device || '').trim();
+      if (!dev) return null;
+      // Collect unique interfaces for the selected side
+      const set = new Set<string>();
+      for (const r of links) {
+        const p = side === 'A'
+          ? (r['A Port'] ?? r.APort ?? r.PortA ?? r['Port A'])
+          : (r['Z Port'] ?? r.ZPort ?? r.PortZ ?? r['Port Z']);
+        const v = String(p ?? '').trim();
+        if (v) set.add(v);
+      }
+      if (!set.size) return null;
+      const interfaces = Array.from(set.values()).join(';');
+      return `https://phynet.trafficmanager.net/WAN?deviceName=${encodeURIComponent(dev)}&interfaces=${interfaces}`;
+    } catch {
+      return null;
+    }
+  };
+
+  const getDeploymentValidatorLinkForSide = (src: any, side: 'A' | 'Z'): string | null => {
+    try {
+      if (!src) return null;
+      const rows: any[] = side === 'A' ? (src.MGFXA || []) : (src.MGFXZ || []);
+      if (!Array.isArray(rows) || rows.length === 0) return null;
+      const set = new Set<string>();
+      for (const r of rows) {
+        const x = String(r?.XOMT ?? r?.xomt ?? '').trim();
+        if (x) set.add(x);
+      }
+      if (!set.size) return null;
+      const devices = Array.from(set.values()).join(',');
+      return `https://phynet.trafficmanager.net/Optical/DeploymentValidator?devices=${devices}`;
+    } catch {
+      return null;
+    }
+  };
+
+  // Normalise GDCO ticket rows from either GDCOTickets or AssociatedTickets.
+  // Return objects with only the visible columns used by the UI and export,
+  // and attach a non-enumerable __hiddenLink when a ticket link is present so
+  // the table can render the TicketId as a clickable link without adding
+  // extra visible columns.
+  const getGdcoRows = (src: any): any[] => {
+    if (!src) return [];
+  // Prefer new Logic App shape: ReleatedTickets (note: source may have this exact spelled key).
+  // Fallbacks: GDCOTickets, AssociatedTickets. Some Logic Apps put tickets inside AssociatedUIDs
+  // (legacy/combined payload) — detect those too by looking for TicketId/CleanTitle.
+  const primary = Array.isArray(src.ReleatedTickets) && src.ReleatedTickets.length ? src.ReleatedTickets : (Array.isArray(src.GDCOTickets) && src.GDCOTickets.length ? src.GDCOTickets : null);
+  const alternate = Array.isArray(src.AssociatedTickets) && src.AssociatedTickets.length ? src.AssociatedTickets : null;
+    let rows: any[] = primary || alternate || [];
+    let sourcePicked = primary ? 'GDCOTickets' : (alternate ? 'AssociatedTickets' : null);
+    if ((!rows || !rows.length) && Array.isArray(src.AssociatedUIDs) && src.AssociatedUIDs.length) {
+      // Filter AssociatedUIDs for entries that look like tickets
+      const candidates = src.AssociatedUIDs.filter((r: any) => r && (r.TicketId || r.CleanTitle || r.TicketLink || r.TicketID || r.DatacenterCode));
+      if (candidates.length) {
+        rows = candidates;
+        sourcePicked = 'AssociatedUIDs';
+      }
+    }
+    // Debug info to help diagnose missing rows (can be removed later)
+    try {
+      // eslint-disable-next-line no-console
+      console.debug('[getGdcoRows] sourcePicked=', sourcePicked, 'rowsCount=', (rows || []).length, 'sample=', (rows || []).slice(0,3));
+    } catch {}
+    const mapped = (rows || []).map((r: any) => {
+      const ticketId = String(r?.TicketId ?? r?.TicketID ?? r?.['Ticket Id'] ?? r?.['Ticket Id'] ?? r?.Ticket ?? '').trim();
+      const dc = String(r?.DatacenterCode ?? r?.DCCode ?? r?.['DC Code'] ?? r?.Datacenter ?? r?.DC ?? '').trim();
+      const title = String(r?.CleanTitle ?? r?.Title ?? r?.cleanTitle ?? '').trim();
+      const state = String(r?.State ?? r?.Status ?? '').trim();
+      const assigned = String(r?.CleanAssignedTo ?? r?.AssignedTo ?? r?.Owner ?? r?.Assigned ?? '').trim();
+      const link = String(r?.TicketLink ?? r?.TicketLinkUrl ?? r?.TicketURL ?? r?.TicketUrl ?? r?.Ticket_Link ?? r?.TicketLink ?? r?.Link ?? r?.link ?? r?.URL ?? r?.Url ?? '').trim() || null;
+      const obj: any = {
+        "Ticket Id": ticketId,
+        "DC Code": dc,
+        "Title": title,
+        "State": state,
+        "Assigned To": assigned,
+      };
+      if (link) {
+        try { Object.defineProperty(obj, '__hiddenLink', { value: link, enumerable: false }); } catch { (obj as any).__hiddenLink = link; }
+      }
+      return obj;
+    });
+    // Filter out rows that have no visible content (all fields empty)
+    return mapped.filter((m: any) => {
+      return (String(m['Ticket Id'] || '').trim() || String(m['Title'] || '').trim() || String(m['DC Code'] || '').trim() || String(m['State'] || '').trim() || String(m['Assigned To'] || '').trim());
+    });
+  };
+
   // Build full plain‑text export of all sections
   const buildAllText = (): string => {
     const dataNow = getViewData();
@@ -1345,26 +1617,58 @@ export default function UIDLookup() {
       const isCancelled = /cancel|cancelled|canceled/i.test(rawStatus);
       const isDecom = /decom/i.test(rawStatus);
       const statusDisplay = isCancelled ? 'WF Cancelled' : isDecom ? 'DECOM' : (rawStatus || '—');
-  const jobId = dataNow?.KQLData?.JobId;
-      const cisLink = jobId ? `https://azcis.trafficmanager.net/Public/NetworkingOptical/JobDetails/${jobId}` : '';
+  
 
       const detailsHeaders = ["SRLGID", "SRLG", "SolutionID", "Status", "CIS Workflow"];
+      // Prefer SRLG/SRLGID and JobId/SolutionId from the AssociatedUID matching the current UID when present
+      const assocRows: any[] = Array.isArray((dataNow as any).AssociatedUIDs) ? (dataNow as any).AssociatedUIDs : [];
+      const assoc = lastSearched ? assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched ?? '')) : null;
+      // Prefer JobId from assoc if present (for CIS Workflow link)
+      const jobIdPrefer = assoc?.JobId ?? dataNow?.KQLData?.JobId;
+      const cisLinkPrefer = jobIdPrefer ? `https://azcis.trafficmanager.net/Public/NetworkingOptical/JobDetails/${jobIdPrefer}` : '';
+      const solutionPrefer = (() => {
+        try {
+          const assocSol = assoc?.SolutionId ?? assoc?.SolutionID ?? assoc?.Solution ?? null;
+          if (assocSol) {
+            if (Array.isArray(assocSol)) return assocSol.map((v: any) => formatSolutionId(String(v))).filter(Boolean).join(', ');
+            return formatSolutionId(String(assocSol));
+          }
+          const base = dataNow?.Base ?? dataNow?.base ?? null;
+          if (base) {
+            if (Array.isArray(base) && base.length) {
+              const b0 = base[0];
+              const bSol = b0?.SolutionId ?? b0?.SolutionID ?? b0?.Solution ?? null;
+              if (bSol) {
+                if (Array.isArray(bSol)) return bSol.map((v: any) => formatSolutionId(String(v))).filter(Boolean).join(', ');
+                return formatSolutionId(String(bSol));
+              }
+            } else if (typeof base === 'object') {
+              const bSol = base?.SolutionId ?? base?.SolutionID ?? base?.Solution ?? null;
+              if (bSol) {
+                if (Array.isArray(bSol)) return bSol.map((v: any) => formatSolutionId(String(v))).filter(Boolean).join(', ');
+                return formatSolutionId(String(bSol));
+              }
+            }
+          }
+          return (getSolutionIds(dataNow) || []).map(formatSolutionId).filter(Boolean).join(', ');
+        } catch { return ''; }
+      })();
       const detailsRows = [
         {
-          SRLGID: String(getSrlgIdFrom(dataNow, lastSearched) ?? ""),
-          SRLG: String(getSrlgFrom(dataNow) ?? ""),
-          SolutionID: (() => getSolutionIds(dataNow).map(formatSolutionId).join(', '))(),
+          SRLGID: String(assoc?.SrlgId ?? assoc?.SRLGID ?? getSrlgIdFrom(dataNow, lastSearched) ?? ""),
+          SRLG: String(assoc?.Srlg ?? assoc?.SRLG ?? getSrlgFrom(dataNow, lastSearched) ?? ""),
+          SolutionID: solutionPrefer,
           Status: statusDisplay,
-          "CIS Workflow": cisLink,
+          "CIS Workflow": cisLinkPrefer,
         },
       ].map((r) => Object.values(r).reduce((acc: any, v: any, i: number) => ({ ...acc, [detailsHeaders[i]]: v }), {}));
       text += formatTableText("Details", detailsRows as any, detailsHeaders);
       // Tools / quick links (A/Z WAN checker + Deployment Validator)
       try {
-        const aWan = String(dataNow?.AExpansions?.AUrl || '');
-        const aDeploy = String(dataNow?.AExpansions?.AOpticalUrl || '');
-        const zWan = String(dataNow?.ZExpansions?.ZUrl || '');
-        const zDeploy = String(dataNow?.ZExpansions?.ZOpticalUrl || '');
+        const aWan = getWanLinkForSide(dataNow, 'A');
+        const aDeploy = getDeploymentValidatorLinkForSide(dataNow, 'A');
+        const zWan = getWanLinkForSide(dataNow, 'Z');
+        const zDeploy = getDeploymentValidatorLinkForSide(dataNow, 'Z');
         const toolsLines: string[] = [];
         if (aWan) toolsLines.push(`A WAN Checker: ${aWan}`);
         if (aDeploy) toolsLines.push(`A Deployment Validator: ${aDeploy}`);
@@ -1406,7 +1710,7 @@ export default function UIDLookup() {
         const zDev = r['Z Device'] ?? r['Device Z'] ?? r?.ZDevice ?? r?.DeviceZ ?? '';
         const siteA = r['Site A'] ?? r?.ASite ?? r?.SiteA ?? r?.Site ?? '';
         const siteZ = r['Site Z'] ?? r?.ZSite ?? r?.SiteZ ?? '';
-        const wf = niceWorkflowStatus(wfMap?.[String(uid)]) || '';
+  const wf = niceWorkflowStatus(r?.WorkflowStatus ?? r?.Workflow ?? wfMap?.[String(uid)]) || '';
         return {
           UID: uid,
           SrlgId: srlg,
@@ -1438,8 +1742,14 @@ export default function UIDLookup() {
       );
     }
 
-    // GDCO Tickets
-  text += formatTableText("GDCO Tickets", dataNow.GDCOTickets, ["Ticket Id", "DC Code", "Title", "State", "Assigned To", "Link"]);
+    // GDCO Tickets - prefer normalized rows (this will pick up AssociatedTickets when present)
+    try {
+      const gdco = getGdcoRows(dataNow || {});
+      const exportRows = (gdco || []).map((r: any) => ({ ...r, Link: (r as any).__hiddenLink || '' }));
+      text += formatTableText("GDCO Tickets", exportRows, ["Ticket Id", "DC Code", "Title", "State", "Assigned To", "Link"]);
+    } catch {
+      text += formatTableText("GDCO Tickets", [], ["Ticket Id", "DC Code", "Title", "State", "Assigned To", "Link"]);
+    }
 
     // MGFX A/Z with derived Line column (and without SKU column)
     const mgfxHeaders = [
@@ -1520,32 +1830,63 @@ export default function UIDLookup() {
       console.warn('Failed to build All Details sheet for Excel export:', e);
     }
     // include Details and Tools sheets as well
+    // Prefer values from the AssociatedUID that matches lastSearched when present
+    const assocRowsForExport: any[] = Array.isArray((dataNow as any).AssociatedUIDs) ? (dataNow as any).AssociatedUIDs : [];
+    const assocForExport = lastSearched ? assocRowsForExport.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched ?? '')) : null;
+    const jobIdForExport = assocForExport?.JobId ?? assocForExport?.JobID ?? dataNow?.KQLData?.JobId ?? null;
+    const solutionForExport = (() => {
+      try {
+        const assocSol = assocForExport?.SolutionId ?? assocForExport?.SolutionID ?? assocForExport?.Solution ?? null;
+        if (assocSol) {
+          if (Array.isArray(assocSol)) return assocSol.map((v: any) => formatSolutionId(String(v))).filter(Boolean).join(', ');
+          return formatSolutionId(String(assocSol));
+        }
+        const base = dataNow?.Base ?? dataNow?.base ?? null;
+        if (base) {
+          if (Array.isArray(base) && base.length) {
+            const b0 = base[0];
+            const bSol = b0?.SolutionId ?? b0?.SolutionID ?? b0?.Solution ?? null;
+            if (bSol) {
+              if (Array.isArray(bSol)) return bSol.map((v: any) => formatSolutionId(String(v))).filter(Boolean).join(', ');
+              return formatSolutionId(String(bSol));
+            }
+          } else if (typeof base === 'object') {
+            const bSol = base?.SolutionId ?? base?.SolutionID ?? base?.Solution ?? null;
+            if (bSol) {
+              if (Array.isArray(bSol)) return bSol.map((v: any) => formatSolutionId(String(v))).filter(Boolean).join(', ');
+              return formatSolutionId(String(bSol));
+            }
+          }
+        }
+        return (getSolutionIds(dataNow) || []).map(formatSolutionId).filter(Boolean).join(', ');
+      } catch { return ''; }
+    })();
     const detailsRow = [
       {
-        SRLGID: String(getSrlgIdFrom(dataNow, lastSearched) ?? ""),
-        SRLG: String(getSrlgFrom(dataNow) ?? ""),
-        SolutionID: getSolutionIds(dataNow).map(formatSolutionId).join(', '),
+        SRLGID: String(assocForExport?.SrlgId ?? assocForExport?.SRLGID ?? getSrlgIdFrom(dataNow, lastSearched) ?? ""),
+        SRLG: String(assocForExport?.Srlg ?? assocForExport?.SRLG ?? getSrlgFrom(dataNow, lastSearched) ?? ""),
+        SolutionID: solutionForExport,
         Status: String(getWFStatusFor(dataNow, lastSearched) || ""),
-        CIS_Workflow: dataNow?.KQLData?.JobId ? `https://azcis.trafficmanager.net/Public/NetworkingOptical/JobDetails/${dataNow?.KQLData?.JobId}` : "",
+        CIS_Workflow: jobIdForExport ? `https://azcis.trafficmanager.net/Public/NetworkingOptical/JobDetails/${jobIdForExport}` : "",
       },
     ];
 
     const toolsRows = [
       {
         Tool: 'A WAN Checker',
-        URL: String(dataNow?.AExpansions?.AUrl || ""),
+        URL: String(getWanLinkForSide(dataNow, 'A') || ""),
       },
       {
         Tool: 'A Deployment Validator',
-        URL: String(dataNow?.AExpansions?.AOpticalUrl || ""),
+        URL: String(getDeploymentValidatorLinkForSide(dataNow, 'A') || ""),
       },
       {
         Tool: 'Z WAN Checker',
-        URL: String(dataNow?.ZExpansions?.ZUrl || ""),
+        URL: String(getWanLinkForSide(dataNow, 'Z') || ""),
       },
       {
         Tool: 'Z Deployment Validator',
-        URL: String(dataNow?.ZExpansions?.ZOpticalUrl || ""),
+        URL: String(getDeploymentValidatorLinkForSide(dataNow, 'Z') || ""),
       },
     ].filter(r => r.URL);
 
@@ -1563,7 +1904,7 @@ export default function UIDLookup() {
           const zDev = r['Z Device'] ?? r['Device Z'] ?? r?.ZDevice ?? r?.DeviceZ ?? '';
           const siteA = r['Site A'] ?? r?.ASite ?? r?.SiteA ?? r?.Site ?? '';
           const siteZ = r['Site Z'] ?? r?.ZSite ?? r?.SiteZ ?? '';
-          const wf = niceWorkflowStatus(wfMap?.[String(uid)]) || '';
+          const wf = niceWorkflowStatus(r?.WorkflowStatus ?? r?.Workflow ?? wfMap?.[String(uid)]) || '';
           return {
             UID: uid,
             SrlgId: srlg,
@@ -1594,7 +1935,12 @@ export default function UIDLookup() {
       "Tools": toolsRows,
   "Link Summary": dataNow.OLSLinks,
   "Associated UIDs": associatedRows,
-      "GDCO Tickets": dataNow.GDCOTickets,
+      "GDCO Tickets": ((): any[] => {
+        try {
+          const gd = getGdcoRows(dataNow || {});
+          return (gd || []).map((r: any) => ({ ...r, Link: (r as any).__hiddenLink || '' }));
+        } catch { return []; }
+      })(),
       "MGFX A-Side": dataNow.MGFXA,
       "MGFX Z-Side": dataNow.MGFXZ,
     } as Record<string, any[]>;
@@ -1661,7 +2007,11 @@ export default function UIDLookup() {
     };
 
     const isLinkSummary = title === 'Link Summary';
-    const isScrollCandidate = title === 'GDCO Tickets' || title === 'Associated UIDs';
+    const isScrollCandidate =
+      title === 'GDCO Tickets' ||
+      title === 'Associated UIDs' ||
+      title === 'MGFX A-Side' ||
+      title === 'MGFX Z-Side';
     const shouldScroll = isScrollCandidate && Array.isArray(rows) && rows.length > 10;
 
     return (
@@ -1734,11 +2084,20 @@ export default function UIDLookup() {
                       const looksLikeLink = ['workflow', 'diff', 'ticketlink', 'url', 'link', 'wirecheck'].some(s => keyLower.includes(s) || headerLower.includes(s));
                       if (looksLikeLink) {
                         const link = val;
+                        const isWirecheckCol = keyLower.includes('wirecheck') || headerLower.includes('wirecheck');
+                        const fromLinkWF = isWirecheckCol && (row as any).__wirecheckFrom === 'linkwfs';
                         return (
                           <td key={j}>
                             {link ? (
                               <>
-                                <button className="open-btn" onClick={() => window.open(link, '_blank')}>Open</button>
+                                <button
+                                  className="open-btn"
+                                  onClick={() => window.open(link, '_blank')}
+                                  style={fromLinkWF ? { background: '#107c10', borderColor: '#0b5a0b', color: '#ffffff' } : undefined}
+                                  title={fromLinkWF ? 'Matched from LinkWFs' : undefined}
+                                >
+                                  Open
+                                </button>
                                 <CopyIconInline onCopy={() => { navigator.clipboard.writeText(String(link)); }} message="Link copied" />
                               </>
                             ) : null}
@@ -1927,6 +2286,21 @@ export default function UIDLookup() {
     // If no link rows, synthesize a single placeholder when KQLData provides devices, so the circle shows Increment capacity
     const hasKdDevices = !!(viewData?.KQLData?.DeviceA || viewData?.KQLData?.DeviceZ);
     const effectiveLinks = linksArr.length ? linksArr : (hasKdDevices ? [{}] : []);
+
+    // Prefer Increment from the AssociatedUID that matches the current UID (this is where Optic/Increment are placed by Logic Apps)
+    try {
+  const assocRows: any[] = Array.isArray(viewData?.AssociatedUIDs) ? viewData.AssociatedUIDs : [];
+  const assoc = assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched ?? '')) || null;
+      const incCandidate = assoc?.Increment ?? assoc?.increment ?? assoc?.OpticalSpeed ?? assoc?.IncrementGb ?? assoc?.OpticalSpeedGb ?? assoc?.Speed ?? null;
+      const incNum = incCandidate != null && incCandidate !== '' && !isNaN(Number(incCandidate)) ? Number(incCandidate) : null;
+      if (incNum != null && effectiveLinks.length) {
+        // Use increment x number of links as requested
+        const total = Math.round(incNum * effectiveLinks.length);
+        const linkCount = effectiveLinks.length;
+        return { main: `${total}G`, sub: `${linkCount} link${linkCount === 1 ? '' : 's'}`, count: linkCount };
+      }
+    } catch {}
+
     return computeCapacity(effectiveLinks, viewData?.KQLData?.Increment, viewData?.KQLData?.DeviceA);
   })();
 
@@ -1965,10 +2339,43 @@ export default function UIDLookup() {
     if (!t) return '';
     return /^sls-/i.test(t) ? `SLS-${t.slice(4)}` : `SLS-${t}`;
   };
-  const solutionIdDisplay = (viewData ? getSolutionIds(viewData) : [])
-    .map(formatSolutionId)
-    .filter(Boolean)
-    .join(', ');
+  const solutionIdDisplay = (() => {
+    try {
+      if (!viewData) return '';
+      // 1) Prefer SolutionId from the AssociatedUID that matches the current UID
+      const assocRows: any[] = Array.isArray(viewData?.AssociatedUIDs) ? viewData.AssociatedUIDs : [];
+      const assoc = lastSearched ? assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched)) : null;
+      const assocSol = assoc?.SolutionId ?? assoc?.SolutionID ?? assoc?.Solution ?? null;
+      if (assocSol) {
+        if (Array.isArray(assocSol)) return assocSol.map((v: any) => formatSolutionId(String(v))).filter(Boolean).join(', ');
+        return formatSolutionId(String(assocSol));
+      }
+
+      // 2) Fallback: prefer SolutionId from Base if present (some payloads use Base for link-summary rows)
+      const base = viewData?.Base ?? viewData?.base ?? null;
+      if (base) {
+        if (Array.isArray(base) && base.length) {
+          const b0 = base[0];
+          const bSol = b0?.SolutionId ?? b0?.SolutionID ?? b0?.Solution ?? null;
+          if (bSol) {
+            if (Array.isArray(bSol)) return bSol.map((v: any) => formatSolutionId(String(v))).filter(Boolean).join(', ');
+            return formatSolutionId(String(bSol));
+          }
+        } else if (typeof base === 'object') {
+          const bSol = base?.SolutionId ?? base?.SolutionID ?? base?.Solution ?? null;
+          if (bSol) {
+            if (Array.isArray(bSol)) return bSol.map((v: any) => formatSolutionId(String(v))).filter(Boolean).join(', ');
+            return formatSolutionId(String(bSol));
+          }
+        }
+      }
+
+      // 3) Last fallback: derive from KQLData / OLSLinks as before
+      return (getSolutionIds(viewData) || []).map(formatSolutionId).filter(Boolean).join(', ');
+    } catch {
+      return '';
+    }
+  })();
 
   // Troubleshooting section component (collapsible, interactive per-link tracking)
   const TroubleshootingSection: React.FC<{ contextKey: string; rows: any[] }> = ({ contextKey, rows }) => {
@@ -2491,22 +2898,22 @@ export default function UIDLookup() {
             <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
               <Text className="section-title">Details</Text>
             </Stack>
-            <table className="data-table details-table">
+            <table className="data-table details-table" style={{ borderTop: 'none' }}>
               <thead>
                 <tr>
-                  <th>SRLGID</th>
-                  <th>SRLG</th>
-                  <th>SolutionID</th>
-                  <th style={{ textAlign: 'center' }}>Status</th>
-                  <th>CIS Workflow</th>
-                  <th>Repository</th>
-                  <th>Fiber Planner</th>
+                  <th style={{ borderBottom: 'none' }}>SRLGID</th>
+                  <th style={{ borderBottom: 'none' }}>SRLG</th>
+                  <th style={{ borderBottom: 'none' }}>SolutionID</th>
+                  <th style={{ textAlign: 'center', borderBottom: 'none' }}>Status</th>
+                  <th style={{ borderBottom: 'none' }}>CIS Workflow</th>
+                  <th style={{ borderBottom: 'none' }}>Repository</th>
+                  <th style={{ borderBottom: 'none' }}>Fiber Planner</th>
                 </tr>
               </thead>
               <tbody>
                 <tr>
                   <td>{getSrlgIdFrom(viewData, lastSearched) || ''}</td>
-                  <td>{getSrlgFrom(viewData) || ''}</td>
+                  <td>{getSrlgFrom(viewData, lastSearched) || ''}</td>
                   <td>{solutionIdDisplay || '—'}</td>
                   <td style={{ textAlign: 'center' }}>
                     {(() => {
@@ -2564,7 +2971,10 @@ export default function UIDLookup() {
                   </td>
                   <td>
                     {(() => {
-                      const jobId = viewData?.KQLData?.JobId;
+                      // Prefer JobId from the AssociatedUID that matches the current searched UID; fallback to KQLData.JobId
+                      const assocRows: any[] = Array.isArray(viewData?.AssociatedUIDs) ? viewData.AssociatedUIDs : [];
+                      const assoc = lastSearched ? assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched)) : null;
+                      const jobId = assoc?.JobId ?? assoc?.JobID ?? viewData?.KQLData?.JobId;
                       const link = jobId ? `https://azcis.trafficmanager.net/Public/NetworkingOptical/JobDetails/${jobId}` : null;
                       return link ? (
                         <>
@@ -2623,34 +3033,34 @@ export default function UIDLookup() {
             </table>
           </div>
 
-          {/* WAN Buttons */}
+          {/* WAN Buttons (formulated links) */}
           <div className="button-header-align-left">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Text className="side-label">A Side:</Text>
-                  {viewData?.AExpansions?.AUrl && (
+                  {(() => { const url = getWanLinkForSide(viewData, 'A'); return url; })() && (
                     <>
                       <button
                         className="sleek-btn wan"
-                        onClick={() => window.open(viewData?.AExpansions?.AUrl, "_blank")}
+                        onClick={() => { const u = getWanLinkForSide(viewData, 'A'); if (u) window.open(u, "_blank"); }}
                       >
                         WAN Checker
                       </button>
-                      <CopyIconInline onCopy={() => { navigator.clipboard.writeText(String(viewData?.AExpansions?.AUrl)); }} message="Link copied" />
+                      <CopyIconInline onCopy={() => { const u = getWanLinkForSide(viewData, 'A'); if (u) navigator.clipboard.writeText(String(u)); }} message="Link copied" />
                     </>
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {viewData?.AExpansions?.AOpticalUrl && (
+                  {(() => { const url = getDeploymentValidatorLinkForSide(viewData, 'A'); return url; })() && (
                     <>
                       <button
                         className="sleek-btn optical"
-                        onClick={() => window.open(viewData?.AExpansions?.AOpticalUrl, "_blank")}
+                        onClick={() => { const u = getDeploymentValidatorLinkForSide(viewData, 'A'); if (u) window.open(u, "_blank"); }}
                       >
                         Deployment Validator
                       </button>
-                      <CopyIconInline onCopy={() => { navigator.clipboard.writeText(String(viewData?.AExpansions?.AOpticalUrl)); }} message="Link copied" />
+                      <CopyIconInline onCopy={() => { const u = getDeploymentValidatorLinkForSide(viewData, 'A'); if (u) navigator.clipboard.writeText(String(u)); }} message="Link copied" />
                     </>
                   )}
                 </div>
@@ -2659,28 +3069,28 @@ export default function UIDLookup() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <Text className="side-label">Z Side</Text>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {viewData?.ZExpansions?.ZUrl && (
+                  {(() => { const url = getWanLinkForSide(viewData, 'Z'); return url; })() && (
                     <>
                       <button
                         className="sleek-btn wan"
-                        onClick={() => window.open(viewData?.ZExpansions?.ZUrl, "_blank")}
+                        onClick={() => { const u = getWanLinkForSide(viewData, 'Z'); if (u) window.open(u, "_blank"); }}
                       >
                         WAN Checker
                       </button>
-                      <CopyIconInline onCopy={() => { navigator.clipboard.writeText(String(viewData?.ZExpansions?.ZUrl)); }} message="Link copied" />
+                      <CopyIconInline onCopy={() => { const u = getWanLinkForSide(viewData, 'Z'); if (u) navigator.clipboard.writeText(String(u)); }} message="Link copied" />
                     </>
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {viewData?.ZExpansions?.ZOpticalUrl && (
+                  {(() => { const url = getDeploymentValidatorLinkForSide(viewData, 'Z'); return url; })() && (
                     <>
                       <button
                         className="sleek-btn optical"
-                        onClick={() => window.open(viewData?.ZExpansions?.ZOpticalUrl, "_blank")}
+                        onClick={() => { const u = getDeploymentValidatorLinkForSide(viewData, 'Z'); if (u) window.open(u, "_blank"); }}
                       >
                         Deployment Validator
                       </button>
-                      <CopyIconInline onCopy={() => { navigator.clipboard.writeText(String(viewData?.ZExpansions?.ZOpticalUrl)); }} message="Link copied" />
+                      <CopyIconInline onCopy={() => { const u = getDeploymentValidatorLinkForSide(viewData, 'Z'); if (u) navigator.clipboard.writeText(String(u)); }} message="Link copied" />
                     </>
                   )}
                 </div>
@@ -2694,25 +3104,33 @@ export default function UIDLookup() {
             headers={[
               "A Device",
               "A Port",
-              "Admin",
-              "State",
+              "A Admin",
+              "A Oper",
               "A Optical Device",
               "A Optical Port",
               "Z Device",
               "Z Port",
-              "Admin",
-              "State",
+              "Z Admin",
+              "Z Oper",
               "Z Optical Device",
               "Z Optical Port",
+              "Speed",
               "Wirecheck",
             ]}
             rows={(() => {
               const links: any[] = Array.isArray(viewData.OLSLinks) ? viewData.OLSLinks : [];
-              // If there are no link rows, synthesize a single fallback row from KQLData
+              // If there are no link rows, synthesize a single fallback row from AssociatedUIDs (preferred) or KQLData
               if (!links.length) {
+                const assocRows: any[] = Array.isArray((viewData as any)?.AssociatedUIDs) ? (viewData as any).AssociatedUIDs : [];
+                const assocMatch = lastSearched
+                  ? assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched))
+                  : null;
+                const assoc = assocMatch || assocRows[0] || null;
+                const aDevAssoc = assoc ? String(assoc['A Device'] ?? assoc['Device A'] ?? assoc.ADevice ?? assoc.DeviceA ?? '').trim() : '';
+                const zDevAssoc = assoc ? String(assoc['Z Device'] ?? assoc['Device Z'] ?? assoc.ZDevice ?? assoc.DeviceZ ?? '').trim() : '';
                 const kd = (viewData as any)?.KQLData || {};
-                const aDev = String(kd?.DeviceA ?? '').trim();
-                const zDev = String(kd?.DeviceZ ?? '').trim();
+                const aDev = aDevAssoc || String(kd?.DeviceA ?? '').trim();
+                const zDev = zDevAssoc || String(kd?.DeviceZ ?? '').trim();
                 // Do NOT use LagA/LagZ for ports; ports and LAGs are not the same. Leave ports blank.
                 const aPort = '';
                 const zPort = '';
@@ -2739,51 +3157,158 @@ export default function UIDLookup() {
                 return [];
               }
 
+              const utilRows: any[] = Array.isArray(viewData?.Utilization) ? viewData.Utilization : (Array.isArray(viewData?.utilization) ? viewData.utilization : []);
+              // Parse WorkflowsString (Logic App may provide a multiline string with one URL per link row)
+              const rawWorkflows: any = viewData?.WorkflowsString ?? viewData?.WorkflowsStringRaw ?? viewData?.Workflows ?? viewData?.WorkflowUrls ?? null;
+              let workflowsArr: string[] = [];
+              try {
+                if (typeof rawWorkflows === 'string') {
+                  workflowsArr = rawWorkflows.split(/\r?\n/).map((s: string) => String(s || '').trim()).filter((s: string) => !!s);
+                } else if (Array.isArray(rawWorkflows)) {
+                  workflowsArr = rawWorkflows.map((s: any) => String(s || '').trim()).filter((s: string) => !!s);
+                }
+              } catch {
+                workflowsArr = [];
+              }
+              // Prepare AssociatedUID device fallback for per-row mapping as well
+              const assocRows: any[] = Array.isArray((viewData as any)?.AssociatedUIDs) ? (viewData as any).AssociatedUIDs : [];
+              const assocMatch = lastSearched
+                ? assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched))
+                : null;
+              const assoc = assocMatch || assocRows[0] || null;
+              const aDevAssoc = assoc ? String(assoc['A Device'] ?? assoc['Device A'] ?? assoc.ADevice ?? assoc.DeviceA ?? '').trim() : '';
+              const zDevAssoc = assoc ? String(assoc['Z Device'] ?? assoc['Device Z'] ?? assoc.ZDevice ?? assoc.DeviceZ ?? '').trim() : '';
+
               return links.map((r: any) => {
-              // Map directly from canonical keys you provided, with safe fallbacks
-              const aDevRaw = r["ADevice"] ?? r["A Device"] ?? r["A_Device"] ?? r["DeviceA"] ?? r["Device A"] ?? "";
-              const aPort = r["APort"] ?? r["A Port"] ?? r["A_Port"] ?? r["PortA"] ?? r["Port A"] ?? "";
-              const zDevRaw = r["ZDevice"] ?? r["Z Device"] ?? r["Z_Device"] ?? r["DeviceZ"] ?? r["Device Z"] ?? "";
-              const zPort = r["ZPort"] ?? r["Z Port"] ?? r["Z_Port"] ?? r["PortZ"] ?? r["Port Z"] ?? "";
-              const aOptDev = r["AOpticalDevice"] ?? r["A Optical Device"] ?? r["A_Optical_Device"] ?? r["A OpticalDevice"] ?? r["A Optical"] ?? "";
-              const aOptPort = r["AOpticalPort"] ?? r["A Optical Port"] ?? r["A_Optical_Port"] ?? r["A OpticalPort"] ?? "";
-              const zOptDev = r["ZOpticalDevice"] ?? r["Z Optical Device"] ?? r["Z_Optical_Device"] ?? r["Z OpticalDevice"] ?? r["Z Optical"] ?? "";
-              const zOptPort = r["ZOpticalPort"] ?? r["Z Optical Port"] ?? r["Z_Optical_Port"] ?? r["Z OpticalPort"] ?? "";
-              const workflow = r["Workflow"] ?? r["workflow"] ?? r["Link"] ?? r["link"] ?? r["URL"] ?? r["Url"] ?? "";
+                // Map directly from canonical keys you provided, with safe fallbacks
+                const aDevRaw = r["ADevice"] ?? r["A Device"] ?? r["A_Device"] ?? r["DeviceA"] ?? r["Device A"] ?? "";
+                const aPort = r["APort"] ?? r["A Port"] ?? r["A_Port"] ?? r["PortA"] ?? r["Port A"] ?? "";
+                const zDevRaw = r["ZDevice"] ?? r["Z Device"] ?? r["Z_Device"] ?? r["DeviceZ"] ?? r["Device Z"] ?? "";
+                const zPort = r["ZPort"] ?? r["Z Port"] ?? r["Z_Port"] ?? r["PortZ"] ?? r["Port Z"] ?? "";
+                const aOptDev = r["AOpticalDevice"] ?? r["A Optical Device"] ?? r["A_Optical_Device"] ?? r["A OpticalDevice"] ?? r["A Optical"] ?? "";
+                const aOptPort = r["AOpticalPort"] ?? r["A Optical Port"] ?? r["A_Optical_Port"] ?? r["A OpticalPort"] ?? "";
+                const zOptDev = r["ZOpticalDevice"] ?? r["Z Optical Device"] ?? r["Z_Optical_Device"] ?? r["Z OpticalDevice"] ?? r["Z Optical"] ?? "";
+                const zOptPort = r["ZOpticalPort"] ?? r["Z Optical Port"] ?? r["Z_Optical_Port"] ?? r["Z OpticalPort"] ?? "";
+                // Prefer a per-payload ordered WorkflowsString if present (first URL -> first row, etc.)
+                const idx = Array.isArray(links) ? links.indexOf(r) : 0;
+                const wfFromArr = (workflowsArr && workflowsArr.length && typeof idx === 'number') ? (workflowsArr[idx] ?? null) : null;
+                // Prefer LinkWFs match (case-insensitive A/Z device+port) when available
+                const linkWFs: any[] = Array.isArray((viewData as any)?.LinkWFs) ? (viewData as any).LinkWFs : [];
+                const makeKey = (ad: string, ap: string, zd: string, zp: string) => `${(ad||'').toLowerCase().replace(/\s+/g,'').trim()}|${(ap||'').toLowerCase().replace(/\s+/g,'').trim()}|${(zd||'').toLowerCase().replace(/\s+/g,'').trim()}|${(zp||'').toLowerCase().replace(/\s+/g,'').trim()}`;
+                const mapWF = (() => {
+                  const m = new Map<string, string>();
+                  for (const it of linkWFs) {
+                    const ad = String(it?.ADevice ?? it?.Adevice ?? it?.adevice ?? '').trim();
+                    const ap = String(it?.APort ?? it?.Aport ?? it?.aport ?? '').trim();
+                    const zd = String(it?.ZDevice ?? it?.Zdevice ?? it?.zdevice ?? '').trim();
+                    const zp = String(it?.ZPort ?? it?.Zport ?? it?.zport ?? '').trim();
+                    const url = String(it?.Workflow ?? it?.workflow ?? it?.Link ?? it?.URL ?? '').trim();
+                    if (!ad || !ap || !zd || !zp || !url) continue;
+                    const k1 = makeKey(ad, ap, zd, zp);
+                    const k2 = makeKey(zd, zp, ad, ap); // reverse direction
+                    m.set(k1, url);
+                    if (!m.has(k2)) m.set(k2, url);
+                  }
+                  return m;
+                })();
 
-              // Fallback to KQLData DeviceA/DeviceZ only if per-row device fields are blank
-              const aDev = (String(aDevRaw ?? '').trim() || String(viewData?.KQLData?.DeviceA ?? '').trim());
-              const zDev = (String(zDevRaw ?? '').trim() || String(viewData?.KQLData?.DeviceZ ?? '').trim());
+                const aDevNorm = String(aDevRaw ?? '').trim();
+                const zDevNorm = String(zDevRaw ?? '').trim();
+                const k = makeKey(aDevNorm, String(aPort||''), zDevNorm, String(zPort||''));
+                const wfMatched = mapWF.get(k) || null;
 
-              // Admin/Oper status for A/Z sides (support multiple possible key names; fallback to global AdminStatus/OperStatus)
-              const aAdmin = r["AAdminStatus"] ?? r["AdminStatusA"] ?? r["AdminStatus_A"] ?? r["A_AdminStatus"] ?? r["A AdminStatus"] ?? r["AdminStatus"] ?? '';
-              const aOper = r["AOperStatus"] ?? r["OperStatusA"] ?? r["OperStatus_A"] ?? r["A_OperStatus"] ?? r["A OperStatus"] ?? r["OperStatus"] ?? '';
-              const zAdmin = r["ZAdminStatus"] ?? r["AdminStatusZ"] ?? r["AdminStatus_Z"] ?? r["Z_AdminStatus"] ?? r["Z AdminStatus"] ?? r["AdminStatus"] ?? '';
-              const zOper = r["ZOperStatus"] ?? r["OperStatusZ"] ?? r["OperStatus_Z"] ?? r["Z_OperStatus"] ?? r["Z OperStatus"] ?? r["OperStatus"] ?? '';
+                const workflow = (wfMatched ? String(wfMatched).trim() : '') || (wfFromArr ? String(wfFromArr).trim() : '') || (r["Workflow"] ?? r["workflow"] ?? r["Link"] ?? r["link"] ?? r["URL"] ?? r["Url"] ?? "");
 
-              // Return object with keys matching header order; no swaps
-              return {
-                "A Device": aDev,
-                "A Port": aPort,
-                "A Admin": aAdmin,
-                "A Oper": aOper,
-                "A Optical Device": aOptDev,
-                "A Optical Port": aOptPort,
-                "Z Device": zDev,
-                "Z Port": zPort,
-                "Z Admin": zAdmin,
-                "Z Oper": zOper,
-                "Z Optical Device": zOptDev,
-                "Z Optical Port": zOptPort,
-                "Wirecheck": workflow,
-              };
+                // Fallback to AssociatedUIDs DeviceA/DeviceZ, then KQLData DeviceA/DeviceZ if per-row device fields are blank
+                const aDev = (String(aDevRaw ?? '').trim() || aDevAssoc || String(viewData?.KQLData?.DeviceA ?? '').trim());
+                const zDev = (String(zDevRaw ?? '').trim() || zDevAssoc || String(viewData?.KQLData?.DeviceZ ?? '').trim());
+
+                // Admin/Oper status for A/Z sides (support multiple possible key names; fallback to global AdminStatus/OperStatus)
+                let aAdmin = r["AAdminStatus"] ?? r["AdminStatusA"] ?? r["AdminStatus_A"] ?? r["A_AdminStatus"] ?? r["A AdminStatus"] ?? r["AdminStatus"] ?? '';
+                let aOper = r["AOperStatus"] ?? r["OperStatusA"] ?? r["OperStatus_A"] ?? r["A_OperStatus"] ?? r["A OperStatus"] ?? r["OperStatus"] ?? '';
+                let zAdmin = r["ZAdminStatus"] ?? r["AdminStatusZ"] ?? r["AdminStatus_Z"] ?? r["Z_AdminStatus"] ?? r["Z AdminStatus"] ?? r["AdminStatus"] ?? '';
+                let zOper = r["ZOperStatus"] ?? r["OperStatusZ"] ?? r["OperStatus_Z"] ?? r["Z_OperStatus"] ?? r["Z OperStatus"] ?? r["OperStatus"] ?? '';
+
+                // Try to find a matching utilization row (match both directions and also partial matches)
+                const aDevL = String(aDev || '').toLowerCase();
+                const aPortL = String(aPort || '').toLowerCase();
+                const zDevL = String(zDev || '').toLowerCase();
+                const zPortL = String(zPort || '').toLowerCase();
+                const utilMatch = utilRows.find((u: any) => {
+                  const sd = String(u.StartDevice ?? u.startDevice ?? '').toLowerCase();
+                  const sp = String(u.StartPort ?? u.startPort ?? '').toLowerCase();
+                  const ed = String(u.EndDevice ?? u.endDevice ?? '').toLowerCase();
+                  const ep = String(u.EndPort ?? u.endPort ?? '').toLowerCase();
+                  if (sd === aDevL && sp === aPortL && ed === zDevL && ep === zPortL) return true;
+                  if (sd === zDevL && sp === zPortL && ed === aDevL && ep === aPortL) return true;
+                  if (sd === aDevL && sp === aPortL) return true;
+                  if (ed === zDevL && ep === zPortL) return true;
+                  return false;
+                }) || null;
+
+                // If we found utilization data, merge statuses and add speed (store as opticalGb)
+                let opticalGb: number | null = null;
+                if (utilMatch) {
+                  const opticalSpeedRaw = utilMatch.OpticalSpeed ?? utilMatch.opticalSpeed ?? utilMatch.Optical_Speed ?? null;
+                  if (opticalSpeedRaw != null && opticalSpeedRaw !== '' && !isNaN(Number(opticalSpeedRaw))) {
+                    const n = Number(opticalSpeedRaw);
+                    opticalGb = n > 1000 ? Math.round(n / 1000) : Math.round(n);
+                  }
+                  // prefer utilization-provided admin/oper statuses if present
+                  aAdmin = utilMatch.AdminStatus ?? utilMatch.Admin ?? aAdmin;
+                  aOper = utilMatch.OperStatus ?? utilMatch.Oper ?? aOper;
+                  zAdmin = utilMatch.AdminStatus ?? utilMatch.Admin ?? zAdmin;
+                  zOper = utilMatch.OperStatus ?? utilMatch.Oper ?? zOper;
+                }
+
+                const defaultInc = viewData?.KQLData?.Increment ?? null;
+                const speedDisplay = opticalGb != null ? `${opticalGb}G` : (defaultInc ? `${defaultInc}G` : '');
+
+                // Return only the visible Link Summary columns (keep Speed).
+                // Per-row SRLG/router-optic details remain available on the original
+                // row objects (e.g. AOpticalDevice/AOpticalPort/etc) so they can be
+                // used in the Details section and AI summary panel.
+                const outRow: any = {
+                  "A Device": aDev,
+                  "A Port": aPort,
+                  "A Admin": aAdmin,
+                  "A Oper": aOper,
+                  "A Optical Device": aOptDev,
+                  "A Optical Port": aOptPort,
+                  "Z Device": zDev,
+                  "Z Port": zPort,
+                  "Z Admin": zAdmin,
+                  "Z Oper": zOper,
+                  "Z Optical Device": zOptDev,
+                  "Z Optical Port": zOptPort,
+                  "Speed": speedDisplay,
+                  "Wirecheck": workflow,
+                };
+                if (wfMatched) {
+                  try { Object.defineProperty(outRow, '__wirecheckFrom', { value: 'linkwfs', enumerable: false }); } catch { (outRow as any).__wirecheckFrom = 'linkwfs'; }
+                }
+                return outRow;
               });
             })()}
             headerRight={(() => {
+              // Display a fixed "Latest Refresh" ISO timestamp converted to the user's local format,
+              // and also keep any per-payload TIMESTAMP (if present) to the right of it.
+              const latestIso = '2025-11-11T10:00:00Z';
+              const latestLocal = formatTimestamp(latestIso);
               const ts = formatTimestamp(getTimestamp(viewData));
-              return ts ? (
-                <span style={{ color: '#a6b7c6', fontSize: 12 }}>Last refresh: <b style={{ color: '#d0e7ff' }}>{ts}</b></span>
-              ) : null;
+              return (
+                <>
+                  {latestLocal ? (
+                    <span style={{ color: '#a6b7c6', fontSize: 12, marginRight: 8 }} title={latestIso}>
+                      Latest Refresh: <b style={{ color: '#d0e7ff' }}>{latestLocal}</b>
+                    </span>
+                  ) : null}
+                  {ts ? (
+                    // per-payload timestamp (kept smaller / secondary)
+                    <span style={{ color: '#a6b7c6', fontSize: 12 }} title={ts}><b style={{ color: '#d0e7ff' }}>{ts}</b></span>
+                  ) : null}
+                </>
+              );
             })()}
           />
 
@@ -2813,7 +3338,7 @@ export default function UIDLookup() {
                   const zDev = r['Z Device'] ?? r['Device Z'] ?? r?.ZDevice ?? r?.DeviceZ ?? '';
                   const siteA = r['Site A'] ?? r?.ASite ?? r?.SiteA ?? r?.Site ?? '';
                   const siteZ = r['Site Z'] ?? r?.ZSite ?? r?.SiteZ ?? '';
-                  const wf = niceWorkflowStatus(wfMap?.[String(uid)]) || '';
+                  const wf = niceWorkflowStatus(r?.WorkflowStatus ?? r?.Workflow ?? wfMap?.[String(uid)]) || '';
                   return {
                     UID: uid,
                     SrlgId: srlg,
@@ -2854,37 +3379,11 @@ export default function UIDLookup() {
             <Table
               title="GDCO Tickets"
               headers={["Ticket Id", "DC Code", "Title", "State", "Assigned To"]}
-              rows={(() => {
-                const rows = Array.isArray(viewData.GDCOTickets) ? viewData.GDCOTickets : [];
-                // Remove any rows that are effectively empty (no visible fields populated)
-                const nonEmpty = rows.filter((r: any) => {
-                  if (!r || typeof r !== 'object') return false;
-                  const visibleFields = [
-                    'Ticket Id','TicketId','TicketID',
-                    'DC Code','DCCode','Datacenter','DC',
-                    'Title',
-                    'State','Status',
-                    'Assigned To','AssignedTo','Owner'
-                  ];
-                  return visibleFields.some((k) => {
-                    const v = (r as any)[k];
-                    return v != null && String(v).trim() !== '';
-                  });
-                });
-                return nonEmpty.map((r: any) => {
-                  const { Link, link, URL, Url, TicketLink, ticketLink, ...rest } = r || {};
-                  const l = r?.Link || r?.link || r?.URL || r?.Url || r?.TicketLink || r?.ticketLink || null;
-                  const obj: any = { ...rest };
-                  if (l) {
-                    try { Object.defineProperty(obj, '__hiddenLink', { value: l, enumerable: false }); } catch {}
-                  }
-                  return obj;
-                });
-              })()}
+              rows={getGdcoRows(viewData || {})}
             />
           </Stack>
 
-          <Stack horizontal tokens={{ childrenGap: 20 }} styles={{ root: { width: '100%' } }}>
+          <Stack horizontal tokens={{ childrenGap: 20 }} styles={{ root: { width: '100%' } }} className="equal-tables-row">
             <Table
               title="MGFX A-Side"
               headers={[

@@ -4,6 +4,7 @@
     "FUNCTIONS_WORKER_RUNTIME": "node",
     "TABLES_ACCOUNT_URL": "https://optical360.table.core.windows.net",
     "TABLES_TABLE_NAME": "Projects",
-    "TABLES_TABLE_NAME_VSO": "VsoCalendar"
+    "TABLES_TABLE_NAME_VSO": "VsoCalendar",
+    "TABLES_TABLE_NAME_TROUBLESHOOTING": "Troubleshooting"
   }
 }

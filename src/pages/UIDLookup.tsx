@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { saveToStorage } from "../api/saveToStorage";
-import { getNotesForUid, deleteNote as deleteNoteApi, NoteEntity } from "../api/items";
+import { getNotesForUid, getTroubleshootingForUid, deleteNote as deleteNoteApi, NoteEntity } from "../api/items";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Stack,
@@ -2429,7 +2429,7 @@ export default function UIDLookup() {
   const TroubleshootingSection: React.FC<{ contextKey: string; rows: any[] }> = ({ contextKey, rows }) => {
     const STORE_KEY = `${contextKey}:troubles`;
     const COLLAPSE_KEY = `${contextKey}:troublesCollapsed`;
-  type TItem = { note?: string; notes?: Array<{ id: string; text: string }>; color?: string; done?: boolean };
+  type TItem = { note?: string; notes?: Array<{ id: string; text: string }>; color?: string; done?: boolean; rowKey?: string; savedAt?: string };
     const [map, setMap] = useState<Record<string, TItem>>(() => {
       try { const raw = localStorage.getItem(STORE_KEY); const obj = raw ? JSON.parse(raw) : {}; return obj && typeof obj === 'object' ? obj : {}; } catch { return {}; }
     });
@@ -2438,6 +2438,101 @@ export default function UIDLookup() {
     });
   useEffect(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify(map)); } catch {} }, [map, STORE_KEY]);
   useEffect(() => { try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch {} }, [collapsed, COLLAPSE_KEY]);
+
+    // If contextKey represents a UID (contextKey === `uid:<UID>`), persist/load to server Table Storage
+    const uidFromContext = (() => {
+      try {
+        if (!contextKey || !contextKey.startsWith('uid:')) return null;
+        return contextKey.split(':')[1] || null;
+      } catch { return null; }
+    })();
+
+    // Load remote troubleshooting entries for this UID and merge into the local map
+    useEffect(() => {
+      if (!uidFromContext) return;
+      let cancelled = false;
+      (async () => {
+        try {
+          const items = await getTroubleshootingForUid(uidFromContext, NOTES_ENDPOINT);
+          if (cancelled) return;
+          // Map by LinkKey (saved by client when persisting); if no LinkKey, skip
+          const byKey: Record<string, TItem & { rowKey?: string; savedAt?: string }> = {};
+          for (const it of items) {
+            try {
+              const linkKey = (it.LinkKey || it.linkKey || it.linkkey || it?.LinkKey) as string | undefined;
+              const rk = (it.rowKey || it.RowKey || it.RowKey || it.rowKey) as string | undefined;
+              const ts = (it.savedAt || it.timestamp || it.Timestamp || it.Timestamp) as string | undefined;
+              if (!linkKey) continue;
+              // Description was stored as JSON by the client; try to parse
+              let parsed: any = {};
+              try { parsed = typeof it.description === 'string' ? JSON.parse(it.description) : (it.description || {}); } catch { parsed = { note: it.description || '' }; }
+              const notes = Array.isArray(parsed?.notes) ? parsed.notes : (parsed?.note ? [{ id: `legacy-${Date.now()}`, text: String(parsed.note) }] : []);
+              const color = parsed?.color || undefined;
+              const done = !!parsed?.done;
+              byKey[linkKey] = { notes, color, done, rowKey: rk, savedAt: ts } as any;
+            } catch (e) { /* ignore per-item parse errors */ }
+          }
+          // Merge: server values win for keys they have; keep local-only keys as-is
+          setMap(prev => {
+            const next = { ...prev };
+            for (const k of Object.keys(byKey)) {
+              next[k] = { ...(next[k] || {}), ...(byKey[k] as any) };
+            }
+            return next;
+          });
+        } catch (e) {
+          // ignore errors; keep local map
+          // eslint-disable-next-line no-console
+          console.warn('[Troubleshooting] Failed to fetch remote entries', e);
+        }
+      })();
+      return () => { cancelled = true; };
+    }, [uidFromContext]);
+
+    // Persist an item to server when running under a UID context
+    const persistToServer = async (id: string, item: TItem) => {
+      if (!uidFromContext) return;
+      try {
+        const payload = {
+          notes: Array.isArray(item.notes) ? item.notes : (item.note ? [{ id: `legacy-${Date.now()}`, text: String(item.note) }] : []),
+          color: item.color || undefined,
+          done: !!item.done,
+        } as any;
+        const alias = getAlias(getEmail());
+        const resText = await saveToStorage({
+          endpoint: NOTES_ENDPOINT,
+          category: 'Troubleshooting',
+          uid: uidFromContext,
+          title: 'Troubleshooting',
+          description: JSON.stringify(payload),
+          owner: alias || '',
+          rowKey: item.rowKey,
+          // Explicitly request the Troubleshooting table on the backend by
+          // providing multiple commonly-recognised extra keys. Some deployed
+          // Function implementations map category->table but others honour an
+          // explicit table name in the payload. Providing these extras makes
+          // the intent clear and avoids writing into the VsoCalendar table.
+          extras: {
+            LinkKey: id,
+            TableName: 'Troubleshooting',
+            tableName: 'Troubleshooting',
+            targetTable: 'Troubleshooting',
+          },
+        });
+        try {
+          const parsed = JSON.parse(resText);
+          const entity = parsed?.entity || parsed?.Entity;
+          if (entity) {
+            const rk = entity.RowKey || entity.rowKey || undefined;
+            const ts = entity.Timestamp || entity.timestamp || undefined;
+            setMap(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...(payload || {}), rowKey: rk, savedAt: ts } }));
+          }
+        } catch { /* ignore parse errors */ }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[Troubleshooting] Failed to persist to server', e);
+      }
+    };
 
     const normalize = (r: any) => {
       const aDev = r["ADevice"] ?? r["A Device"] ?? r["DeviceA"] ?? r["Device A"] ?? '';
@@ -2455,9 +2550,30 @@ export default function UIDLookup() {
       return `${n.aDev}|${n.aPort}|${n.zDev}|${n.zPort}`;
     };
     const setField = (id: string, patch: Partial<TItem>) => {
-      setMap(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
+      setMap(prev => {
+        const merged = { ...(prev[id] || {}), ...patch };
+        // Persist to server when operating in a UID context
+        if (uidFromContext) {
+          void persistToServer(id, merged);
+        }
+        return { ...prev, [id]: merged };
+      });
     };
+
     const clearRow = (id: string) => {
+      // If this row was saved server-side, attempt server delete
+      const rk = map[id]?.rowKey;
+      if (uidFromContext && rk) {
+        // best-effort delete
+        void (async () => {
+            try {
+            await deleteNoteApi(`UID_${uidFromContext}`, rk, NOTES_ENDPOINT, 'Troubleshooting');
+          } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('[Troubleshooting] Failed to delete remote row', e);
+          }
+        })();
+      }
       setMap(prev => { const next = { ...prev }; delete next[id]; return next; });
     };
 

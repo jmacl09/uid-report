@@ -86,6 +86,28 @@ export async function getCalendarEntries(uid: string, endpoint?: string): Promis
 }
 
 /**
+ * Fetch troubleshooting entries for a given UID.
+ * Mirrors the same HttpTrigger1 contract as notes/calendar and requests category=Troubleshooting.
+ */
+export async function getTroubleshootingForUid(uid: string, endpoint?: string): Promise<NoteEntity[]> {
+  const rawEndpoint = endpoint || 'HttpTrigger1';
+  const isAbsolute = /^https?:\/\//i.test(rawEndpoint);
+  const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
+  const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Troubleshooting')}`;
+
+  const res = await fetch(url, { method: 'GET' });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`getTroubleshootingForUid failed ${res.status}: ${text}`);
+  try {
+    const data = JSON.parse(text);
+    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Save a new note for a UID.
  * This uses the Azure Function routed as /api/projects (POST).
  */
@@ -135,7 +157,8 @@ export async function saveNote(
 export async function deleteNote(
   partitionKey: string,
   rowKey: string,
-  endpoint?: string
+  endpoint?: string,
+  tableName?: string
 ): Promise<void> {
   const rawEndpoint = endpoint || 'HttpTrigger1';
   const isAbsolute = /^https?:\/\//i.test(rawEndpoint);
@@ -145,6 +168,11 @@ export async function deleteNote(
     partitionKey,
     rowKey,
   };
+  if (tableName) {
+    body.tableName = tableName;
+    body.TableName = tableName;
+    body.targetTable = tableName;
+  }
   const uidMatch = /^UID_(.+)$/i.exec(partitionKey || '');
   if (uidMatch && uidMatch[1]) body.uid = uidMatch[1];
 

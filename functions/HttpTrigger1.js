@@ -76,15 +76,31 @@ app.http('HttpTrigger1', {
                     };
                 }
 
-                // Choose table based on category. Calendar entries go to VsoCalendar
-                const tableName = (function(category) {
+                // Determine target table. Prefer an explicit table name provided
+                // by the caller (tableName/TableName/targetTable). Next, map known
+                // categories (Calendar -> VsoCalendar, Troubleshooting -> Troubleshooting table env var).
+                const chooseTable = (opts) => {
                     try {
-                        if (category && String(category).toLowerCase() === 'calendar') {
-                            return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
+                        if (opts && typeof opts === 'object') {
+                            const t = opts.tableName || opts.TableName || opts.targetTable;
+                            if (t) return String(t);
+                            const cat = opts.category || opts.Category;
+                            if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
+                            if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
                         }
-                    } catch {}
+                        // Fallback: if a plain category string was provided
+                        if (typeof opts === 'string') {
+                            const cat = opts;
+                            if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
+                            if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                        }
+                    } catch (e) {
+                        // ignore and fallback below
+                    }
                     return process.env.TABLES_TABLE_NAME || 'Projects';
-                })(category);
+                };
+
+                const tableName = chooseTable({ category });
                 const { client, ensureTable, auth } = getTableClient(tableName);
                 // Log which auth path and table is being used for easier debugging
                 context.log && context.log(`[Table] GET -> table=${tableName} auth=${auth} accountUrl=${process.env.TABLES_ACCOUNT_URL ? process.env.TABLES_ACCOUNT_URL : '(using connection string)'} `);
@@ -140,14 +156,25 @@ app.http('HttpTrigger1', {
                 }
 
                 // DELETE: use special VSO table for Calendar deletes when requested
-                const tableName = (function(category) {
+                const chooseTable = (opts) => {
                     try {
-                        if (category && String(category).toLowerCase() === 'calendar') {
-                            return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
+                        if (opts && typeof opts === 'object') {
+                            const t = opts.tableName || opts.TableName || opts.targetTable;
+                            if (t) return String(t);
+                            const cat = opts.category || opts.Category;
+                            if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
+                            if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
                         }
-                    } catch {}
+                        if (typeof opts === 'string') {
+                            const cat = opts;
+                            if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
+                            if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                        }
+                    } catch (e) {}
                     return process.env.TABLES_TABLE_NAME || 'Projects';
-                })(payload.category || payload.Category || url.searchParams.get('category'));
+                };
+
+                const tableName = chooseTable(payload || payload.category || payload.Category || url.searchParams.get('category'));
                 const { client, ensureTable, auth } = getTableClient(tableName);
                 context.log && context.log(`[Table] DELETE -> table=${tableName} auth=${auth} accountUrl=${process.env.TABLES_ACCOUNT_URL ? process.env.TABLES_ACCOUNT_URL : '(using connection string)'} `);
                 await ensureTable();
@@ -191,14 +218,25 @@ app.http('HttpTrigger1', {
 
         try {
             // POST (save): route Calendar category to the VSO-specific table name
-            const tableName = (function(category) {
+            const chooseTable = (opts) => {
                 try {
-                    if (category && String(category).toLowerCase() === 'calendar') {
-                        return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
+                    if (opts && typeof opts === 'object') {
+                        const t = opts.tableName || opts.TableName || opts.targetTable;
+                        if (t) return String(t);
+                        const cat = opts.category || opts.Category;
+                        if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
+                        if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
                     }
-                } catch {}
+                    if (typeof opts === 'string') {
+                        const cat = opts;
+                        if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
+                        if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                    }
+                } catch (e) {}
                 return process.env.TABLES_TABLE_NAME || 'Projects';
-            })(category);
+            };
+
+            const tableName = chooseTable(payload || category);
             const { client, ensureTable, auth } = getTableClient(tableName);
             context.log && context.log(`[Table] POST -> table=${tableName} auth=${auth} accountUrl=${process.env.TABLES_ACCOUNT_URL ? process.env.TABLES_ACCOUNT_URL : '(using connection string)'} `);
             await ensureTable();

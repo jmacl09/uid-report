@@ -87,17 +87,20 @@ app.http('HttpTrigger1', {
                             const cat = opts.category || opts.Category;
                             if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
                             if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                            if (cat && String(cat).toLowerCase() === 'status') return process.env.TABLES_TABLE_NAME_STATUS || 'UIDStatus';
+                            if (cat && String(cat).toLowerCase() === 'projects') return process.env.TABLES_TABLE || process.env.TABLES_TABLE_NAME || 'Projects';
                         }
                         // Fallback: if a plain category string was provided
                         if (typeof opts === 'string') {
                             const cat = opts;
                             if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
                             if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                            if (cat && String(cat).toLowerCase() === 'status') return process.env.TABLES_TABLE_NAME_STATUS || 'UIDStatus';
                         }
                     } catch (e) {
                         // ignore and fallback below
                     }
-                    return process.env.TABLES_TABLE_NAME || 'Projects';
+                    return process.env.TABLES_TABLE || process.env.TABLES_TABLE_NAME || 'Projects';
                 };
 
                 const tableName = chooseTable({ category });
@@ -164,6 +167,8 @@ app.http('HttpTrigger1', {
                             const cat = opts.category || opts.Category;
                             if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
                             if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                            if (cat && String(cat).toLowerCase() === 'projects') return process.env.TABLES_TABLE || process.env.TABLES_TABLE_NAME || 'Projects';
+                            if (cat && String(cat).toLowerCase() === 'status') return process.env.TABLES_TABLE_NAME_STATUS || 'UIDStatus';
                         }
                         if (typeof opts === 'string') {
                             const cat = opts;
@@ -171,7 +176,7 @@ app.http('HttpTrigger1', {
                             if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
                         }
                     } catch (e) {}
-                    return process.env.TABLES_TABLE_NAME || 'Projects';
+                    return process.env.TABLES_TABLE || process.env.TABLES_TABLE_NAME || 'Projects';
                 };
 
                 const tableName = chooseTable(payload || payload.category || payload.Category || url.searchParams.get('category'));
@@ -226,14 +231,17 @@ app.http('HttpTrigger1', {
                         const cat = opts.category || opts.Category;
                         if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
                         if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                        if (cat && String(cat).toLowerCase() === 'projects') return process.env.TABLES_TABLE || process.env.TABLES_TABLE_NAME || 'Projects';
+                        if (cat && String(cat).toLowerCase() === 'status') return process.env.TABLES_TABLE_NAME_STATUS || 'UIDStatus';
                     }
                     if (typeof opts === 'string') {
                         const cat = opts;
                         if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
                         if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                        if (cat && String(cat).toLowerCase() === 'status') return process.env.TABLES_TABLE_NAME_STATUS || 'UIDStatus';
                     }
                 } catch (e) {}
-                return process.env.TABLES_TABLE_NAME || 'Projects';
+                return process.env.TABLES_TABLE || process.env.TABLES_TABLE_NAME || 'Projects';
             };
 
             const tableName = chooseTable(payload || category);

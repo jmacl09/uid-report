@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { saveToStorage } from "../api/saveToStorage";
-import { getNotesForUid, getTroubleshootingForUid, deleteNote as deleteNoteApi, NoteEntity } from "../api/items";
+import { getNotesForUid, getTroubleshootingForUid, getStatusForUid, getProjectsForUid, deleteNote as deleteNoteApi, NoteEntity } from "../api/items";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Stack,
@@ -359,6 +359,123 @@ export default function UIDLookup() {
         setNotes(mapped);
       } catch (err) {
         setNotes([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [lastSearched]);
+
+  // Load troubleshooting entries when the current UID changes and keep at top-level
+  const [troubleshootingItems, setTroubleshootingItems] = useState<NoteEntity[] | null>(null);
+  useEffect(() => {
+    const keyUid = lastSearched || '';
+    if (!keyUid) { setTroubleshootingItems(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = await getTroubleshootingForUid(keyUid, NOTES_ENDPOINT);
+        if (cancelled) return;
+        setTroubleshootingItems(items || []);
+      } catch (e) {
+        // on error, clear to avoid stale contents
+        setTroubleshootingItems(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [lastSearched]);
+
+  // Load Projects entries for current UID and merge into local projects state
+  const [remoteProjectsForUid, setRemoteProjectsForUid] = useState<NoteEntity[] | null>(null);
+  useEffect(() => {
+    const keyUid = lastSearched || '';
+    if (!keyUid) { setRemoteProjectsForUid(null); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = await getProjectsForUid(keyUid, NOTES_ENDPOINT);
+        if (cancelled) return;
+        setRemoteProjectsForUid(items || []);
+        // Merge server projects into local projects state (lightweight):
+        try {
+          if (items && items.length) {
+            // Map server entities into Project shape where possible. We store the raw entity under data.__serverEntity
+            const mapped = items.map((e) => {
+              const pk = e.partitionKey || e.PartitionKey || '';
+              const id = e.rowKey || e.RowKey || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+              const name = e.title || e.Title || e.projectName || e.ProjectName || `Project ${id}`;
+              const createdAt = e.savedAt ? Date.parse(String(e.savedAt)) : Date.now();
+              const snapshot = (e.projectJson || e.ProjectJson || e.description) ? (() => {
+                try {
+                  const raw = e.projectJson || e.ProjectJson || e.description || '';
+                  return typeof raw === 'string' ? JSON.parse(raw) : raw;
+                } catch { return null; }
+              })() : null;
+              return {
+                id,
+                name: String(name || id),
+                createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
+                data: snapshot || (snapshot === null ? {} : {}),
+                __serverEntity: e,
+              } as any;
+            });
+            // Prepend any remote projects that don't already exist locally by id
+            setProjects(prev => {
+              const existingIds = new Set(prev.map(p => p.id));
+              const toAdd = mapped.filter(m => !existingIds.has(m.id));
+              return toAdd.length ? [...toAdd, ...prev] : prev;
+            });
+          }
+        } catch {}
+      } catch (e) {
+        setRemoteProjectsForUid(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [lastSearched]);
+
+  // Load UID status (expected delivery date, etc.) when the current UID changes
+  useEffect(() => {
+    const keyUid = lastSearched || '';
+    if (!keyUid) { return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = await getStatusForUid(keyUid, NOTES_ENDPOINT);
+        if (cancelled) return;
+        if (!items || !items.length) return;
+        // Choose the most-recent entity (prefer savedAt/timestamp)
+        const parseTime = (e: any) => {
+          const cand = e?.savedAt || e?.timestamp || e?.Timestamp || e?.SavedAt || '';
+          const t = Date.parse(String(cand || ''));
+          return Number.isFinite(t) ? t : 0;
+        };
+        const sorted = items.slice().sort((a, b) => parseTime(b) - parseTime(a));
+        const entity = sorted[0] || items[0];
+
+        const normalizeDate = (v: any): string | null => {
+          if (!v && v !== 0) return null;
+          const s = String(v);
+          const m = s.match(/\d{4}-\d{2}-\d{2}/);
+          if (m) return m[0];
+          const d = Date.parse(s);
+          if (!isNaN(d)) return new Date(d).toISOString().slice(0, 10);
+          return null;
+        };
+
+        const candidateDate = entity?.expectedDeliveryDate ?? entity?.expecteddeliverydate ?? entity?.etaForDelivery?.date ?? entity?.ETA ?? entity?.eta ?? entity?.Description ?? null;
+        const normalized = normalizeDate(candidateDate);
+        if (normalized) {
+          try {
+            const key = `uidStatus:${keyUid}`;
+            const raw = localStorage.getItem(key);
+            const base = raw ? JSON.parse(raw) : { configPush: "Unknown", circuitsQc: "Unknown", expectedDeliveryDate: null };
+            const merged = { ...base, expectedDeliveryDate: normalized };
+            localStorage.setItem(key, JSON.stringify(merged));
+            // Also trigger a state update indirectly by touching `data` if present so panels re-read
+            // (UIDStatusPanel reads from localStorage on uid change, so no further action needed)
+          } catch {}
+        }
+      } catch {
+        // ignore
       }
     })();
     return () => { cancelled = true; };
@@ -939,6 +1056,23 @@ export default function UIDLookup() {
         notes: Object.keys(notesMap).length ? notesMap : undefined,
       };
       setProjects((prev) => [proj, ...prev]);
+      // Fire-and-forget: persist this project snapshot to Table Storage (Projects table)
+      try {
+        const email = getEmail();
+        const alias = getAlias(email);
+        void saveToStorage({
+          endpoint: NOTES_ENDPOINT,
+          category: "Projects",
+          uid: lastSearched,
+          title: proj.name,
+          description: proj.name,
+          owner: alias || email || '',
+          extras: { projectJson: JSON.stringify(proj) },
+        }).catch((e) => {
+          // eslint-disable-next-line no-console
+          console.warn('Failed to persist project to server:', e?.message || e);
+        });
+      } catch {}
       setActiveProjectId(id);
       // reset create-project state
       setCreateSectionChoice('');
@@ -2426,7 +2560,12 @@ export default function UIDLookup() {
   })();
 
   // Troubleshooting section component (collapsible, interactive per-link tracking)
-  const TroubleshootingSection: React.FC<{ contextKey: string; rows: any[] }> = ({ contextKey, rows }) => {
+  // Accept an optional remoteItems prop so parent code can supply pre-fetched
+  // Troubleshooting entities (useful to fetch as soon as the UID is entered
+  // instead of waiting for the full viewData render). If remoteItems is
+  // provided, it will be preferred and merged into the local map; otherwise
+  // the section performs its own GET as before.
+  const TroubleshootingSection: React.FC<{ contextKey: string; rows: any[]; remoteItems?: NoteEntity[] | null }> = ({ contextKey, rows, remoteItems }) => {
     const STORE_KEY = `${contextKey}:troubles`;
     const COLLAPSE_KEY = `${contextKey}:troublesCollapsed`;
   type TItem = { note?: string; notes?: Array<{ id: string; text: string }>; color?: string; done?: boolean; rowKey?: string; savedAt?: string };
@@ -2447,47 +2586,61 @@ export default function UIDLookup() {
       } catch { return null; }
     })();
 
-    // Load remote troubleshooting entries for this UID and merge into the local map
+    // Load remote troubleshooting entries for this UID and merge into the local map.
+    // Prefer parent-supplied `remoteItems` when available; otherwise perform
+    // an internal GET like before.
     useEffect(() => {
       if (!uidFromContext) return;
       let cancelled = false;
+
+      const processItems = (items: NoteEntity[] | null | undefined) => {
+        if (!items || !Array.isArray(items)) return;
+        const byKey: Record<string, TItem & { rowKey?: string; savedAt?: string }> = {};
+        for (const it of items) {
+          try {
+            const linkKey = (it.LinkKey || it.linkKey || it.linkkey || (it as any)?.LinkKey) as string | undefined;
+            const rk = (it.rowKey || it.RowKey || (it as any).RowKey || (it as any).rowKey) as string | undefined;
+            const ts = (it.savedAt || it.timestamp || (it as any).Timestamp || (it as any).timestamp) as string | undefined;
+            if (!linkKey) continue;
+            // Description was stored as JSON by the client; try to parse
+            let parsed: any = {};
+            try { parsed = typeof (it as any).description === 'string' ? JSON.parse((it as any).description) : ((it as any).description || {}); } catch { parsed = { note: (it as any).description || '' }; }
+            const notes = Array.isArray(parsed?.notes) ? parsed.notes : (parsed?.note ? [{ id: `legacy-${Date.now()}`, text: String(parsed.note) }] : []);
+            const color = parsed?.color || undefined;
+            const done = !!parsed?.done;
+            byKey[linkKey] = { notes, color, done, rowKey: rk, savedAt: ts } as any;
+          } catch (e) { /* ignore per-item parse errors */ }
+        }
+        // Merge: server values win for keys they have; keep local-only keys as-is
+        setMap(prev => {
+          const next = { ...prev };
+          for (const k of Object.keys(byKey)) {
+            next[k] = { ...(next[k] || {}), ...(byKey[k] as any) };
+          }
+          return next;
+        });
+      };
+
       (async () => {
         try {
+          if (remoteItems != null) {
+            // Parent provided pre-fetched items; use them immediately
+            if (!cancelled) processItems(remoteItems);
+            return;
+          }
+          // Fallback: perform internal GET as before
           const items = await getTroubleshootingForUid(uidFromContext, NOTES_ENDPOINT);
           if (cancelled) return;
-          // Map by LinkKey (saved by client when persisting); if no LinkKey, skip
-          const byKey: Record<string, TItem & { rowKey?: string; savedAt?: string }> = {};
-          for (const it of items) {
-            try {
-              const linkKey = (it.LinkKey || it.linkKey || it.linkkey || it?.LinkKey) as string | undefined;
-              const rk = (it.rowKey || it.RowKey || it.RowKey || it.rowKey) as string | undefined;
-              const ts = (it.savedAt || it.timestamp || it.Timestamp || it.Timestamp) as string | undefined;
-              if (!linkKey) continue;
-              // Description was stored as JSON by the client; try to parse
-              let parsed: any = {};
-              try { parsed = typeof it.description === 'string' ? JSON.parse(it.description) : (it.description || {}); } catch { parsed = { note: it.description || '' }; }
-              const notes = Array.isArray(parsed?.notes) ? parsed.notes : (parsed?.note ? [{ id: `legacy-${Date.now()}`, text: String(parsed.note) }] : []);
-              const color = parsed?.color || undefined;
-              const done = !!parsed?.done;
-              byKey[linkKey] = { notes, color, done, rowKey: rk, savedAt: ts } as any;
-            } catch (e) { /* ignore per-item parse errors */ }
-          }
-          // Merge: server values win for keys they have; keep local-only keys as-is
-          setMap(prev => {
-            const next = { ...prev };
-            for (const k of Object.keys(byKey)) {
-              next[k] = { ...(next[k] || {}), ...(byKey[k] as any) };
-            }
-            return next;
-          });
+          processItems(items || []);
         } catch (e) {
           // ignore errors; keep local map
           // eslint-disable-next-line no-console
           console.warn('[Troubleshooting] Failed to fetch remote entries', e);
         }
       })();
+
       return () => { cancelled = true; };
-    }, [uidFromContext]);
+    }, [uidFromContext, remoteItems]);
 
     // Persist an item to server when running under a UID context
     const persistToServer = async (id: string, item: TItem) => {
@@ -3714,7 +3867,7 @@ export default function UIDLookup() {
 
           {/* Troubleshooting (below UID notes) */}
           {lastSearched && !activeProjectId && (
-            <TroubleshootingSection contextKey={`uid:${lastSearched}`} rows={Array.isArray(viewData?.OLSLinks) ? viewData.OLSLinks : []} />
+            <TroubleshootingSection contextKey={`uid:${lastSearched}`} rows={Array.isArray(viewData?.OLSLinks) ? viewData.OLSLinks : []} remoteItems={troubleshootingItems} />
           )}
 
           {/* Project Notes (when viewing a saved project) */}

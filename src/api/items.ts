@@ -108,6 +108,51 @@ export async function getTroubleshootingForUid(uid: string, endpoint?: string): 
 }
 
 /**
+ * Fetch project entries saved for a given UID. Uses category=Projects so the Function
+ * routes to the Projects table (or explicit table override via payload/tableName).
+ */
+export async function getProjectsForUid(uid: string, endpoint?: string): Promise<NoteEntity[]> {
+  const rawEndpoint = endpoint || 'HttpTrigger1';
+  const isAbsolute = /^https?:\/\//i.test(rawEndpoint);
+  const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
+  const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Projects')}`;
+
+  const res = await fetch(url, { method: 'GET' });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`getProjectsForUid failed ${res.status}: ${text}`);
+  try {
+    const data = JSON.parse(text);
+    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch status entries for a given UID (category=Status).
+ * This will be used by the UI to load persisted status fields such as
+ * expectedDeliveryDate for the UIDStatusPanel.
+ */
+export async function getStatusForUid(uid: string, endpoint?: string): Promise<NoteEntity[]> {
+  const rawEndpoint = endpoint || 'HttpTrigger1';
+  const isAbsolute = /^https?:\/\//i.test(rawEndpoint);
+  const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
+  const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Status')}`;
+
+  const res = await fetch(url, { method: 'GET' });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`getStatusForUid failed ${res.status}: ${text}`);
+  try {
+    const data = JSON.parse(text);
+    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Save a new note for a UID.
  * This uses the Azure Function routed as /api/projects (POST).
  */

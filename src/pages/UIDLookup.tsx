@@ -572,7 +572,8 @@ export default function UIDLookup() {
   // When the main view data changes (search result), pull Status rows for ALL associated UIDs
   // so the UIDStatusPanel and project summaries have up-to-date expectedDeliveryDate values.
   useEffect(() => {
-    const view = getViewData();
+    const p = projects.find(p => p.id === activeProjectId) || null;
+    const view = p ? p.data : data;
     if (!view) return;
     const rows: any[] = Array.isArray(view.AssociatedUIDs) ? view.AssociatedUIDs : [];
     const uids = Array.from(new Set(rows.map(r => String(r?.UID ?? r?.Uid ?? r?.uid ?? '').trim()).filter(Boolean)));
@@ -619,7 +620,7 @@ export default function UIDLookup() {
       }
     })();
     return () => { /* signal cancellation */ cancelled = true; };
-  }, [data]);
+  }, [projects, activeProjectId, data]);
   const addNote = () => {
     const uidKey = lastSearched || '';
     if (!uidKey) return;

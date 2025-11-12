@@ -785,10 +785,10 @@ export default function UIDLookup() {
   }, [data, lastSearched, lastPromptUid]);
 
   // Helper to get the dataset currently being viewed (live or project snapshot)
-  const getViewData = () => {
+  const getViewData = React.useCallback(() => {
     const p = projects.find(p => p.id === activeProjectId) || null;
     return p ? p.data : data;
-  };
+  }, [projects, activeProjectId, data]);
   const getActiveProject = () => projects.find(p => p.id === activeProjectId) || null;
   // Reset project note target when active project changes
   useEffect(() => {

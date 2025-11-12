@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { saveToStorage } from "../api/saveToStorage";
-import { getNotesForUid, getTroubleshootingForUid, getStatusForUid, getProjectsForUid, deleteNote as deleteNoteApi, NoteEntity } from "../api/items";
+import { getNotesForUid, getTroubleshootingForUid, getStatusForUid, getProjectsForUid, getAllProjects, deleteNote as deleteNoteApi, NoteEntity } from "../api/items";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   Stack,
@@ -255,6 +255,41 @@ export default function UIDLookup() {
   useEffect(() => {
     try { localStorage.setItem(RAIL_WIDTH_KEY, String(railWidth)); } catch {}
   }, [railWidth]);
+  // Pre-load Projects from server so project details are available before any UID search
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const items = await getAllProjects(NOTES_ENDPOINT);
+        if (cancelled) return;
+        if (!items || !items.length) return;
+        // Map server entities into Project shape and merge with local projects
+        const mapped: Project[] = items.map((e: NoteEntity) => {
+          const id = e.rowKey || e.RowKey || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+          const name = e.title || e.Title || e.projectName || e.ProjectName || `Project ${id}`;
+          const createdAt = e.savedAt ? Date.parse(String(e.savedAt)) : Date.now();
+          const snapshot = (e.projectJson || e.ProjectJson || e.description) ? (() => {
+            try { const raw = e.projectJson || e.ProjectJson || e.description || ''; return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
+          })() : null;
+          return {
+            id,
+            name: String(name || id),
+            createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
+            data: snapshot || {},
+            __serverEntity: e,
+          } as any;
+        });
+        setProjects(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const toAdd = mapped.filter(m => !existingIds.has(m.id));
+          return toAdd.length ? [...toAdd, ...prev] : prev;
+        });
+      } catch (e) {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
   const railDragRef = React.useRef<{ startX: number; startW: number } | null>(null);
   const onRailDragStart = (e: React.MouseEvent<HTMLDivElement>) => {
     e.preventDefault();

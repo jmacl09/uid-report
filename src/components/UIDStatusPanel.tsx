@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { saveToStorage } from "../api/saveToStorage";
 
 type Status = "Unknown" | "In progress" | "Completed";
 
@@ -145,6 +146,47 @@ const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
     if (!storageKey) return;
     try { localStorage.setItem(storageKey, JSON.stringify(state)); } catch {}
   }, [state, storageKey]);
+
+  // Persist to server (UIDStatus table) when expectedDeliveryDate or status fields change.
+  useEffect(() => {
+    if (!uid) return;
+    // Debounce saves to avoid rapid requests during typing
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      if (cancelled) return;
+      try {
+        const payload = {
+          expectedDeliveryDate: state.expectedDeliveryDate ?? null,
+          configPush: state.configPush,
+          circuitsQc: state.circuitsQc,
+        } as Record<string, any>;
+        // Use saveToStorage; include explicit table hints so the Function writes to UIDStatus
+        await saveToStorage({
+          category: 'Status',
+          uid: uid,
+          title: 'Status',
+          description: JSON.stringify(payload),
+          owner: '',
+          extras: {
+            expectedDeliveryDate: state.expectedDeliveryDate ?? null,
+            configPush: state.configPush,
+            circuitsQc: state.circuitsQc,
+            TableName: 'UIDStatus',
+            tableName: 'UIDStatus',
+            targetTable: 'UIDStatus',
+          }
+        }).catch((e: unknown) => {
+          // eslint-disable-next-line no-console
+          console.warn('[UIDStatusPanel] Failed to persist status to server', (e as any)?.message ?? String(e));
+        });
+      } catch (e: unknown) {
+        // eslint-disable-next-line no-console
+        console.warn('[UIDStatusPanel] Save error', (e as any)?.message ?? String(e));
+      }
+    }, 900);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, state.expectedDeliveryDate, state.configPush, state.circuitsQc]);
 
   const setField = (k: keyof PersistShape, v: any) => setState((s) => ({ ...s, [k]: v }));
 

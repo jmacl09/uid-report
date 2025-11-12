@@ -93,7 +93,7 @@ export async function getTroubleshootingForUid(uid: string, endpoint?: string): 
   const rawEndpoint = endpoint || 'HttpTrigger1';
   const isAbsolute = /^https?:\/\//i.test(rawEndpoint);
   const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
-  const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Troubleshooting')}`;
+  const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Troubleshooting')}&tableName=${encodeURIComponent('Troubleshooting')}&TableName=${encodeURIComponent('Troubleshooting')}&targetTable=${encodeURIComponent('Troubleshooting')}`;
 
   const res = await fetch(url, { method: 'GET' });
   const text = await res.text();
@@ -120,6 +120,27 @@ export async function getProjectsForUid(uid: string, endpoint?: string): Promise
   const res = await fetch(url, { method: 'GET' });
   const text = await res.text();
   if (!res.ok) throw new Error(`getProjectsForUid failed ${res.status}: ${text}`);
+  try {
+    const data = JSON.parse(text);
+    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch all Projects rows (no uid) so clients can pre-load project snapshots.
+ */
+export async function getAllProjects(endpoint?: string): Promise<NoteEntity[]> {
+  const rawEndpoint = endpoint || 'HttpTrigger1';
+  const isAbsolute = /^https?:\/\//i.test(rawEndpoint);
+  const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
+  const url = `${base}?category=${encodeURIComponent('Projects')}&tableName=${encodeURIComponent('Projects')}&TableName=${encodeURIComponent('Projects')}&targetTable=${encodeURIComponent('Projects')}`;
+
+  const res = await fetch(url, { method: 'GET' });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`getAllProjects failed ${res.status}: ${text}`);
   try {
     const data = JSON.parse(text);
     if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];

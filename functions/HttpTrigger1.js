@@ -67,8 +67,32 @@ app.http('HttpTrigger1', {
                 const url = new URL(request.url);
                 const uid = url.searchParams.get('uid');
                 const category = url.searchParams.get('category');
+                // Allow callers to request an explicit table via querystring
+                const qTable = url.searchParams.get('tableName') || url.searchParams.get('TableName') || url.searchParams.get('targetTable');
 
                 if (!uid) {
+                    // If no UID supplied, allow listing Projects across the table when requested.
+                    const catLower = (category || '').toString().toLowerCase();
+                    if (catLower === 'projects') {
+                        try {
+                            const qTable = url.searchParams.get('tableName') || url.searchParams.get('TableName') || url.searchParams.get('targetTable');
+                            const tableName = chooseTable(qTable ? { tableName: qTable, category } : { category });
+                            const { client, ensureTable, auth } = getTableClient(tableName);
+                            context.log && context.log(`[Table] GET all Projects -> table=${tableName} auth=${auth}`);
+                            await ensureTable();
+                            const items = [];
+                            for await (const entity of client.listEntities()) items.push(entity);
+                            // sort newest first
+                            items.sort((a, b) => {
+                                const ak = a.rowKey || a.savedAt || '';
+                                const bk = b.rowKey || b.savedAt || '';
+                                return ak < bk ? 1 : ak > bk ? -1 : 0;
+                            });
+                            return { status: 200, headers: corsHeaders, jsonBody: { ok: true, category: 'Projects', count: items.length, items } };
+                        } catch (e) {
+                            return { status: 500, headers: corsHeaders, jsonBody: { ok: false, error: String(e?.message || e) } };
+                        }
+                    }
                     return {
                         status: 200,
                         headers: corsHeaders,
@@ -103,7 +127,8 @@ app.http('HttpTrigger1', {
                     return process.env.TABLES_TABLE || process.env.TABLES_TABLE_NAME || 'Projects';
                 };
 
-                const tableName = chooseTable({ category });
+                // Prefer explicit table name from querystring when provided
+                const tableName = chooseTable(qTable ? { tableName: qTable, category } : { category });
                 const { client, ensureTable, auth } = getTableClient(tableName);
                 // Log which auth path and table is being used for easier debugging
                 context.log && context.log(`[Table] GET -> table=${tableName} auth=${auth} accountUrl=${process.env.TABLES_ACCOUNT_URL ? process.env.TABLES_ACCOUNT_URL : '(using connection string)'} `);

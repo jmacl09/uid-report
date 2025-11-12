@@ -268,14 +268,42 @@ export default function UIDLookup() {
           const id = e.rowKey || e.RowKey || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
           const name = e.title || e.Title || e.projectName || e.ProjectName || `Project ${id}`;
           const createdAt = e.savedAt ? Date.parse(String(e.savedAt)) : Date.now();
-          const snapshot = (e.projectJson || e.ProjectJson || e.description) ? (() => {
+          const parsed = (e.projectJson || e.ProjectJson || e.description) ? (() => {
             try { const raw = e.projectJson || e.ProjectJson || e.description || ''; return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
           })() : null;
+          // support two shapes:
+          // 1) stored snapshot directly (contains sourceUids, AssociatedUIDs, etc.)
+          // 2) stored full Project object (id, name, createdAt, data: { ...snapshot }, notes, section)
+          let dataSnapshot: any = null;
+          let finalId = id;
+          let finalName = String(name || id);
+          let finalCreatedAt = Number.isFinite(createdAt) ? createdAt : Date.now();
+          let owners: string[] | undefined = undefined;
+          let sectionVal: string | undefined = undefined;
+          let notesVal: Record<string, any> | undefined = undefined;
+          if (parsed) {
+            if (parsed.data && (parsed.data.sourceUids || parsed.data.AssociatedUIDs || parsed.data.OLSLinks)) {
+              // parsed is a full Project object
+              dataSnapshot = parsed.data;
+              finalId = parsed.id || finalId;
+              finalName = String(parsed.name || finalName);
+              finalCreatedAt = parsed.createdAt ? Number(parsed.createdAt) : finalCreatedAt;
+              owners = parsed.owners;
+              sectionVal = parsed.section;
+              notesVal = parsed.notes;
+            } else {
+              // parsed is the snapshot itself
+              dataSnapshot = parsed;
+            }
+          }
           return {
-            id,
-            name: String(name || id),
-            createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
-            data: snapshot || {},
+            id: finalId,
+            name: finalName,
+            createdAt: Number.isFinite(finalCreatedAt) ? finalCreatedAt : Date.now(),
+            data: dataSnapshot || {},
+            owners,
+            section: sectionVal,
+            notes: notesVal,
             __serverEntity: e,
           } as any;
         });
@@ -443,17 +471,37 @@ export default function UIDLookup() {
               const id = e.rowKey || e.RowKey || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
               const name = e.title || e.Title || e.projectName || e.ProjectName || `Project ${id}`;
               const createdAt = e.savedAt ? Date.parse(String(e.savedAt)) : Date.now();
-              const snapshot = (e.projectJson || e.ProjectJson || e.description) ? (() => {
-                try {
-                  const raw = e.projectJson || e.ProjectJson || e.description || '';
-                  return typeof raw === 'string' ? JSON.parse(raw) : raw;
-                } catch { return null; }
+              const parsed = (e.projectJson || e.ProjectJson || e.description) ? (() => {
+                try { const raw = e.projectJson || e.ProjectJson || e.description || ''; return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
               })() : null;
+              let dataSnapshot: any = null;
+              let finalId = id;
+              let finalName = String(name || id);
+              let finalCreatedAt = Number.isFinite(createdAt) ? createdAt : Date.now();
+              let owners: string[] | undefined = undefined;
+              let sectionVal: string | undefined = undefined;
+              let notesVal: Record<string, any> | undefined = undefined;
+              if (parsed) {
+                if (parsed.data && (parsed.data.sourceUids || parsed.data.AssociatedUIDs || parsed.data.OLSLinks)) {
+                  dataSnapshot = parsed.data;
+                  finalId = parsed.id || finalId;
+                  finalName = String(parsed.name || finalName);
+                  finalCreatedAt = parsed.createdAt ? Number(parsed.createdAt) : finalCreatedAt;
+                  owners = parsed.owners;
+                  sectionVal = parsed.section;
+                  notesVal = parsed.notes;
+                } else {
+                  dataSnapshot = parsed;
+                }
+              }
               return {
-                id,
-                name: String(name || id),
-                createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
-                data: snapshot || (snapshot === null ? {} : {}),
+                id: finalId,
+                name: finalName,
+                createdAt: Number.isFinite(finalCreatedAt) ? finalCreatedAt : Date.now(),
+                data: dataSnapshot || {},
+                owners,
+                section: sectionVal,
+                notes: notesVal,
                 __serverEntity: e,
               } as any;
             });
@@ -520,6 +568,58 @@ export default function UIDLookup() {
     })();
     return () => { cancelled = true; };
   }, [lastSearched]);
+
+  // When the main view data changes (search result), pull Status rows for ALL associated UIDs
+  // so the UIDStatusPanel and project summaries have up-to-date expectedDeliveryDate values.
+  useEffect(() => {
+    const view = getViewData();
+    if (!view) return;
+    const rows: any[] = Array.isArray(view.AssociatedUIDs) ? view.AssociatedUIDs : [];
+    const uids = Array.from(new Set(rows.map(r => String(r?.UID ?? r?.Uid ?? r?.uid ?? '').trim()).filter(Boolean)));
+    if (!uids.length) return;
+    let cancelled = false;
+    (async () => {
+      // Helper to normalise date strings to YYYY-MM-DD (same logic as single-uid fetch)
+      const normalizeDate = (v: any): string | null => {
+        if (!v && v !== 0) return null;
+        const s = String(v);
+        const m = s.match(/\d{4}-\d{2}-\d{2}/);
+        if (m) return m[0];
+        const d = Date.parse(s);
+        if (!isNaN(d)) return new Date(d).toISOString().slice(0, 10);
+        return null;
+      };
+
+      // Limit concurrent requests to avoid flooding the Function/storage
+      for (const u of uids) {
+        if (cancelled) return;
+        try {
+          const items = await getStatusForUid(u, NOTES_ENDPOINT);
+          if (!items || !items.length) continue;
+          // prefer most recent
+          const parseTime = (e: any) => { const cand = e?.savedAt || e?.timestamp || e?.Timestamp || e?.SavedAt || ''; const t = Date.parse(String(cand || '')); return Number.isFinite(t) ? t : 0; };
+          const sorted = items.slice().sort((a,b)=> parseTime(b) - parseTime(a));
+          const entity = sorted[0] || items[0];
+          const candidateDate = entity?.expectedDeliveryDate ?? entity?.expecteddeliverydate ?? entity?.etaForDelivery?.date ?? entity?.ETA ?? entity?.eta ?? entity?.Description ?? null;
+          const normalized = normalizeDate(candidateDate);
+          if (normalized) {
+            try {
+              const key = `uidStatus:${u}`;
+              const raw = localStorage.getItem(key);
+              const base = raw ? JSON.parse(raw) : { configPush: "Unknown", circuitsQc: "Unknown", expectedDeliveryDate: null };
+              const merged = { ...base, expectedDeliveryDate: normalized };
+              localStorage.setItem(key, JSON.stringify(merged));
+            } catch {}
+          }
+        } catch (e) {
+          // ignore per-uid errors
+        }
+        // small pause to avoid hammering the Function
+        await new Promise(resolve => setTimeout(resolve, 180));
+      }
+    })();
+    return () => { /* signal cancellation */ cancelled = true; };
+  }, [data]);
   const addNote = () => {
     const uidKey = lastSearched || '';
     if (!uidKey) return;

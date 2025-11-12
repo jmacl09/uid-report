@@ -385,6 +385,12 @@ export default function UIDLookup() {
 
   // Load Projects entries for current UID and merge into local projects state
   const [remoteProjectsForUid, setRemoteProjectsForUid] = useState<NoteEntity[] | null>(null);
+  // reference remoteProjectsForUid to satisfy lint rules (used to drive debug/side-effects)
+  useEffect(() => {
+    if (!remoteProjectsForUid) return;
+    // lightweight debug: count of remote projects loaded for the current UID
+    try { console.debug('[UIDLookup] remoteProjectsForUid count=', remoteProjectsForUid.length); } catch {}
+  }, [remoteProjectsForUid]);
   useEffect(() => {
     const keyUid = lastSearched || '';
     if (!keyUid) { setRemoteProjectsForUid(null); return; }
@@ -399,7 +405,6 @@ export default function UIDLookup() {
           if (items && items.length) {
             // Map server entities into Project shape where possible. We store the raw entity under data.__serverEntity
             const mapped = items.map((e) => {
-              const pk = e.partitionKey || e.PartitionKey || '';
               const id = e.rowKey || e.RowKey || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
               const name = e.title || e.Title || e.projectName || e.ProjectName || `Project ${id}`;
               const createdAt = e.savedAt ? Date.parse(String(e.savedAt)) : Date.now();

@@ -452,12 +452,24 @@ export default function UIDLookup() {
       return;
     }
     setProjectLoadError(null);
-    setProjectLoadingCount(0);
-    setProjectTotalCount(uids.length);
-    setIsProjectLoading(true);
-    setCombinedData({ LinkSummary: [], MGFXA: [], MGFXZ: [], GDCOTickets: [] });
-
+    // Keep previous combinedData visible until at least one UID returns
+    // meaningful content. This avoids clearing the tables immediately on
+    // Refresh and provides a smoother UX.
+    const prevCombined = combinedData;
     const partialResults: any[] = [];
+    let firstMeaningfulSeen = false;
+
+    const looksMeaningful = (json: any) => {
+      if (!json || typeof json !== 'object') return false;
+      if (Array.isArray(json.OLSLinks) && json.OLSLinks.length) return true;
+      if (Array.isArray(json.AssociatedUIDs) && json.AssociatedUIDs.length) return true;
+      if (Array.isArray(json.MGFXA) && json.MGFXA.length) return true;
+      if (Array.isArray(json.MGFXZ) && json.MGFXZ.length) return true;
+      if (Array.isArray(json.GDCOTickets) && json.GDCOTickets.length) return true;
+      // If the payload contains any string/number keys beyond empty object, treat as meaningful
+      if (Object.keys(json).length > 0) return true;
+      return false;
+    };
 
     const tasks = uids.map((u) => {
       const url = `${NOTES_ENDPOINT}?uid=${encodeURIComponent(String(u))}`;
@@ -467,23 +479,40 @@ export default function UIDLookup() {
           const json = await res.json().catch(() => null);
           return json;
         })
-          .then((json) => {
+        .then((json) => {
           partialResults.push(json || {});
-          // update progressive combined data
-          try { setCombinedData((_prev: any) => combineResults(partialResults)); } catch { setCombinedData(combineResults(partialResults)); }
+          if (!firstMeaningfulSeen && looksMeaningful(json)) firstMeaningfulSeen = true;
+          // Only update combinedData once we've observed meaningful content
+          if (firstMeaningfulSeen) {
+            try { setCombinedData((_prev: any) => combineResults(partialResults)); } catch { setCombinedData(combineResults(partialResults)); }
+          }
         })
         .catch((err) => {
           // on failure for this UID, record an empty object and continue
           partialResults.push({});
-          try { setCombinedData((_prev: any) => combineResults(partialResults)); } catch { setCombinedData(combineResults(partialResults)); }
+          if (firstMeaningfulSeen) {
+            try { setCombinedData((_prev: any) => combineResults(partialResults)); } catch { setCombinedData(combineResults(partialResults)); }
+          }
         })
         .finally(() => {
           setProjectLoadingCount((c) => c + 1);
         });
     });
 
-    // Wait for all to settle, but we already progressive-updated on each finish.
+    // Wait for all to settle. If none returned meaningful content, keep the
+    // previous combinedData and show a lightweight error message instead of
+    // blanking the UI.
     await Promise.allSettled(tasks);
+    if (!firstMeaningfulSeen) {
+      // leave previous data visible to avoid a jarring empty state; surface a message
+      setProjectLoadError('Refresh completed: no new data returned for these UIDs.');
+      // keep existing combinedData (do not overwrite)
+    } else {
+      // ensure final combined data reflects all partial results
+      try { setCombinedData((_prev: any) => combineResults(partialResults)); } catch { setCombinedData(combineResults(partialResults)); }
+      setProjectLoadError(null);
+    }
+    setIsProjectLoading(false);
     setIsProjectLoading(false);
   };
 

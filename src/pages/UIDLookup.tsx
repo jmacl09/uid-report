@@ -173,13 +173,9 @@ export default function UIDLookup() {
     notes?: Record<string, Note[]>; // notes keyed by UID
     urgent?: boolean; // optional urgent tag
   };
-  const [projects, setProjects] = useState<Project[]>(() => {
-    try {
-      const raw = localStorage.getItem("uidProjects");
-      const arr = raw ? JSON.parse(raw) : [];
-      return Array.isArray(arr) ? arr : [];
-    } catch { return []; }
-  });
+  // Projects are sourced only from the Projects Table on the server.
+  // Do NOT persist projects locally anymore.
+  const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<string>("");
   const COLLAPSED_SECTIONS_KEY = 'uidCollapsedSections';
@@ -260,7 +256,8 @@ export default function UIDLookup() {
     let cancelled = false;
     (async () => {
       try {
-        const items = await getAllProjects(NOTES_ENDPOINT);
+        // Use the default endpoint (proxy/API_BASE) to avoid cross-origin issues.
+        const items = await getAllProjects();
         if (cancelled) return;
         if (!items || !items.length) return;
         // Map server entities into Project shape and merge with local projects
@@ -404,10 +401,105 @@ export default function UIDLookup() {
     localStorage.setItem("uidHistory", JSON.stringify(history.slice(0, 10)));
   }, [history]);
 
-  // persist projects whenever they change
-  useEffect(() => {
-    try { localStorage.setItem('uidProjects', JSON.stringify(projects)); } catch {}
-  }, [projects]);
+  // Projects are no longer persisted to localStorage per requirements.
+  // (Server sync occurs when creating/updating via saveToStorage elsewhere.)
+
+  // ---- Project multi-UID loader state and helpers ----
+  const [projectLoadingCount, setProjectLoadingCount] = useState<number>(0);
+  const [projectTotalCount, setProjectTotalCount] = useState<number>(0);
+  const [isProjectLoading, setIsProjectLoading] = useState<boolean>(false);
+  const [projectLoadError, setProjectLoadError] = useState<string | null>(null);
+  const [combinedData, setCombinedData] = useState<any | null>(null);
+
+  // Combine results from multiple UID responses into the four target collections.
+  const dedupeArray = (arr: any[]) => {
+    const seen = new Set<string>();
+    const out: any[] = [];
+    for (const it of arr || []) {
+      try {
+        const k = JSON.stringify(it);
+        if (!seen.has(k)) { seen.add(k); out.push(it); }
+      } catch {
+        if (!out.includes(it)) out.push(it);
+      }
+    }
+    return out;
+  };
+
+  const combineResults = (resultsArray: any[]) => {
+    const LinkSummary = resultsArray.flatMap(r => (r?.LinkSummary || r?.OLSLinks || r?.LinkSummaryArray || []));
+    const MGFXA = resultsArray.flatMap(r => (r?.MGFXA || []));
+    const MGFXZ = resultsArray.flatMap(r => (r?.MGFXZ || []));
+    const GDCOTickets = resultsArray.flatMap(r => (r?.GDCOTickets || r?.ReleatedTickets || []));
+    const ls = dedupeArray(LinkSummary);
+    const mgfxa = dedupeArray(MGFXA);
+    const mgfxz = dedupeArray(MGFXZ);
+    const tickets = dedupeArray(GDCOTickets);
+    // Return both legacy and normalized keys so the rest of the UI can read them
+    return {
+      LinkSummary: ls,
+      OLSLinks: ls,
+      MGFXA: mgfxa,
+      MGFXZ: mgfxz,
+      GDCOTickets: tickets,
+    };
+  };
+
+  // Load project data for a list of UIDs in parallel, update progressive state as each finishes.
+  const loadProjectData = async (uids: string[]) => {
+    if (!Array.isArray(uids) || !uids.length) {
+      setProjectLoadError('No UIDs to load for this project.');
+      return;
+    }
+    setProjectLoadError(null);
+    setProjectLoadingCount(0);
+    setProjectTotalCount(uids.length);
+    setIsProjectLoading(true);
+    setCombinedData({ LinkSummary: [], MGFXA: [], MGFXZ: [], GDCOTickets: [] });
+
+    const partialResults: any[] = [];
+
+    const tasks = uids.map((u) => {
+      const url = `${NOTES_ENDPOINT}?uid=${encodeURIComponent(String(u))}`;
+      return fetch(url)
+        .then(async (res) => {
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          const json = await res.json().catch(() => null);
+          return json;
+        })
+          .then((json) => {
+          partialResults.push(json || {});
+          // update progressive combined data
+          try { setCombinedData((_prev: any) => combineResults(partialResults)); } catch { setCombinedData(combineResults(partialResults)); }
+        })
+        .catch((err) => {
+          // on failure for this UID, record an empty object and continue
+          partialResults.push({});
+          try { setCombinedData((_prev: any) => combineResults(partialResults)); } catch { setCombinedData(combineResults(partialResults)); }
+        })
+        .finally(() => {
+          setProjectLoadingCount((c) => c + 1);
+        });
+    });
+
+    // Wait for all to settle, but we already progressive-updated on each finish.
+    await Promise.allSettled(tasks);
+    setIsProjectLoading(false);
+  };
+
+  // When the user clicks a project, load all UIDs for that project and switch to project view
+  const handleProjectClick = (projectId: string) => {
+    const p = projects.find(x => x.id === projectId);
+    if (!p) {
+      setActiveProjectId(projectId);
+      return;
+    }
+    // Try to find sourceUids first, else extract from AssociatedUIDs
+    const uids: string[] = Array.from(new Set([...(p.data?.sourceUids || []), ...(Array.isArray(p.data?.AssociatedUIDs) ? p.data.AssociatedUIDs.map((r: any) => String(r?.UID || r?.Uid || r?.uid || '')).filter(Boolean) : [])]));
+    setActiveProjectId(projectId);
+    // kick off loading; progressive results will render as they come in
+    void loadProjectData(uids);
+  };
 
   // Load notes when the current UID changes (server data only)
   useEffect(() => {
@@ -460,7 +552,8 @@ export default function UIDLookup() {
     let cancelled = false;
     (async () => {
       try {
-        const items = await getProjectsForUid(keyUid, NOTES_ENDPOINT);
+  // Use proxy/default endpoint to avoid cross-origin issues
+  const items = await getProjectsForUid(keyUid);
         if (cancelled) return;
         setRemoteProjectsForUid(items || []);
         // Merge server projects into local projects state (lightweight):
@@ -787,9 +880,11 @@ export default function UIDLookup() {
 
   // Helper to get the dataset currently being viewed (live or project snapshot)
   const getViewData = React.useCallback(() => {
+    // If we've loaded combined data for the active project, prefer it so tables render unified views.
+    if (activeProjectId && combinedData) return combinedData;
     const p = projects.find(p => p.id === activeProjectId) || null;
     return p ? p.data : data;
-  }, [projects, activeProjectId, data]);
+  }, [projects, activeProjectId, data, combinedData]);
   const getActiveProject = () => projects.find(p => p.id === activeProjectId) || null;
   // Reset project note target when active project changes
   useEffect(() => {
@@ -1213,6 +1308,58 @@ export default function UIDLookup() {
           // eslint-disable-next-line no-console
           console.warn('Failed to persist project to server:', e?.message || e);
         });
+      
+      // After saving, refresh Projects list from server so it persists across reloads/tabs
+      try {
+        void (async () => {
+          const remote = await getAllProjects();
+          if (remote && remote.length) {
+            const mapped: Project[] = remote.map((e: NoteEntity) => {
+              const id = e.rowKey || e.RowKey || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+              const name = e.title || e.Title || e.projectName || e.ProjectName || `Project ${id}`;
+              const createdAt = e.savedAt ? Date.parse(String(e.savedAt)) : Date.now();
+              const parsed = (e.projectJson || e.ProjectJson || e.description) ? (() => {
+                try { const raw = e.projectJson || e.ProjectJson || e.description || ''; return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
+              })() : null;
+              let dataSnapshot: any = null;
+              let finalId = id;
+              let finalName = String(name || id);
+              let finalCreatedAt = Number.isFinite(createdAt) ? createdAt : Date.now();
+              let owners: string[] | undefined = undefined;
+              let sectionVal: string | undefined = undefined;
+              let notesVal: Record<string, any> | undefined = undefined;
+              if (parsed) {
+                if (parsed.data && (parsed.data.sourceUids || parsed.data.AssociatedUIDs || parsed.data.OLSLinks)) {
+                  dataSnapshot = parsed.data;
+                  finalId = parsed.id || finalId;
+                  finalName = String(parsed.name || finalName);
+                  finalCreatedAt = parsed.createdAt ? Number(parsed.createdAt) : finalCreatedAt;
+                  owners = parsed.owners;
+                  sectionVal = parsed.section;
+                  notesVal = parsed.notes;
+                } else {
+                  dataSnapshot = parsed;
+                }
+              }
+              return {
+                id: finalId,
+                name: finalName,
+                createdAt: Number.isFinite(finalCreatedAt) ? finalCreatedAt : Date.now(),
+                data: dataSnapshot || {},
+                owners,
+                section: sectionVal,
+                notes: notesVal,
+                __serverEntity: e,
+              } as any;
+            });
+            setProjects(prev => {
+              const existingIds = new Set(prev.map(p => p.id));
+              const toAdd = mapped.filter(m => !existingIds.has(m.id));
+              return toAdd.length ? [...toAdd, ...prev] : prev;
+            });
+          }
+        })();
+      } catch {}
       } catch {}
       setActiveProjectId(id);
       // reset create-project state
@@ -3219,6 +3366,7 @@ export default function UIDLookup() {
       <div className="last-searched-gap" />
 
       {error && <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>}
+  {projectLoadError && <MessageBar messageBarType={MessageBarType.error}>{projectLoadError}</MessageBar>}
 
       {viewData && (
         <>
@@ -3300,6 +3448,21 @@ export default function UIDLookup() {
                     );
                   })()}
                   <button className="sleek-btn" style={{ background:'#444' }} onClick={() => setActiveProjectId(null)}>Exit</button>
+                  <button
+                    className="sleek-btn repo"
+                    onClick={() => {
+                      const ap = projects.find(pp => pp.id === activeProjectId);
+                      const uids: string[] = Array.from(new Set([...(ap?.data?.sourceUids || []), ...(Array.isArray(ap?.data?.AssociatedUIDs) ? (ap?.data?.AssociatedUIDs || []).map((r: any)=>String(r?.UID||r?.Uid||r?.uid||'')).filter(Boolean) : [])]));
+                      void loadProjectData(uids);
+                    }}
+                    title="Reload all UIDs for this project"
+                    style={{ marginLeft: 8, color: '#fff' }}
+                    disabled={isProjectLoading}
+                  >
+                    {projectLoadingCount < projectTotalCount && projectTotalCount > 0
+                      ? `Loading ${projectLoadingCount}/${projectTotalCount} UIDs...`
+                      : 'Refresh Project Data'}
+                  </button>
                 </>
               )}
             </div>
@@ -4272,10 +4435,10 @@ export default function UIDLookup() {
                             draggable
                             onDragStart={(e) => { setDragProjectId(p.id); e.dataTransfer.setData('text/plain', p.id); }}
                             onDragEnd={() => setDragProjectId(null)}
-                            onClick={() => { if (dragProjectId) return; setActiveProjectId(p.id); }}
+                            onClick={() => { if (dragProjectId) return; handleProjectClick(p.id); }}
                             role="button"
                             tabIndex={0}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveProjectId(p.id); } }}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleProjectClick(p.id); } }}
                           >
                             <div className="projects-rail-main">
                               <div className="projects-rail-name" title={p.name}>{p.name}</div>

@@ -29,14 +29,26 @@ export async function getNotesForUid(uid: string, endpoint?: string): Promise<No
   const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
   const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Notes')}`;
 
-  const res = await fetch(url, { method: 'GET' });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`getNotesForUid failed ${res.status}: ${text}`);
   try {
-    const data = JSON.parse(text);
-    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
-    return [];
-  } catch {
+    const res = await fetch(url, { method: 'GET' });
+    const text = await res.text();
+    if (!res.ok) {
+      // don't throw to avoid uncaught runtime errors in the UI; surface via empty list
+      // eslint-disable-next-line no-console
+      console.warn(`getNotesForUid returned ${res.status}: ${text}`);
+      return [];
+    }
+    try {
+      const data = JSON.parse(text);
+      if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+      return [];
+    } catch {
+      return [];
+    }
+  } catch (networkErr) {
+    // Network/CORS or other fetch-level failure — don't throw to keep UI stable
+    // eslint-disable-next-line no-console
+    console.warn('[getNotesForUid] Network error', networkErr);
     return [];
   }
 }
@@ -51,14 +63,24 @@ export async function getCommentsForUid(uid: string, endpoint?: string): Promise
   const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
   const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Comments')}`;
 
-  const res = await fetch(url, { method: 'GET' });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`getCommentsForUid failed ${res.status}: ${text}`);
   try {
-    const data = JSON.parse(text);
-    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
-    return [];
-  } catch {
+    const res = await fetch(url, { method: 'GET' });
+    const text = await res.text();
+    if (!res.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(`getCommentsForUid returned ${res.status}: ${text}`);
+      return [];
+    }
+    try {
+      const data = JSON.parse(text);
+      if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+      return [];
+    } catch {
+      return [];
+    }
+  } catch (networkErr) {
+    // eslint-disable-next-line no-console
+    console.warn('[getCommentsForUid] Network error', networkErr);
     return [];
   }
 }
@@ -73,14 +95,24 @@ export async function getCalendarEntries(uid: string, endpoint?: string): Promis
   const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
   const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Calendar')}`;
 
-  const res = await fetch(url, { method: 'GET' });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`getCalendarEntries failed ${res.status}: ${text}`);
   try {
-    const data = JSON.parse(text);
-    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
-    return [];
-  } catch {
+    const res = await fetch(url, { method: 'GET' });
+    const text = await res.text();
+    if (!res.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(`getCalendarEntries returned ${res.status}: ${text}`);
+      return [];
+    }
+    try {
+      const data = JSON.parse(text);
+      if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+      return [];
+    } catch {
+      return [];
+    }
+  } catch (networkErr) {
+    // eslint-disable-next-line no-console
+    console.warn('[getCalendarEntries] Network error', networkErr);
     return [];
   }
 }
@@ -95,14 +127,24 @@ export async function getTroubleshootingForUid(uid: string, endpoint?: string): 
   const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
   const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Troubleshooting')}&tableName=${encodeURIComponent('Troubleshooting')}&TableName=${encodeURIComponent('Troubleshooting')}&targetTable=${encodeURIComponent('Troubleshooting')}`;
 
-  const res = await fetch(url, { method: 'GET' });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`getTroubleshootingForUid failed ${res.status}: ${text}`);
   try {
-    const data = JSON.parse(text);
-    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
-    return [];
-  } catch {
+    const res = await fetch(url, { method: 'GET' });
+    const text = await res.text();
+    if (!res.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(`getTroubleshootingForUid returned ${res.status}: ${text}`);
+      return [];
+    }
+    try {
+      const data = JSON.parse(text);
+      if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+      return [];
+    } catch {
+      return [];
+    }
+  } catch (networkErr) {
+    // eslint-disable-next-line no-console
+    console.warn('[getTroubleshootingForUid] Network error', networkErr);
     return [];
   }
 }
@@ -117,14 +159,24 @@ export async function getProjectsForUid(uid: string, endpoint?: string): Promise
   const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
   const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Projects')}`;
 
-  const res = await fetch(url, { method: 'GET' });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`getProjectsForUid failed ${res.status}: ${text}`);
   try {
-    const data = JSON.parse(text);
-    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
-    return [];
-  } catch {
+    const res = await fetch(url, { method: 'GET' });
+    const text = await res.text();
+    if (!res.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(`getProjectsForUid returned ${res.status}: ${text}`);
+      return [];
+    }
+    try {
+      const data = JSON.parse(text);
+      if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+      return [];
+    } catch {
+      return [];
+    }
+  } catch (networkErr) {
+    // eslint-disable-next-line no-console
+    console.warn('[getProjectsForUid] Network error', networkErr);
     return [];
   }
 }
@@ -138,14 +190,24 @@ export async function getAllProjects(endpoint?: string): Promise<NoteEntity[]> {
   const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
   const url = `${base}?category=${encodeURIComponent('Projects')}&tableName=${encodeURIComponent('Projects')}&TableName=${encodeURIComponent('Projects')}&targetTable=${encodeURIComponent('Projects')}`;
 
-  const res = await fetch(url, { method: 'GET' });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`getAllProjects failed ${res.status}: ${text}`);
   try {
-    const data = JSON.parse(text);
-    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
-    return [];
-  } catch {
+    const res = await fetch(url, { method: 'GET' });
+    const text = await res.text();
+    if (!res.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(`getAllProjects returned ${res.status}: ${text}`);
+      return [];
+    }
+    try {
+      const data = JSON.parse(text);
+      if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+      return [];
+    } catch {
+      return [];
+    }
+  } catch (networkErr) {
+    // eslint-disable-next-line no-console
+    console.warn('[getAllProjects] Network error', networkErr);
     return [];
   }
 }
@@ -161,14 +223,24 @@ export async function getStatusForUid(uid: string, endpoint?: string): Promise<N
   const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
   const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Status')}`;
 
-  const res = await fetch(url, { method: 'GET' });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`getStatusForUid failed ${res.status}: ${text}`);
   try {
-    const data = JSON.parse(text);
-    if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
-    return [];
-  } catch {
+    const res = await fetch(url, { method: 'GET' });
+    const text = await res.text();
+    if (!res.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(`getStatusForUid returned ${res.status}: ${text}`);
+      return [];
+    }
+    try {
+      const data = JSON.parse(text);
+      if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+      return [];
+    } catch {
+      return [];
+    }
+  } catch (networkErr) {
+    // eslint-disable-next-line no-console
+    console.warn('[getStatusForUid] Network error', networkErr);
     return [];
   }
 }

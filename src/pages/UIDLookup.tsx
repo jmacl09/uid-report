@@ -1179,22 +1179,68 @@ export default function UIDLookup() {
 
         const aRows: any[] = [];
         const zRows: any[] = [];
-  // Prefer site codes from AssociatedUIDs (they tend to be the most reliable
-  // for determining which XOMT prefixes belong to A vs Z). Fall back to
-  // KQLData.SiteA/SiteZ or normalized.SiteA if AssociatedUIDs are absent.
-  const sitesFromAssociated = getFirstSites(normalized, query /* current UID */);
-  const siteAraw = String((sitesFromAssociated.a || normalized?.KQLData?.SiteA || normalized?.SiteA) || '').toLowerCase();
-  const siteZraw = String((sitesFromAssociated.z || normalized?.KQLData?.SiteZ || normalized?.SiteZ) || '').toLowerCase();
+  
 
         const makeDiffLink = (hostname: string) => `https://phynet.trafficmanager.net/ConfigMon/ConfigDiff?Hostname=${encodeURIComponent(hostname)}&DiffGroups=&Timestamp`;
 
+        // Use ordering from Logic Apps: rows are sent in A→Z order.
+        // Determine a simple group prefix (first two dash-separated segments)
+        // and treat the first encountered prefix as the A-side; any subsequent
+        // different prefix is treated as Z-side. This avoids relying on Site A/Z
+        // fields which are not always accurate.
+        const xomtPrefixKey = (s: string) => {
+          const parts = String(s || '').split('-').filter(Boolean);
+          if (parts.length >= 2) return (parts[0] + '-' + parts[1]).toLowerCase();
+          return parts[0]?.toLowerCase() || String(s || '').toLowerCase();
+        };
+        const xomtBaseKey = (s: string) => {
+          const parts = String(s || '').split('-').filter(Boolean);
+          return parts[0]?.toLowerCase() || String(s || '').toLowerCase();
+        };
+        let firstPrefix: string | null = null;
+
+        // If there are many different prefixes present, prefer using the
+        // optical devices from the Link Summary to identify A vs Z prefixes
+        // (use only the base prefix like 'gvx11' or 'osl20'). Fall back to
+        // order-based assignment when optical hints aren't available.
+        let optAPrefix: string | null = null;
+        let optZPrefix: string | null = null;
+        try {
+          const links = Array.isArray(normalized?.OLSLinks) ? normalized.OLSLinks : [];
+          // Helper to safely read a device name from a link row
+          const pickDevice = (r: any, keys: string[]) => {
+            for (const k of keys) {
+              const v = r?.[k];
+              if (v) return String(v).trim();
+            }
+            return null;
+          };
+          if (links && links.length) {
+            const aDev = pickDevice(links.find(Boolean), ['A Optical Device', 'AOpticalDevice', 'AOpticalDevice', 'A Optical Device', 'ADevice', 'A Device', 'ADevice', 'ADevice']);
+            const zDev = pickDevice(links.find(Boolean), ['Z Optical Device', 'ZOpticalDevice', 'ZOpticalDevice', 'Z Optical Device', 'ZDevice', 'Z Device', 'ZDevice', 'ZDevice']);
+            if (aDev) optAPrefix = xomtBaseKey(aDev);
+            if (zDev) optZPrefix = xomtBaseKey(zDev);
+          }
+        } catch {}
+
+        const makeTargetFor = (x: string) => {
+          const cur = xomtPrefixKey(x);
+          const base = xomtBaseKey(x);
+          if (!firstPrefix) firstPrefix = cur;
+          // If we have optical-derived prefixes and the payload contains
+          // many different prefixes, prefer optical matching for assignment.
+          try {
+            const allPrefixes = Array.from(groups.keys()).map(k => xomtBaseKey(String(k))).filter(Boolean);
+            const distinct = Array.from(new Set(allPrefixes));
+            if (distinct.length > 2 && (optAPrefix || optZPrefix)) {
+              if (optAPrefix && base === optAPrefix) return aRows;
+              if (optZPrefix && base === optZPrefix) return zRows;
+              // if not matched, fall through to order-based
+            }
+          } catch {}
+          return cur === firstPrefix ? aRows : zRows;
+        };
         for (const [xomt, items] of Array.from(groups.entries())) {
-          // Determine side by matching site codes if possible
-          const low = String(xomt || '').toLowerCase();
-          const isA = siteAraw && low.includes(siteAraw.toLowerCase());
-          const isZ = siteZraw && low.includes(siteZraw.toLowerCase());
-          // prefer SiteA match -> A, else SiteZ -> Z, else default to A
-          const target = isA ? aRows : isZ ? zRows : aRows;
 
           // find c0 and m0 entries in the group, and capture any EndSku available
           let c0Dev = '';
@@ -1230,6 +1276,8 @@ export default function UIDLookup() {
             'M0 DIFF': m0Dev ? makeDiffLink(m0Dev) : '',
             StartHardwareSku: c0Sku || '',
           };
+          // assign to A or Z based on observed ordering/prefix
+          const target = makeTargetFor(xomt);
           target.push(row);
         }
 
@@ -3067,7 +3115,7 @@ export default function UIDLookup() {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <Text className="side-label">Z Side</Text>
+                <Text className="side-label">Z Side:</Text>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   {(() => { const url = getWanLinkForSide(viewData, 'Z'); return url; })() && (
                     <>

@@ -107,7 +107,7 @@ const UIDSummaryPanel: React.FC<Props> = ({ data, currentUid, style, bare }) => 
   const leftSummary = useMemo(() => {
     if (!summary) return '';
     // Path, Capacity, WF Status, and Type (no explicit Links count in line)
-    return `Path: ${dcFrom} → ${dcTo}\nCapacity: ${capStr}\nWF Status: ${summary.wfDisplay}\nType: ${summary.typeLabel}`;
+    return `Path: ${dcFrom} → ${dcTo}\nTotal: ${capStr}\nWF Status: ${summary.wfDisplay}\nType: ${summary.typeLabel}`;
   }, [dcFrom, dcTo, capStr, summary]);
 
   if (!summary) return null;

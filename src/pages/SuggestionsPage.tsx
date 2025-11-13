@@ -15,20 +15,15 @@ type Suggestion = {
 
 const SUGGESTIONS_KEY = "uidSuggestions";
 
-// Table Storage configuration (client-side). Prefer REACT_APP_* env vars when built.
-// NOTE: For browser-side reads/writes the TABLES_ACCOUNT_URL should include any SAS token required.
-const TABLES_ACCOUNT_URL = (process.env.REACT_APP_TABLES_ACCOUNT_URL as string) || (window as any).REACT_APP_TABLES_ACCOUNT_URL || "https://optical360.table.core.dwindows.net";
+// API endpoint for server-side function (HttpTrigger1). Prefer REACT_APP_API_TRIGGER_URL when built.
+const API_TRIGGER_URL = (process.env.REACT_APP_API_TRIGGER_URL as string) || (window as any).REACT_APP_API_TRIGGER_URL || '/api/HttpTrigger1';
 // Variable name requested: TABLES_TABLE_NAME_SUGGESTIONS. Use env var when present; default to the provided name 'Sugestions'.
 const TABLES_TABLE_NAME_SUGGESTIONS = (process.env.REACT_APP_TABLES_TABLE_NAME_SUGGESTIONS as string) || (process.env as any).TABLES_TABLE_NAME_SUGGESTIONS || (window as any).TABLES_TABLE_NAME_SUGGESTIONS || "Sugestions";
 
 // Helper to build a table endpoint URL. If account URL includes a query (SAS token), additional
 // query params will be appended using '&', otherwise start with '?'.
-function buildTableUrlForTable(tableName: string, suffix = "") {
-  // Ensure no trailing slash on account URL
-  const base = TABLES_ACCOUNT_URL.replace(/\/$/, "");
-  const path = `${base}/${tableName}${suffix}`;
-  return path;
-}
+// We use the server-side function `HttpTrigger1` for table operations,
+// so no direct table URL builder is necessary in the client.
 
 const typeOptions: IDropdownOption[] = [
   { key: "Feature", text: "Feature" },
@@ -73,37 +68,24 @@ const SuggestionsPage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-  // Build URL to query table entities. We will request JSON minimal metadata.
-  const tableName = TABLES_TABLE_NAME_SUGGESTIONS || 'Sugestions';
-        // Query: list entities. Use OData '()' form to query the table itself.
-        // We'll request up to 500 items; ordering will be handled client-side.
-        const suffix = `()?$top=500`;
-        const url = buildTableUrlForTable(tableName, suffix);
+        // Use the server-side function to load suggestions. Provide uid to namespace suggestions
+        // and tableName to target the 'Sugestions' table in the function's chooseTable logic.
+        const tableName = TABLES_TABLE_NAME_SUGGESTIONS || 'Sugestions';
+        const url = `${API_TRIGGER_URL}?uid=suggestions&tableName=${encodeURIComponent(tableName)}`;
+        const headers: Record<string,string> = { 'Accept': 'application/json' };
 
-        const headers: Record<string,string> = {
-          'Accept': 'application/json;odata=nometadata',
-          'Content-Type': 'application/json',
-          // x-ms-version is often accepted by Table endpoints
-          'x-ms-version': '2019-02-02'
-        };
-
-        // Try to fetch from Table Storage directly. If the account URL requires a SAS
-        // token it should be included in TABLES_ACCOUNT_URL.
         let fetchedItems: Suggestion[] = [];
         try {
           // eslint-disable-next-line no-console
-          console.debug('[Suggestions] GET table', url);
-          const res = await fetch(url, { method: 'GET', headers, credentials: 'omit' });
-          if (!res.ok) {
-            throw new Error(`Table GET failed ${res.status}`);
-          }
+          console.debug('[Suggestions] GET via function', url);
+          const res = await fetch(url, { method: 'GET', headers, credentials: 'same-origin' });
+          if (!res.ok) throw new Error(`Function GET failed ${res.status}`);
           const body = await res.json();
-          // Azure Table REST returns entities under 'value'.
-          const entities = Array.isArray(body?.value) ? body.value : (Array.isArray(body) ? body : []);
+          const entities = Array.isArray(body?.items) ? body.items : [];
           fetchedItems = entities.map((e: any) => {
-            const id = e.RowKey || e.rowKey || `${e.savedAt || Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+            const id = e.rowKey || e.RowKey || `${e.savedAt || Date.now()}-${Math.random().toString(36).slice(2,8)}`;
             const ts = (() => {
-              const d = e.savedAt || e.SavedAt || e.Timestamp || e.timestamp || e.RowKey;
+              const d = e.savedAt || e.SavedAt || e.Timestamp || e.timestamp || e.rowKey || e.RowKey;
               const parsed = Date.parse(d || '');
               return Number.isNaN(parsed) ? (e.ts || Date.now()) : parsed;
             })();
@@ -118,14 +100,14 @@ const SuggestionsPage: React.FC = () => {
               authorAlias: e.authorAlias || e.author || undefined,
             } as Suggestion;
           });
-        } catch (tableErr) {
-          // If table fetch fails, fall back to localStorage silently but surface an error.
+        } catch (fnErr) {
+          // Fallback to localStorage if function call fails
           // eslint-disable-next-line no-console
-          console.warn('[Suggestions] Table fetch failed, falling back to localStorage', tableErr);
+          console.warn('[Suggestions] Function GET failed, falling back to localStorage', fnErr);
           const raw = localStorage.getItem(SUGGESTIONS_KEY);
           const arr = raw ? JSON.parse(raw) : [];
           fetchedItems = Array.isArray(arr) ? arr : [];
-          if (!cancelled) setError(String((tableErr as any)?.message || tableErr));
+          if (!cancelled) setError(String((fnErr as any)?.message || fnErr));
         }
 
         if (!cancelled) {
@@ -190,42 +172,44 @@ const SuggestionsPage: React.FC = () => {
     setDescription("");
     setAnonymous(false);
 
-    // Send to Table Storage using REST API. The TABLES_ACCOUNT_URL should include any SAS token
-    // required for browser-side writes. If not available, we skip network save and only keep
-    // the optimistic local entry.
+    // Send suggestion to the server-side function (HttpTrigger1). The function will persist
+    // to the configured table server-side. We provide uid='suggestions' so entries are namespaced.
     (async () => {
       try {
-        // Use the table() endpoint for insert operations
-        const url = buildTableUrlForTable(tableName, '()');
+        const payload = {
+          uid: 'suggestions',
+          category: type,
+          title: s,
+          description: d,
+          owner: anonymous ? undefined : (email || 'Unknown'),
+          timestamp: nowIso,
+          rowKey: rowKey,
+          tableName: tableName,
+        } as any;
+
+        const url = API_TRIGGER_URL;
         const headers: Record<string,string> = {
-          'Accept': 'application/json;odata=nometadata',
-          'Content-Type': 'application/json',
-          'x-ms-version': '2019-02-02'
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
         };
-        // Azure Table REST expects entity body without section wrapper in JSON
         // eslint-disable-next-line no-console
-        console.debug('[Suggestions] POST table', url, entity);
-        const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(entity), credentials: 'omit' });
+        console.debug('[Suggestions] POST via function', url, payload);
+        const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload), credentials: 'same-origin' });
         if (!res.ok) {
           // eslint-disable-next-line no-console
-          console.warn('[Suggestions] Table POST failed', res.status, await res.text());
-          // leave optimistic state; user will still see entry locally
+          console.warn('[Suggestions] Function POST failed', res.status, await res.text());
+          if (!anonymous) setError(`Save failed: ${res.status}`);
         } else {
-          // Optionally refresh list from table to get canonical data
-          // (we'll do a lightweight refresh by re-running the load effect via setting items)
-          // Attempt to read the response; Azure Table returns 201 with entity in body for some SDKs
           try {
             const body = await res.json().catch(() => null);
-            // If body contains a saved entity, we could map and replace optimistic entry.
-            // For now we keep optimistic entry as-is; the background load on next mount or manual refresh
-            // will sync canonical data.
             // eslint-disable-next-line no-console
-            console.debug('[Suggestions] Table POST succeeded', body);
+            console.debug('[Suggestions] Function POST succeeded', body);
           } catch {}
         }
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.warn('[Suggestions] Table POST error', err);
+        console.warn('[Suggestions] Function POST error', err);
+        if (!anonymous) setError(String((err as any)?.message || err));
       }
     })();
   };

@@ -26,6 +26,7 @@ import {
 } from "@fluentui/react";
 import "../Theme.css";
 import datacenterOptions from "../data/datacenterOptions";
+import COUNTRIES from "../data/Countries";
 import { getRackElevationUrl } from "../data/MappedREs";
 import VSOCalendar, { VsoCalendarEvent } from "../components/VSOCalendar";
 import { getCalendarEntries } from "../api/items";
@@ -83,6 +84,11 @@ const VSOAssistant: React.FC = () => {
   const [rackDC, setRackDC] = useState<string>();
   const [dcSearch, setDcSearch] = useState<string>("");
   const [dcSearchZ, setDcSearchZ] = useState<string>("");
+  const [country, setCountry] = useState<string>("");
+  const [countrySearch, setCountrySearch] = useState<string>("");
+  const countryComboRef = React.useRef<IComboBox | null>(null);
+  const [countryPanelOpen, setCountryPanelOpen] = useState<boolean>(false);
+  const [isDecomMode, setIsDecomMode] = useState<boolean>(false);
   const dcComboRef = React.useRef<IComboBox | null>(null);
   const dcComboRefZ = React.useRef<IComboBox | null>(null);
 
@@ -730,6 +736,17 @@ const VSOAssistant: React.FC = () => {
     caretDownWrapper: { color: "#fff" },
   } as const;
 
+  // Build country options from Countries list (allow typing to filter but require selection)
+  const countryOptions: IComboBoxOption[] = useMemo(() => {
+    const base = [...COUNTRIES].sort((a, b) => a.localeCompare(b)).map((c) => ({ key: c, text: c }));
+    const search = (countrySearch || "").toString().trim().toLowerCase();
+    if (!search) return base;
+    // Prefer startsWith matches then includes
+    const starts = base.filter(o => (o.key as string).toLowerCase().startsWith(search));
+    if (starts.length) return starts.concat(base.filter(o => !starts.includes(o) && (o.key as string).toLowerCase().includes(search)));
+    return base.filter(o => (o.key as string).toLowerCase().includes(search) || (o.text || '').toString().toLowerCase().includes(search));
+  }, [countrySearch]);
+
   const dropdownStyles = {
     root: { width: "100%" },
     dropdown: { backgroundColor: "#141414", color: "#fff", borderRadius: 8 },
@@ -794,12 +811,10 @@ const VSOAssistant: React.FC = () => {
     const set = new Set<string>();
     for (const r of result || []) {
       if (!r || typeof r !== 'object') continue;
-      const a = (r as any).FacilityCodeA;
-      const z = (r as any).FacilityCodeZ;
-      if (a && typeof a === 'string' && a.trim()) set.add(a.trim());
-      if (z && typeof z === 'string' && z.trim()) set.add(z.trim());
+      const dc = (r as any).Datacenter || (r as any).DataCenter;
+      if (dc && typeof dc === 'string' && dc.trim()) set.add(dc.trim());
     }
-    // Convert to sorted options
+    // Convert to sorted options (only Datacenter codes present in the DC column)
     return Array.from(set)
       .sort()
       .map((d) => ({ key: d, text: d }));
@@ -1389,6 +1404,8 @@ const VSOAssistant: React.FC = () => {
           }}
         />
 
+        {/* Removed duplicate top-level Decommissioned-by-Country control; use the Decommissioned collapsed panel button instead. */}
+
         {/* Splice Rack A/Z - conditionally shown; selecting one hides the other */}
         <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
           {!facilityCodeZ && (
@@ -1447,22 +1464,111 @@ const VSOAssistant: React.FC = () => {
         )}
 
         <div className="form-buttons" style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button className="submit-btn" onClick={() => handleSubmit()}>
-              Submit
-            </button>
-            {searchDone && (
-              <button
-                className="sleek-btn danger"
-                onClick={() => resetAll()}
-                title="Reset search and form"
-                aria-label="Reset"
-                style={{ minWidth: 96 }}
-              >
-                Reset
-              </button>
-            )}
-          </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="submit-btn" onClick={() => handleSubmit()}>
+                  Submit
+                </button>
+                {searchDone && (
+                  <button
+                    className="sleek-btn danger"
+                    onClick={() => { resetAll(); setCountryPanelOpen(false); setIsDecomMode(false); }}
+                    title="Reset search and form"
+                    aria-label="Reset"
+                    style={{ minWidth: 96 }}
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+
+              {/* Right-aligned collapsed country panel toggle and content */}
+              <div style={{ marginLeft: 12, display: 'flex', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <DefaultButton
+                    text={countryPanelOpen ? 'Hide' : 'Decommissioned Spans'}
+                    onClick={() => setCountryPanelOpen(o => !o)}
+                    styles={{ root: { height: 36, backgroundColor: '#f1c232', color: '#000', borderRadius: 6, border: '1px solid #b38f16' } }}
+                  />
+                </div>
+                {countryPanelOpen && (
+                  <div style={{ display: 'flex', gap: 8, marginLeft: 8, alignItems: 'center', width: 520 }}>
+                    <div style={{ flex: 1 }}>
+                      <ComboBox
+                        placeholder="Type or select a country"
+                        options={countryOptions}
+                        selectedKey={country || undefined}
+                        allowFreeform={true}
+                        autoComplete="on"
+                        useComboBoxAsMenuWidth
+                        calloutProps={{ className: 'combo-dark-callout' }}
+                        componentRef={countryComboRef}
+                        onClick={() => countryComboRef.current?.focus(true)}
+                        onFocus={() => countryComboRef.current?.focus(true)}
+                        styles={{ ...comboBoxStyles, root: { width: 340 } } as any}
+                        onChange={(_, option, index, value) => {
+                          const typed = (value || "").toString().toLowerCase();
+                          const found = countryOptions.find((c) => {
+                            const keyStr = (c.key || "").toString().toLowerCase();
+                            const textStr = (c.text || "").toString().toLowerCase();
+                            return textStr === typed || keyStr === typed;
+                          });
+
+                          if (option) {
+                            const selectedKey = option.key?.toString() ?? "";
+                            if (selectedKey === "") { setCountry(""); return; }
+                            if (selectedKey === country) {
+                              setCountry("");
+                            } else {
+                              setCountry(selectedKey);
+                            }
+                          } else if (found) {
+                            setCountry(found.key.toString());
+                          } else {
+                            // reset if invalid typed text
+                            setCountry("");
+                          }
+                        }}
+                        onPendingValueChanged={(option, index, value) => {
+                          setCountrySearch(value || "");
+                        }}
+                        onMenuDismiss={() => setCountrySearch("")}
+                      />
+                    </div>
+                    <div style={{ width: 100, display: 'flex', alignItems: 'center' }}>
+                      <PrimaryButton
+                        text="Lookup"
+                        disabled={!country}
+                        styles={{ root: { height: 36 } }}
+                        onClick={async () => {
+                          setLoading(true);
+                          setError(null);
+                          setResult([]);
+                          setIsDecomMode(true);
+                          setShowAll(true); // show all decom'd spans
+                          try {
+                            const logicAppUrl = "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net:443/api/VSO/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=6ViXNM-TmW5F7Qd9_e4fz3IhRNqmNzKwovWvcmuNJto";
+                            const payload = { Stage: "10", Country: country };
+                            const resp = await fetch(logicAppUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                            const data: LogicAppResponse = await resp.json();
+                            const spans = Array.isArray(data?.Spans) ? data.Spans : (data?.Spans ? [data.Spans] : []);
+                            setResult(spans as any);
+                            if (data?.RackElevationUrl) setRackUrl(data.RackElevationUrl);
+                            if (data?.DataCenter) setRackDC(data.DataCenter);
+                          } catch (e: any) {
+                            setError(String(e?.message || e));
+                          } finally {
+                            setLoading(false);
+                            setSearchDone(true);
+                          }
+                        }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
         </div>
 
         {loading && <Spinner label="Loading results..." size={SpinnerSize.medium} styles={{ root: { marginTop: 15 } }} />}
@@ -1528,17 +1634,17 @@ const VSOAssistant: React.FC = () => {
                   const totalSpans = result.length;
                   const productionCount = result.filter(r => (r.Status || '').toString().toLowerCase() === 'inproduction').length;
                   return (
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <div style={{ background: '#071821', border: '1px solid #20343f', padding: '8px 12px', borderRadius: 8, display: 'flex', gap: 12, alignItems: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}>
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: 18, fontWeight: 700, color: '#dfefff' }}>{totalSpans}</div>
-                          <div style={{ fontSize: 11, color: '#9fb3c6' }}>Total Spans</div>
-                        </div>
-                        <div style={{ width: 1, height: 34, background: '#23343c', margin: '0 6px' }} />
-                        <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: 18, fontWeight: 700, color: '#8fe3a3' }}>{productionCount}</div>
-                          <div style={{ fontSize: 11, color: '#9fb3c6' }}>In Production</div>
-                        </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ background: '#071821', border: '1px solid #20343f', padding: '6px 10px', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}>
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: 18, fontWeight: 700, color: '#dfefff' }}>{totalSpans}</div>
+                                <div style={{ fontSize: 11, color: '#9fb3c6' }}>Total Spans</div>
+                              </div>
+                              {/* divider removed to tighten layout */}
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: 18, fontWeight: 700, color: '#8fe3a3' }}>{productionCount}</div>
+                                <div style={{ fontSize: 11, color: '#9fb3c6' }}>In Production</div>
+                              </div>
                       </div>
                     </div>
                   );
@@ -1549,8 +1655,10 @@ const VSOAssistant: React.FC = () => {
               <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: 220 }}>
                 {(() => {
                   const resolvedDC = rackDC || facilityCodeA || facilityCodeZ;
-                  const otherOptions = availableDcOptions.filter(o => o.key !== resolvedDC);
-                  const options = resolvedDC ? [{ key: resolvedDC, text: resolvedDC }, ...otherOptions] : otherOptions;
+                  // Only list DCs that are present in the current results table
+                  const options = resolvedDC
+                    ? [{ key: resolvedDC, text: resolvedDC }, ...availableDcOptions.filter(o => o.key !== resolvedDC)]
+                    : availableDcOptions;
 
                   const headerDropdownStyles = {
                     ...dropdownStyles,
@@ -1584,9 +1692,11 @@ const VSOAssistant: React.FC = () => {
 
               {/* Right: controls */}
               <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: 12, alignItems: 'center' }}>
-                <button className="rack-btn slim" onClick={() => setShowAll(!showAll)}>
-                  {showAll ? "Show Only Production" : "Show All Spans"}
-                </button>
+                {!isDecomMode && (
+                  <button className="rack-btn slim" onClick={() => setShowAll(!showAll)}>
+                    {showAll ? "Show Only Production" : "Show All Spans"}
+                  </button>
+                )}
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   <Toggle
                     label="Simplified view"
@@ -1629,6 +1739,11 @@ const VSOAssistant: React.FC = () => {
                     {row.SpanID}
                   </a>
                 ) },
+                { key: 'Datacenter', label: 'DC', render: (row: SpanData) => {
+                  // Prefer explicit Datacenter/ DataCenter on the row, fallback to rackDC or facility codes
+                  const v = (row as any).Datacenter || (row as any).DataCenter || rackDC || (row as any).FacilityCodeA || (row as any).FacilityCodeZ || '';
+                  return String(v || '');
+                } },
                 { key: 'FacilityCodeA', label: 'Facility A' },
                 { key: 'FacilityCodeZ', label: 'Facility Z' },
                 { key: 'IDF_A', label: 'IDF A' },
@@ -1681,27 +1796,36 @@ const VSOAssistant: React.FC = () => {
                 dynamicCols = candidate.filter(c => c.key === 'SpanID' || hasValue(c.key));
               }
               // Compute a fair percent width per column for the detailed view so columns fit evenly
-              // Use more aggressive compression: allow as small as 4% per column when many columns present
-              const colWidthPercent = dynamicCols && dynamicCols.length ? Math.max(4, Math.floor(100 / dynamicCols.length)) : 12;
+              // Use more aggressive compression: allow as small as 3% per column when many columns present
+              const colWidthPercent = dynamicCols && dynamicCols.length ? Math.max(3, Math.floor(100 / dynamicCols.length)) : 12;
 
               return (
-                <table className="data-table compact" style={{ fontSize: 12, tableLayout: 'fixed', width: '100%', borderCollapse: 'collapse', marginLeft: -6 }}>
+                <table className="data-table compact" style={{ fontSize: 11, tableLayout: 'fixed', width: '100%', borderCollapse: 'collapse', marginLeft: -6 }}>
                   <thead>
                     <tr>
                       <th style={{ width: 30, padding: '2px 4px' }}></th>
                       {dynamicCols.map(c => (
                         <th
-                          key={c.key}
-                          onClick={() => handleSort(c.key)}
-                          style={{
-                            // reduce horizontal padding so content shifts left and leaves more room to the right
-                            padding: '4px 4px',
+                                key={c.key}
+                                onClick={() => handleSort(c.key)}
+                                style={{
+                                // reduce horizontal padding so content shifts left and leaves more room to the right
+                                padding: '1px 6px',
                             cursor: 'pointer',
                             whiteSpace: 'nowrap',
                             fontWeight: 500,
                             // Use even percentage widths for detailed view so columns fit; keep small fixed widths for certain keys
                             // Give Diversity a bit more space so the colored pill doesn't get clipped.
-                            width: (c.key === 'SpanID') ? '10ch' : (c.key === 'Diversity' ? '8%' : (c.key === 'FacilityCodeA' ? '6ch' : (c.key === 'FacilityCodeZ' ? '6ch' : (c.key === 'IDF_A' ? '5ch' : (c.key === 'Status' ? '8%' : `${colWidthPercent}%`))))),
+                                width: (c.key === 'SpanID') ? '8ch'
+                                  : (c.key === 'Datacenter') ? '4ch'
+                                  : (c.key === 'Diversity') ? '7%'
+                                  : (c.key === 'FacilityCodeA') ? '5ch'
+                                  : (c.key === 'FacilityCodeZ') ? '5ch'
+                                  : (c.key === 'IDF_A') ? '5ch'
+                                  : (c.key === 'SpliceRackZ' || c.key === 'SpliceRackZ_Unit') ? '5ch'
+                                  : (c.key === 'WiringScope') ? '6ch'
+                                  : (c.key === 'Status') ? '12%'
+                                  : `${colWidthPercent}%`,
                             ...(c.key === 'Diversity' ? { paddingLeft: 10 } : {}),
                             ...(c.key === 'SpanID' ? { textAlign: 'center' as const } : {})
                           }}
@@ -1760,14 +1884,23 @@ const VSOAssistant: React.FC = () => {
 
                             const baseStyle: React.CSSProperties = {
                               // reduce horizontal padding so content shifts left and gives more room for status pills
-                              padding: '4px 4px',
+                              padding: '1px 6px',
                               whiteSpace: 'nowrap',
                               // Always clip overflow and use ellipsis to avoid overlapping adjacent columns
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
                               // keep small fixed widths for id columns; otherwise use percent. Use small maxWidth to compress.
-                              width: (c.key === 'SpanID') ? '10ch' : (c.key === 'Diversity' ? '8%' : (c.key === 'FacilityCodeA' ? '6ch' : (c.key === 'FacilityCodeZ' ? '6ch' : (c.key === 'IDF_A' ? '5ch' : (c.key === 'Status' ? '8%' : `${colWidthPercent}%`))))),
-                              maxWidth: (c.key === 'SpanID') ? '10ch' : (c.key === 'FacilityCodeA' ? '6ch' : (c.key === 'FacilityCodeZ' ? '6ch' : (c.key === 'IDF_A' ? '5ch' : '10ch'))),
+                              width: (c.key === 'SpanID') ? '8ch'
+                                : (c.key === 'Datacenter') ? '4ch'
+                                : (c.key === 'Diversity') ? '7%'
+                                : (c.key === 'FacilityCodeA') ? '5ch'
+                                : (c.key === 'FacilityCodeZ') ? '5ch'
+                                : (c.key === 'IDF_A') ? '5ch'
+                                : (c.key === 'SpliceRackZ' || c.key === 'SpliceRackZ_Unit') ? '5ch'
+                                : (c.key === 'WiringScope') ? '6ch'
+                                : (c.key === 'Status') ? '12%'
+                                : `${colWidthPercent}%`,
+                              maxWidth: (c.key === 'SpanID') ? '8ch' : (c.key === 'Datacenter' ? '4ch' : (c.key === 'FacilityCodeA' ? '5ch' : (c.key === 'FacilityCodeZ' ? '5ch' : (c.key === 'IDF_A' ? '5ch' : '8ch')))),
                               ...(c.key === 'Diversity' ? { paddingLeft: 10 } : {}),
                               ...(c.key === 'SpanID' ? { textAlign: 'center' as const } : {})
                             };

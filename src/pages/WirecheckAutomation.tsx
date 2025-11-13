@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { PrimaryButton, Dialog, DialogType, DialogFooter, DefaultButton, MessageBar, MessageBarType } from '@fluentui/react';
 import '../Theme.css';
+import wireImage from '../assets/image.png';
 
 const WirecheckAutomation: React.FC = () => {
   const [description] = useState<string>(() => {
@@ -92,16 +93,16 @@ const WirecheckAutomation: React.FC = () => {
         <div style={{ padding: 20, textAlign: 'center' }}>
           {/* much larger image for easier viewing - wrapped so it can scroll horizontally */}
           <div style={{ overflowX: 'hidden', paddingBottom: 8 }}>
-            {/* image removed - placeholder area kept for layout */}
-            <div style={{ width: '100%', height: 240, margin: '12px auto', background: '#f3f3f3', borderRadius: 6, border: '1px dashed #ddd', color: '#666', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <span>Wirecheck image removed (asset not tracked)</span>
+            {/* user's wirecheck image (from src/assets/image.png) - show full image without scrollbars */}
+            <div style={{ width: '100%', margin: '12px auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img src={wireImage} alt="Wirecheck automation" style={{ width: '100%', height: 'auto', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
             </div>
           </div>
 
           <div style={{ marginTop: 18, textAlign: 'left', lineHeight: 1.5 }}>
             {/* SharePoint-style rich description */}
             <div className="wirecheck-description" style={{ background: 'transparent', padding: 12 }}>
-              <h2 style={{ marginTop: 0 }}>Wirecheck Automation Video Tutorial: Streamlining Link Validation in Clock Warp</h2>
+              <h2 style={{ marginTop: 0 }}>Wirecheck Automation Tutorial: Streamlining Link Validation in Clock Warp</h2>
 
               <p style={{ marginTop: 6 }}>
                 In this video, I'll walk you through my custom-built <strong>Wirecheck Automation</strong>—a JavaScript-based browser automation tool

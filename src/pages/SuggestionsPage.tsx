@@ -16,9 +16,10 @@ type Suggestion = {
 const SUGGESTIONS_KEY = "uidSuggestions";
 
 // Table Storage configuration (client-side). Prefer REACT_APP_* env vars when built.
-const TABLES_ACCOUNT_URL = (process.env.REACT_APP_TABLES_ACCOUNT_URL as string) || (window as any).REACT_APP_TABLES_ACCOUNT_URL || "https://optical360.table.core.windows.net";
-// Variable name requested: TABLES_TABLE_NAME_SUGGESTIONS. Try common env forms; default to 'Suggestions'.
-const TABLES_TABLE_NAME_SUGGESTIONS = (process.env.REACT_APP_TABLES_TABLE_NAME_SUGGESTIONS as string) || (process.env as any).TABLES_TABLE_NAME_SUGGESTIONS || (window as any).TABLES_TABLE_NAME_SUGGESTIONS || "Suggestions";
+// NOTE: For browser-side reads/writes the TABLES_ACCOUNT_URL should include any SAS token required.
+const TABLES_ACCOUNT_URL = (process.env.REACT_APP_TABLES_ACCOUNT_URL as string) || (window as any).REACT_APP_TABLES_ACCOUNT_URL || "https://optical360.table.core.dwindows.net";
+// Variable name requested: TABLES_TABLE_NAME_SUGGESTIONS. Use env var when present; default to the provided name 'Sugestions'.
+const TABLES_TABLE_NAME_SUGGESTIONS = (process.env.REACT_APP_TABLES_TABLE_NAME_SUGGESTIONS as string) || (process.env as any).TABLES_TABLE_NAME_SUGGESTIONS || (window as any).TABLES_TABLE_NAME_SUGGESTIONS || "Sugestions";
 
 // Helper to build a table endpoint URL. If account URL includes a query (SAS token), additional
 // query params will be appended using '&', otherwise start with '?'.
@@ -72,8 +73,8 @@ const SuggestionsPage: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        // Build URL to query table entities. We will request JSON minimal metadata.
-        const tableName = TABLES_TABLE_NAME_SUGGESTIONS || 'Suggestions';
+  // Build URL to query table entities. We will request JSON minimal metadata.
+  const tableName = TABLES_TABLE_NAME_SUGGESTIONS || 'Sugestions';
         // Query: list entities. Use OData '()' form to query the table itself.
         // We'll request up to 500 items; ordering will be handled client-side.
         const suffix = `()?$top=500`;
@@ -160,7 +161,7 @@ const SuggestionsPage: React.FC = () => {
     // Build entity for Azure Table Storage
     const nowIso = new Date().toISOString();
     const rowKey = nowIso;
-    const tableName = TABLES_TABLE_NAME_SUGGESTIONS || 'Suggestions';
+  const tableName = TABLES_TABLE_NAME_SUGGESTIONS || 'Sugestions';
     const entity: Record<string, unknown> = {
       PartitionKey: 'Suggestions',
       RowKey: rowKey,
@@ -194,7 +195,8 @@ const SuggestionsPage: React.FC = () => {
     // the optimistic local entry.
     (async () => {
       try {
-        const url = buildTableUrlForTable(tableName, '');
+        // Use the table() endpoint for insert operations
+        const url = buildTableUrlForTable(tableName, '()');
         const headers: Record<string,string> = {
           'Accept': 'application/json;odata=nometadata',
           'Content-Type': 'application/json',

@@ -452,10 +452,12 @@ export default function UIDLookup() {
       return;
     }
     setProjectLoadError(null);
-    // Keep previous combinedData visible until at least one UID returns
-    // meaningful content. This avoids clearing the tables immediately on
-    // Refresh and provides a smoother UX.
-    const prevCombined = combinedData;
+    // Prepare loading state: keep previous combinedData visible until at least
+    // one UID returns meaningful content. This avoids clearing the tables
+    // immediately on Refresh and provides a smoother UX.
+    setProjectTotalCount(uids.length);
+    setProjectLoadingCount(0);
+    setIsProjectLoading(true);
     const partialResults: any[] = [];
     let firstMeaningfulSeen = false;
 

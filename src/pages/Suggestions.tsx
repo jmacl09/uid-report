@@ -3,6 +3,9 @@ import { Stack, Text, TextField, PrimaryButton, IconButton, Dropdown, IDropdownO
 import { saveToStorage } from "../api/saveToStorage";
 import { getAllSuggestions } from "../api/items";
 
+// Explicit Function endpoint to ensure the Suggestions page posts to the deployed function
+const SUGGESTIONS_FUNCTION_ENDPOINT = "https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1";
+
 // Simple suggestion model
 type Suggestion = {
   id: string;
@@ -62,7 +65,7 @@ const SuggestionsPage: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
-        const rows = await getAllSuggestions();
+        const rows = await getAllSuggestions(SUGGESTIONS_FUNCTION_ENDPOINT);
         if (cancelled) return;
         const mapped: Suggestion[] = (rows || []).map((e: any) => {
           const rk = (e.rowKey || e.RowKey || e.rowkey || '').toString();
@@ -124,6 +127,7 @@ const SuggestionsPage: React.FC = () => {
         title: s,
         description: d,
         owner: anonymous ? 'Anonymous' : (alias || email || 'Unknown'),
+        endpoint: SUGGESTIONS_FUNCTION_ENDPOINT,
       }).then(async (resultText) => {
         try {
           const parsed = JSON.parse(resultText);
@@ -155,7 +159,7 @@ const SuggestionsPage: React.FC = () => {
         // Refresh list after short delay to pick up other people's suggestions too
         await new Promise(resolve => setTimeout(resolve, 900));
         try {
-          const rows = await getAllSuggestions();
+          const rows = await getAllSuggestions(SUGGESTIONS_FUNCTION_ENDPOINT);
           if (rows && rows.length) {
             const mapped = rows.map((e: any) => {
               const rk = (e.rowKey || e.RowKey || e.rowkey || '').toString();

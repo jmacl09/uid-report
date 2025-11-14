@@ -116,11 +116,11 @@ const SuggestionsPage: React.FC = () => {
     setDescription("");
     setAnonymous(false);
 
-    // Fire-and-forget save to server. Use a shared 'public' uid so rows land in the Suggestions table
+    // Fire-and-forget save to server. Suggestions are global so we do not require a UID.
     try {
       void saveToStorage({
         category: 'Suggestions',
-        uid: 'public',
+        uid: '',
         title: s,
         description: d,
         owner: anonymous ? 'Anonymous' : (alias || email || 'Unknown'),

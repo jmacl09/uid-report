@@ -111,6 +111,7 @@ app.http('HttpTrigger1', {
                             const cat = opts.category || opts.Category;
                             if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
                             if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                            if (cat && String(cat).toLowerCase() === 'suggestions') return process.env.TABLES_TABLE_NAME_SUGGESTIONS || 'Suggestions';
                             if (cat && String(cat).toLowerCase() === 'status') return process.env.TABLES_TABLE_NAME_STATUS || 'UIDStatus';
                             if (cat && String(cat).toLowerCase() === 'projects') return process.env.TABLES_TABLE || process.env.TABLES_TABLE_NAME || 'Projects';
                         }
@@ -119,6 +120,7 @@ app.http('HttpTrigger1', {
                             const cat = opts;
                             if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
                             if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                                if (cat && String(cat).toLowerCase() === 'suggestions') return process.env.TABLES_TABLE_NAME_SUGGESTIONS || 'Suggestions';
                             if (cat && String(cat).toLowerCase() === 'status') return process.env.TABLES_TABLE_NAME_STATUS || 'UIDStatus';
                         }
                     } catch (e) {
@@ -192,6 +194,7 @@ app.http('HttpTrigger1', {
                             const cat = opts.category || opts.Category;
                             if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
                             if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                            if (cat && String(cat).toLowerCase() === 'suggestions') return process.env.TABLES_TABLE_NAME_SUGGESTIONS || 'Suggestions';
                             if (cat && String(cat).toLowerCase() === 'projects') return process.env.TABLES_TABLE || process.env.TABLES_TABLE_NAME || 'Projects';
                             if (cat && String(cat).toLowerCase() === 'status') return process.env.TABLES_TABLE_NAME_STATUS || 'UIDStatus';
                         }
@@ -199,6 +202,7 @@ app.http('HttpTrigger1', {
                             const cat = opts;
                             if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
                             if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                            if (cat && String(cat).toLowerCase() === 'suggestions') return process.env.TABLES_TABLE_NAME_SUGGESTIONS || 'Suggestions';
                         }
                     } catch (e) {}
                     return process.env.TABLES_TABLE || process.env.TABLES_TABLE_NAME || 'Projects';
@@ -242,8 +246,13 @@ app.http('HttpTrigger1', {
         }
 
         const { category, uid, title, description, owner, timestamp, rowKey } = payload || {};
-        if (!uid || !category || !title) {
-            return { status: 400, headers: corsHeaders, jsonBody: { ok: false, error: 'Missing required fields: uid, category, title' } };
+        // Allow Suggestions to be saved without a UID (they are global/community entries).
+        const catLower = (category || '').toString().toLowerCase();
+        if (!category || !title) {
+            return { status: 400, headers: corsHeaders, jsonBody: { ok: false, error: 'Missing required fields: category, title' } };
+        }
+        if (catLower !== 'suggestions' && !uid) {
+            return { status: 400, headers: corsHeaders, jsonBody: { ok: false, error: 'Missing required field: uid' } };
         }
 
         try {
@@ -256,6 +265,7 @@ app.http('HttpTrigger1', {
                         const cat = opts.category || opts.Category;
                         if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
                         if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                        if (cat && String(cat).toLowerCase() === 'suggestions') return process.env.TABLES_TABLE_NAME_SUGGESTIONS || 'Suggestions';
                         if (cat && String(cat).toLowerCase() === 'projects') return process.env.TABLES_TABLE || process.env.TABLES_TABLE_NAME || 'Projects';
                         if (cat && String(cat).toLowerCase() === 'status') return process.env.TABLES_TABLE_NAME_STATUS || 'UIDStatus';
                     }
@@ -263,6 +273,7 @@ app.http('HttpTrigger1', {
                         const cat = opts;
                         if (cat && String(cat).toLowerCase() === 'calendar') return process.env.TABLES_TABLE_NAME_VSO || 'VsoCalendar';
                         if (cat && String(cat).toLowerCase() === 'troubleshooting') return process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || 'Troubleshooting';
+                        if (cat && String(cat).toLowerCase() === 'suggestions') return process.env.TABLES_TABLE_NAME_SUGGESTIONS || 'Suggestions';
                         if (cat && String(cat).toLowerCase() === 'status') return process.env.TABLES_TABLE_NAME_STATUS || 'UIDStatus';
                     }
                 } catch (e) {}
@@ -286,7 +297,7 @@ app.http('HttpTrigger1', {
             // Build entity with canonical fields and also copy any additional payload keys
             // so callers can persist extra metadata (e.g., Status, dcCode, spans, etc.).
             const entity = {
-                partitionKey: `UID_${uid}`,
+                partitionKey: (catLower === 'suggestions') ? 'Suggestions' : `UID_${uid}`,
                 rowKey: resolvedRowKey,
                 category,
                 title,

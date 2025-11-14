@@ -118,8 +118,31 @@ app.http('HttpTrigger1', {
                         context.log(`[Table] GET all (${category}) table=${tableName} auth=${auth}`);
                         await ensureTable();
 
-                        const items = [];
-                        for await (const e of client.listEntities()) items.push(e);
+                                const items = [];
+                                for await (const rawEntity of client.listEntities()) {
+                                    // Normalize entity shape for consistent JSON output
+                                    const entity = {};
+                                    try {
+                                        // copy known commonly-used fields with stable names
+                                        entity.partitionKey = rawEntity.partitionKey || rawEntity.PartitionKey || rawEntity.PK || rawEntity.Partition || '';
+                                        entity.rowKey = rawEntity.rowKey || rawEntity.RowKey || rawEntity.RK || rawEntity.row || '';
+                                        entity.category = rawEntity.category || rawEntity.Category || '';
+                                        entity.title = rawEntity.title || rawEntity.Title || rawEntity.projectName || rawEntity.ProjectName || '';
+                                        entity.description = rawEntity.description || rawEntity.Description || '';
+                                        entity.owner = rawEntity.owner || rawEntity.Owner || '';
+                                        entity.savedAt = rawEntity.savedAt || rawEntity.savedAt || rawEntity.Timestamp || rawEntity.timestamp || entity.rowKey || new Date().toISOString();
+                                        // Copy any other user props (avoid prototype keys)
+                                        for (const k of Object.keys(rawEntity || {})) {
+                                            if (!Object.prototype.hasOwnProperty.call(entity, k)) {
+                                                try { entity[k] = rawEntity[k]; } catch { }
+                                            }
+                                        }
+                                    } catch (e) {
+                                        // fallback to raw entity if normalization fails
+                                        try { Object.assign(entity, rawEntity); } catch { }
+                                    }
+                                    items.push(entity);
+                                }
 
                         items.sort((a, b) => (a.rowKey < b.rowKey ? 1 : -1));
 
@@ -148,9 +171,26 @@ app.http('HttpTrigger1', {
                 if (category) filter.push(`(category eq '${category}' or Category eq '${category}')`);
 
                 const items = [];
-                for await (const e of client.listEntities({ queryOptions: { filter: filter.join(' and ') } })) {
-                    items.push(e);
-                }
+                        for await (const rawEntity of client.listEntities({ queryOptions: { filter: filter.join(' and ') } })) {
+                            const entity = {};
+                            try {
+                                entity.partitionKey = rawEntity.partitionKey || rawEntity.PartitionKey || rawEntity.PK || rawEntity.Partition || '';
+                                entity.rowKey = rawEntity.rowKey || rawEntity.RowKey || rawEntity.RK || rawEntity.row || '';
+                                entity.category = rawEntity.category || rawEntity.Category || '';
+                                entity.title = rawEntity.title || rawEntity.Title || '';
+                                entity.description = rawEntity.description || rawEntity.Description || '';
+                                entity.owner = rawEntity.owner || rawEntity.Owner || '';
+                                entity.savedAt = rawEntity.savedAt || rawEntity.savedAt || rawEntity.Timestamp || rawEntity.timestamp || entity.rowKey || new Date().toISOString();
+                                for (const k of Object.keys(rawEntity || {})) {
+                                    if (!Object.prototype.hasOwnProperty.call(entity, k)) {
+                                        try { entity[k] = rawEntity[k]; } catch { }
+                                    }
+                                }
+                            } catch (e) {
+                                try { Object.assign(entity, rawEntity); } catch { }
+                            }
+                            items.push(entity);
+                        }
 
                 items.sort((a, b) => (a.rowKey < b.rowKey ? 1 : -1));
 

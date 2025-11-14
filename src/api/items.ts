@@ -267,6 +267,56 @@ export async function getAllProjects(endpoint?: string): Promise<NoteEntity[]> {
 }
 
 /**
+ * Fetch all Suggestions rows (no uid) so the Suggestions page can show community submissions.
+ */
+export async function getAllSuggestions(endpoint?: string): Promise<NoteEntity[]> {
+  const rawEndpoint = endpoint || 'HttpTrigger1';
+  const isAbsolute = /^https?:\/\//i.test(rawEndpoint);
+  const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
+  const url = `${base}?category=${encodeURIComponent('Suggestions')}&tableName=${encodeURIComponent('Suggestions')}&TableName=${encodeURIComponent('Suggestions')}&targetTable=${encodeURIComponent('Suggestions')}`;
+  const parseList = (text: string) => {
+    try {
+      const data = JSON.parse(text);
+      if (Array.isArray(data)) return data as NoteEntity[];
+      if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+      if (data?.value && Array.isArray(data.value)) return data.value as NoteEntity[];
+      if (data?.entity && Array.isArray(data.entity)) return data.entity as NoteEntity[];
+      if (data?.Entity && Array.isArray(data.Entity)) return data.Entity as NoteEntity[];
+      return [];
+    } catch {
+      return [];
+    }
+  };
+
+  try {
+    const res = await fetch(url, { method: 'GET' });
+    const text = await res.text();
+    if (!res.ok) {
+      // eslint-disable-next-line no-console
+      console.warn(`getAllSuggestions returned ${res.status}: ${text}`);
+    }
+    let parsed = parseList(text);
+    // If proxied API returned nothing and we used a non-absolute endpoint, try the absolute Function URL as a fallback
+    if ((!parsed || !parsed.length) && !isAbsolute) {
+      try {
+        const DEFAULT_FUNCTION_URL = 'https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1';
+        const fbRes = await fetch(`${DEFAULT_FUNCTION_URL}?category=${encodeURIComponent('Suggestions')}&tableName=${encodeURIComponent('Suggestions')}&TableName=${encodeURIComponent('Suggestions')}&targetTable=${encodeURIComponent('Suggestions')}`, { method: 'GET' });
+        const fbText = await fbRes.text();
+        parsed = parseList(fbText);
+      } catch (fbErr) {
+        // eslint-disable-next-line no-console
+        console.warn('[getAllSuggestions] fallback network error', fbErr);
+      }
+    }
+    return parsed || [];
+  } catch (networkErr) {
+    // eslint-disable-next-line no-console
+    console.warn('[getAllSuggestions] Network error', networkErr);
+    return [];
+  }
+}
+
+/**
  * Fetch status entries for a given UID (category=Status).
  * This will be used by the UI to load persisted status fields such as
  * expectedDeliveryDate for the UIDStatusPanel.

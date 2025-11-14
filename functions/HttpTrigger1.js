@@ -73,12 +73,12 @@ app.http('HttpTrigger1', {
                 if (!uid) {
                     // If no UID supplied, allow listing Projects across the table when requested.
                     const catLower = (category || '').toString().toLowerCase();
-                    if (catLower === 'projects') {
+                    if (catLower === 'projects' || catLower === 'suggestions') {
                         try {
                             const qTable = url.searchParams.get('tableName') || url.searchParams.get('TableName') || url.searchParams.get('targetTable');
                             const tableName = chooseTable(qTable ? { tableName: qTable, category } : { category });
                             const { client, ensureTable, auth } = getTableClient(tableName);
-                            context.log && context.log(`[Table] GET all Projects -> table=${tableName} auth=${auth}`);
+                            context.log && context.log(`[Table] GET all ${catLower === 'projects' ? 'Projects' : 'Suggestions'} -> table=${tableName} auth=${auth}`);
                             await ensureTable();
                             const items = [];
                             for await (const entity of client.listEntities()) items.push(entity);
@@ -88,7 +88,7 @@ app.http('HttpTrigger1', {
                                 const bk = b.rowKey || b.savedAt || '';
                                 return ak < bk ? 1 : ak > bk ? -1 : 0;
                             });
-                            return { status: 200, headers: corsHeaders, jsonBody: { ok: true, category: 'Projects', count: items.length, items } };
+                            return { status: 200, headers: corsHeaders, jsonBody: { ok: true, category: catLower === 'projects' ? 'Projects' : (catLower === 'suggestions' ? 'Suggestions' : 'Projects'), count: items.length, items } };
                         } catch (e) {
                             return { status: 500, headers: corsHeaders, jsonBody: { ok: false, error: String(e?.message || e) } };
                         }

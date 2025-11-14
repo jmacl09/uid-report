@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Stack, Text, TextField, PrimaryButton, IconButton, Dropdown, IDropdownOption, Checkbox } from "@fluentui/react";
+import { saveToStorage } from "../api/saveToStorage";
+import { getAllSuggestions } from "../api/items";
 
 // Simple suggestion model
 type Suggestion = {
@@ -55,6 +57,40 @@ const SuggestionsPage: React.FC = () => {
     try { localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(items)); } catch {}
   }, [items]);
 
+  // Load server-side suggestions on mount
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await getAllSuggestions();
+        if (cancelled) return;
+        const mapped: Suggestion[] = (rows || []).map((e: any) => {
+          const rk = (e.rowKey || e.RowKey || e.rowkey || '').toString();
+          const saved = (e.savedAt || e.savedAt || e.Timestamp || e.timestamp || e.savedAt || rk || new Date().toISOString()).toString();
+          const ts = Number.isFinite(Date.parse(saved)) ? Date.parse(saved) : Date.now();
+          return {
+            id: rk || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+            ts,
+            type: (e.category || e.Category || 'Other').toString(),
+            summary: (e.title || e.Title || '').toString(),
+            description: (e.description || e.Description || '').toString(),
+            anonymous: String((e.owner || e.Owner || '')).toLowerCase() === 'anonymous',
+            authorAlias: (e.owner || e.Owner || '').toString() || undefined,
+          } as Suggestion;
+        });
+        if (mapped && mapped.length) setItems(prev => {
+          // merge server items with local optimistic ones (by id)
+          const existingIds = new Set(mapped.map(m => m.id));
+          const leftovers = prev.filter(p => !existingIds.has(p.id));
+          return [...mapped, ...leftovers];
+        });
+      } catch (e) {
+        // ignore failures; keep local-only suggestions
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const email = getEmail();
   const alias = getAlias(email);
 
@@ -73,11 +109,80 @@ const SuggestionsPage: React.FC = () => {
       authorEmail: anonymous ? undefined : (email || undefined),
       authorAlias: anonymous ? undefined : (alias || undefined),
     };
-    setItems([next, ...items]);
+    // optimistic update
+    setItems(prev => [next, ...prev]);
     // reset
     setSummary("");
     setDescription("");
     setAnonymous(false);
+
+    // Fire-and-forget save to server. Use a shared 'public' uid so rows land in the Suggestions table
+    try {
+      void saveToStorage({
+        category: 'Suggestions',
+        uid: 'public',
+        title: s,
+        description: d,
+        owner: anonymous ? 'Anonymous' : (alias || email || 'Unknown'),
+      }).then(async (resultText) => {
+        try {
+          const parsed = JSON.parse(resultText);
+          const entity = (parsed?.entity || parsed?.Entity) as any | undefined;
+          if (entity) {
+            const rk = (entity.rowKey || entity.RowKey || '').toString();
+            const saved = (entity.savedAt || entity.timestamp || entity.Timestamp || rk || new Date().toISOString()).toString();
+            const ts = Number.isFinite(Date.parse(saved)) ? Date.parse(saved) : Date.now();
+            const official: Suggestion = {
+              id: rk || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+              ts,
+              type: (entity.category || entity.Category || 'Other').toString(),
+              summary: (entity.title || entity.Title || '').toString(),
+              description: (entity.description || entity.Description || '').toString(),
+              anonymous: String((entity.owner || entity.Owner || '')).toLowerCase() === 'anonymous',
+              authorAlias: (entity.owner || entity.Owner || '').toString() || undefined,
+            };
+            // replace optimistic entry (match by summary+description and optimistic id) conservatively
+            setItems(prev => {
+              const idx = prev.findIndex(x => x.id === id);
+              if (idx === -1) return [official, ...prev];
+              const copy = [...prev]; copy[idx] = official; return copy;
+            });
+          }
+        } catch {
+          // ignore parse errors
+        }
+
+        // Refresh list after short delay to pick up other people's suggestions too
+        await new Promise(resolve => setTimeout(resolve, 900));
+        try {
+          const rows = await getAllSuggestions();
+          if (rows && rows.length) {
+            const mapped = rows.map((e: any) => {
+              const rk = (e.rowKey || e.RowKey || e.rowkey || '').toString();
+              const saved = (e.savedAt || e.Timestamp || e.timestamp || rk || new Date().toISOString()).toString();
+              const ts = Number.isFinite(Date.parse(saved)) ? Date.parse(saved) : Date.now();
+              return {
+                id: rk || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+                ts,
+                type: (e.category || e.Category || 'Other').toString(),
+                summary: (e.title || e.Title || '').toString(),
+                description: (e.description || e.Description || '').toString(),
+                anonymous: String((e.owner || e.Owner || '')).toLowerCase() === 'anonymous',
+                authorAlias: (e.owner || e.Owner || '').toString() || undefined,
+              } as Suggestion;
+            });
+            setItems(prev => {
+              const existingIds = new Set(mapped.map(m => m.id));
+              const leftovers = prev.filter(p => !existingIds.has(p.id));
+              return [...mapped, ...leftovers];
+            });
+          }
+        } catch {}
+      }).catch((e) => {
+        // eslint-disable-next-line no-console
+        console.warn('Failed to save suggestion to server (kept locally):', e?.body || e?.message || e);
+      });
+    } catch {}
   };
 
   const [expanded, setExpanded] = useState<string | null>(null);

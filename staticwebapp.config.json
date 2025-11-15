@@ -44,6 +44,26 @@
       "allowedRoles": ["authenticated"]
     }
   ],
+  "auth": {
+    "identityProviders": {
+      "azureActiveDirectory": {
+        "registration": {
+          "openIdIssuer": "https://login.microsoftonline.com/microsoft.com",
+          "clientId": "70f3fda5-4fc5-446e-87b0-3adff82fba7b"
+        },
+        "login": {
+          "scopes": [
+            "openid",
+            "profile",
+            "email"
+          ],
+          "loginParameters": [
+            "domain_hint=microsoft.com"
+          ]
+        }
+      }
+    }
+  },
   "responseOverrides": {
     "401": {
       "statusCode": 302,
@@ -51,9 +71,9 @@
     }
   },
   "globalHeaders": {
-  "Access-Control-Allow-Origin": "https://optical360.net, http://localhost:3000",
-  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type,Authorization",
-  "Access-Control-Allow-Credentials": "true"
-}
+    "Access-Control-Allow-Origin": "https://optical360.net, http://localhost:3000",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Credentials": "true"
+  }
 }

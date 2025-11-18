@@ -98,21 +98,44 @@ export async function getCalendarEntries(uid: string, endpoint?: string): Promis
   const base = isAbsolute ? rawEndpoint.replace(/\/?$/,'') : `${API_BASE}/${rawEndpoint.replace(/^\/+/, '')}`;
   const url = `${base}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Calendar')}`;
 
+  const parseList = (text: string) => {
+    try {
+      const data = JSON.parse(text);
+      if (Array.isArray(data)) return data as NoteEntity[];
+      if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
+      if (data?.value && Array.isArray(data.value)) return data.value as NoteEntity[];
+      if (data?.entity && Array.isArray(data.entity)) return data.entity as NoteEntity[];
+      if (data?.Entity && Array.isArray(data.Entity)) return data.Entity as NoteEntity[];
+      return [];
+    } catch {
+      return [];
+    }
+  };
+
   try {
     const res = await fetch(url, { method: 'GET' });
     const text = await res.text();
     if (!res.ok) {
       // eslint-disable-next-line no-console
       console.warn(`getCalendarEntries returned ${res.status}: ${text}`);
-      return [];
     }
-    try {
-      const data = JSON.parse(text);
-      if (data?.items && Array.isArray(data.items)) return data.items as NoteEntity[];
-      return [];
-    } catch {
-      return [];
+    let parsed = parseList(text);
+
+    // If proxied API returned nothing and we used a non-absolute endpoint, try the absolute Function URL as a fallback
+    if ((!parsed || !parsed.length) && !isAbsolute && DEFAULT_FUNCTION_URL) {
+      try {
+        const fbRes = await fetch(`${DEFAULT_FUNCTION_URL}?uid=${encodeURIComponent(uid)}&category=${encodeURIComponent('Calendar')}`, { method: 'GET' });
+        const fbText = await fbRes.text();
+        parsed = parseList(fbText);
+        // eslint-disable-next-line no-console
+        console.debug('[getCalendarEntries] fallback parsedCount', parsed?.length || 0);
+      } catch (fbErr) {
+        // eslint-disable-next-line no-console
+        console.warn('[getCalendarEntries] fallback network error', fbErr);
+      }
     }
+
+    return parsed || [];
   } catch (networkErr) {
     // eslint-disable-next-line no-console
     console.warn('[getCalendarEntries] Network error', networkErr);

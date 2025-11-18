@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ComboBox,
@@ -100,8 +100,9 @@ const VSOAssistant: React.FC = () => {
   const [triedBothNoResults, setTriedBothNoResults] = useState<boolean>(false);
   // When true, ignore the A/Z exclusivity filtering so all options are visible again
   const [showAllOptions, setShowAllOptions] = useState<boolean>(false);
-  // Simplified vs Details view for results table. Default to detailed (simplified=false).
-  const [simplifiedView, setSimplifiedView] = useState<boolean>(false);
+  // Simplified vs Details view for results table. Default to simplified (simplified=true).
+  // The UI exposes a "Detailed view" toggle which is OFF by default (showing the simplified view).
+  const [simplifiedView, setSimplifiedView] = useState<boolean>(true);
   // Key to force remount of the search form controls so internal component state (e.g. ComboBox freeform text)
   // is fully reset when the user hits Reset.
   const [formKey, setFormKey] = useState<number>(0);
@@ -446,8 +447,8 @@ const VSOAssistant: React.FC = () => {
     setSearchDone(false);
     setSortBy("");
     setSortDir("asc");
-  // Ensure detailed view is the default when resetting
-  setSimplifiedView(false);
+  // Ensure simplified view is the default when resetting (Detailed view toggle will be off)
+  setSimplifiedView(true);
   // no-op (filters removed)
     setComposeOpen(false);
     // Force remount of the search form so any uncontrolled/internal component state is cleared
@@ -735,6 +736,53 @@ const VSOAssistant: React.FC = () => {
     optionsContainer: { background: "#181818" },
     caretDownWrapper: { color: "#fff" },
   } as const;
+
+  // Table ref for column resizing
+  const tableRef = useRef<HTMLTableElement | null>(null);
+
+  // Column resize handler: when the user drags the resizer, adjust the
+  // corresponding th width and all body cells in that column to match.
+  const startColumnResize = (ev: React.MouseEvent, resizerEl: HTMLElement) => {
+    ev.preventDefault();
+    ev.stopPropagation();
+    if (!tableRef.current) return;
+    const th = resizerEl.parentElement as HTMLTableCellElement | null;
+    if (!th) return;
+    const table = tableRef.current;
+    const startX = (ev.nativeEvent as MouseEvent).clientX;
+    const startWidth = th.getBoundingClientRect().width;
+    // ensure we operate on visible rows
+    const rows = Array.from(table.tBodies[0]?.rows || [] as any[]);
+
+    // Prevent text selection while dragging
+    const prevUserSelect = document.body.style.userSelect;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+
+    const onMove = (e: MouseEvent) => {
+      const dx = e.clientX - startX;
+      const next = Math.max(36, Math.round(startWidth + dx));
+      try {
+        th.style.width = `${next}px`;
+        // Apply to each row cell at the same index
+        const cellIndex = (th as any).cellIndex;
+        for (const r of rows) {
+          const cell = r.cells[cellIndex];
+          if (cell) cell.style.width = `${next}px`;
+        }
+      } catch {}
+    };
+
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = prevUserSelect || '';
+      document.body.style.cursor = '';
+    };
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
 
   // Build country options from Countries list (allow typing to filter but require selection)
   const countryOptions: IComboBoxOption[] = useMemo(() => {
@@ -1653,12 +1701,41 @@ const VSOAssistant: React.FC = () => {
 
               {/* Center: slim rack elevation dropdown */}
               <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', width: 220 }}>
-                {(() => {
-                  const resolvedDC = rackDC || facilityCodeA || facilityCodeZ;
-                  // Only list DCs that are present in the current results table
-                  const options = resolvedDC
-                    ? [{ key: resolvedDC, text: resolvedDC }, ...availableDcOptions.filter(o => o.key !== resolvedDC)]
-                    : availableDcOptions;
+                  {(() => {
+                  // Build leading options so the rack elevations dropdown prioritizes
+                  // any FacilityCodeA/FacilityCodeZ values that appear in the results table
+                  // (i.e., values from the row columns), then fall back to rackDC and explicit inputs.
+                  const leadingCodes: string[] = [];
+                  // Collect facility codes from result rows (FacilityCodeA / FacilityCodeZ)
+                  for (const r of result || []) {
+                    try {
+                      const a = (r as any).FacilityCodeA;
+                      const z = (r as any).FacilityCodeZ;
+                      if (a && String(a).trim()) leadingCodes.push(String(a).trim());
+                      if (z && String(z).trim()) leadingCodes.push(String(z).trim());
+                    } catch {}
+                  }
+                  // Also include rackDC and any explicit inputs as fallback (preserve ordering)
+                  if (rackDC && String(rackDC).trim()) leadingCodes.push(String(rackDC).trim());
+                  if (facilityCodeA && String(facilityCodeA).trim()) leadingCodes.push(String(facilityCodeA).trim());
+                  if (facilityCodeZ && String(facilityCodeZ).trim()) leadingCodes.push(String(facilityCodeZ).trim());
+
+                  // Deduplicate while preserving order
+                  const seen = new Set<string>();
+                  const leadingUnique = leadingCodes.filter((c) => {
+                    if (!c) return false;
+                    if (seen.has(c)) return false;
+                    seen.add(c);
+                    return true;
+                  });
+
+                  // Create options: put leadingUnique first (sorted ascending), then any availableDcOptions not already included (also sorted)
+                  const leadingUniqueSorted = [...leadingUnique].sort((a, b) => a.localeCompare(b));
+                  const leadingOptions = leadingUniqueSorted.map((c) => ({ key: c, text: c }));
+                  const remaining = availableDcOptions
+                    .filter((o) => !seen.has(String(o.key)))
+                    .sort((a, b) => String(a.key).localeCompare(String(b.key)));
+                  const options = leadingOptions.length ? [...leadingOptions, ...remaining] : remaining;
 
                   const headerDropdownStyles = {
                     ...dropdownStyles,
@@ -1699,12 +1776,15 @@ const VSOAssistant: React.FC = () => {
                 )}
                 <div style={{ display: 'flex', alignItems: 'center' }}>
                   <Toggle
-                    label="Simplified view"
+                    label="Detailed view"
                     inlineLabel
                     onText="On"
                     offText="Off"
-                    checked={simplifiedView}
-                    onChange={(_, v) => setSimplifiedView(!!v)}
+                    // Toggle reflects Detailed view state; invert simplifiedView for checked
+                    checked={!simplifiedView}
+                    onChange={(_, v) => setSimplifiedView(!(!!v))}
+                    // Reduce space between the label text and the toggle control
+                    styles={{ root: { display: 'flex', alignItems: 'center' }, label: { marginRight: 6 } }}
                   />
                 </div>
               </div>
@@ -1721,7 +1801,7 @@ const VSOAssistant: React.FC = () => {
                 { key: 'Diversity', label: 'Diversity', render: (row: SpanData) => (
                   <span
                     className={`status-label ${getDiversityClass(row.Diversity)}`}
-                    style={{ display: 'inline-block', padding: '1px 6px', whiteSpace: 'nowrap', marginRight: 14 }}
+                    style={{ display: 'inline-block', padding: '1px 6px', whiteSpace: 'nowrap', marginRight: 6 }}
                     title={row.Diversity}
                   >
                     {row.Diversity}
@@ -1778,7 +1858,8 @@ const VSOAssistant: React.FC = () => {
 
               let dynamicCols: any[];
               if (simplifiedView) {
-                const simplifiedKeys = ['Diversity', 'SpanID', splicePreferredKey, 'WiringScope', 'Status'];
+                // Include FacilityCodeA and FacilityCodeZ in simplified view per request
+                const simplifiedKeys = ['Diversity', 'SpanID', 'FacilityCodeA', 'FacilityCodeZ', splicePreferredKey, 'WiringScope', 'Status'];
                 dynamicCols = simplifiedKeys.map((k) => {
                   const found = getCandidate(k);
                   if (found) return found;
@@ -1800,7 +1881,7 @@ const VSOAssistant: React.FC = () => {
               const colWidthPercent = dynamicCols && dynamicCols.length ? Math.max(3, Math.floor(100 / dynamicCols.length)) : 12;
 
               return (
-                <table className="data-table compact" style={{ fontSize: 11, tableLayout: 'fixed', width: '100%', borderCollapse: 'collapse', marginLeft: -6 }}>
+                <table ref={tableRef} className="data-table compact" style={{ fontSize: 11, tableLayout: 'fixed', width: '100%', borderCollapse: 'collapse', marginLeft: -6 }}>
                   <thead>
                     <tr>
                       <th style={{ width: 30, padding: '2px 4px' }}></th>
@@ -1830,7 +1911,15 @@ const VSOAssistant: React.FC = () => {
                             ...(c.key === 'SpanID' ? { textAlign: 'center' as const } : {})
                           }}
                         >
-                          {c.label} {sortBy === c.key && (sortDir === 'asc' ? '▲' : '▼')}
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {c.label} {sortBy === c.key && (sortDir === 'asc' ? '▲' : '▼')}
+                          </span>
+                          {/* resize handle: narrow draggable area at the right edge of the header */}
+                          <div
+                            className="col-resizer"
+                            onMouseDown={(e) => startColumnResize(e, e.currentTarget as HTMLElement)}
+                            title="Drag to resize"
+                          />
                         </th>
                       ))}
                     </tr>
@@ -2341,7 +2430,7 @@ const VSOAssistant: React.FC = () => {
 
         <hr />
         <div className="disclaimer">
-        This tool is intended for internal use within Microsoft’s Data Center Operations and Network Delivery environments. Always verify critical data before taking operational action. The information provided is automatically retrieved from validated sources but may not reflect the most recent updates, configurations, or status changes in live systems. Users are responsible for ensuring all details are accurate before proceeding with submitting a VSO. This application is developed and maintained by <b>Josh Maclean</b>, supported by the <b>CIA | Network Delivery</b> team. For for any issues or requests please <a href="https://teams.microsoft.com/l/chat/0/0?users=joshmaclean@microsoft.com" className="uid-click">send a message</a>. 
+        This tool is intended for internal use within Microsoft’s Data Center Operations and Network Delivery environments. Always verify critical data before taking operational action. The information provided is automatically retrieved from validated sources but may not reflect the most recent updates, configurations, or status changes in live systems. Users are responsible for ensuring all details are accurate before proceeding with submitting a VSO. This application is developed and maintained by <b>Josh Maclean</b>, supported by the <b>CIA | Network Delivery</b> team. For any issues or requests please <a href="https://teams.microsoft.com/l/chat/0/0?users=joshmaclean@microsoft.com" className="uid-click">send a message</a>. 
         </div>
       </div>
       {/* Big calendar below the card */}

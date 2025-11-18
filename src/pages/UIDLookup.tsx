@@ -14,6 +14,8 @@ import {
   DialogType,
   MessageBar,
   MessageBarType,
+  Spinner,
+  SpinnerSize,
 } from '@fluentui/react';
 import ThemedProgressBar from "../components/ThemedProgressBar";
 import UIDSummaryPanel from "../components/UIDSummaryPanel";
@@ -173,9 +175,51 @@ export default function UIDLookup() {
     notes?: Record<string, Note[]>; // notes keyed by UID
     urgent?: boolean; // optional urgent tag
   };
-  // Projects are sourced only from the Projects Table on the server.
-  // Do NOT persist projects locally anymore.
-  const [projects, setProjects] = useState<Project[]>([]);
+  // Projects are sourced from server AND a local cache. Projects created via the
+  // UI are stored locally so users can save projects without any server-side
+  // persistence. Server-side Projects (when present) are still fetched and
+  // merged on load, but creation is local-only per current requirements.
+  const LOCAL_PROJECTS_KEY = 'uidLocalProjects';
+  const [projects, setProjects] = useState<Project[]>(() => {
+    try {
+      const raw = localStorage.getItem(LOCAL_PROJECTS_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(arr)) return [];
+      // Normalize any legacy or double-serialized entries so p.data is an object
+      const norm = arr.map((p: any) => {
+        try {
+          const copy = { ...(p || {}) } as any;
+          if (typeof copy.data === 'string') {
+            try { copy.data = JSON.parse(copy.data); } catch { copy.data = {}; }
+          }
+          if (!copy.data || typeof copy.data !== 'object') copy.data = {};
+          // ensure common arrays exist to avoid empty UI when opening projects
+          copy.data.OLSLinks = Array.isArray(copy.data.OLSLinks) ? copy.data.OLSLinks : (Array.isArray(copy.data.LinkSummary) ? copy.data.LinkSummary : []);
+          copy.data.AssociatedUIDs = Array.isArray(copy.data.AssociatedUIDs) ? copy.data.AssociatedUIDs : [];
+          copy.data.MGFXA = Array.isArray(copy.data.MGFXA) ? copy.data.MGFXA : [];
+          copy.data.MGFXZ = Array.isArray(copy.data.MGFXZ) ? copy.data.MGFXZ : [];
+          copy.data.GDCOTickets = Array.isArray(copy.data.GDCOTickets) ? copy.data.GDCOTickets : (Array.isArray(copy.data.ReleatedTickets) ? copy.data.ReleatedTickets : []);
+          if (!Array.isArray(copy.data.sourceUids)) copy.data.sourceUids = (Array.isArray(copy.data.sourceUids) ? copy.data.sourceUids : ([]));
+          return copy as Project;
+        } catch {
+          return { id: String(p?.id || `${Date.now()}`), name: p?.name || 'Project', createdAt: Date.now(), data: {} } as Project;
+        }
+      });
+      return norm as Project[];
+    } catch {
+      return [];
+    }
+  });
+
+  // Persist only local-created projects (those without a __serverEntity marker)
+  // into localStorage so they survive reloads. Server-origin projects are not
+  // overwritten here and will be merged on startup when the app fetches them.
+  useEffect(() => {
+    try {
+      const localOnly = (projects || []).filter(p => !(p as any).__serverEntity);
+      localStorage.setItem(LOCAL_PROJECTS_KEY, JSON.stringify(localOnly || []));
+    } catch {}
+  }, [projects]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<string>("");
   const COLLAPSED_SECTIONS_KEY = 'uidCollapsedSections';
@@ -427,21 +471,49 @@ export default function UIDLookup() {
   };
 
   const combineResults = (resultsArray: any[]) => {
-    const LinkSummary = resultsArray.flatMap(r => (r?.LinkSummary || r?.OLSLinks || r?.LinkSummaryArray || []));
-    const MGFXA = resultsArray.flatMap(r => (r?.MGFXA || []));
-    const MGFXZ = resultsArray.flatMap(r => (r?.MGFXZ || []));
-    const GDCOTickets = resultsArray.flatMap(r => (r?.GDCOTickets || r?.ReleatedTickets || []));
-    const ls = dedupeArray(LinkSummary);
-    const mgfxa = dedupeArray(MGFXA);
-    const mgfxz = dedupeArray(MGFXZ);
-    const tickets = dedupeArray(GDCOTickets);
-    // Return both legacy and normalized keys so the rest of the UI can read them
+    // Accept two shapes for resultsArray items:
+    // 1) legacy: each item is the raw payload
+    // 2) new: each item is { uid, data }
+    const flatLinkSummary: any[] = [];
+    const mgfxAList: any[] = [];
+  const mgfxZList: any[] = [];
+  const utilizationList: any[] = [];
+    const ticketsList: any[] = [];
+    const byUid: Array<{ uid: string; links: any[] }> = [];
+
+    for (const item of resultsArray || []) {
+      const uid = (item && item.uid) ? String(item.uid) : null;
+      const src = (item && item.data) ? item.data : item;
+      // collect Utilization rows for combined view
+      const utilRows = Array.isArray(src?.Utilization) ? src.Utilization : (Array.isArray(src?.utilization) ? src.utilization : []);
+      if (utilRows && utilRows.length) utilizationList.push(...utilRows);
+      const links = Array.isArray(src?.LinkSummary) ? src.LinkSummary : (Array.isArray(src?.OLSLinks) ? src.OLSLinks : (Array.isArray(src?.LinkSummaryArray) ? src.LinkSummaryArray : []));
+      const mgfxA = Array.isArray(src?.MGFXA) ? src.MGFXA : [];
+      const mgfxZ = Array.isArray(src?.MGFXZ) ? src.MGFXZ : [];
+      const tickets = Array.isArray(src?.GDCOTickets) ? src.GDCOTickets : (Array.isArray(src?.ReleatedTickets) ? src.ReleatedTickets : []);
+      if (uid) {
+        byUid.push({ uid, links: dedupeArray(links) });
+      }
+      flatLinkSummary.push(...links);
+      mgfxAList.push(...mgfxA);
+      mgfxZList.push(...mgfxZ);
+      ticketsList.push(...tickets);
+    }
+
+    const ls = dedupeArray(flatLinkSummary);
+    const mgfxa = dedupeArray(mgfxAList);
+    const mgfxz = dedupeArray(mgfxZList);
+    const tickets = dedupeArray(ticketsList);
+    const utilization = dedupeArray(utilizationList || []);
     return {
       LinkSummary: ls,
       OLSLinks: ls,
       MGFXA: mgfxa,
       MGFXZ: mgfxz,
       GDCOTickets: tickets,
+      Utilization: utilization,
+      // Optional grouped view for UI: array of { uid, links }
+      OLSLinksByUid: byUid,
     };
   };
 
@@ -482,7 +554,7 @@ export default function UIDLookup() {
           return json;
         })
         .then((json) => {
-          partialResults.push(json || {});
+          partialResults.push({ uid: u, data: json || {} });
           if (!firstMeaningfulSeen && looksMeaningful(json)) firstMeaningfulSeen = true;
           // Only update combinedData once we've observed meaningful content
           if (firstMeaningfulSeen) {
@@ -491,7 +563,7 @@ export default function UIDLookup() {
         })
         .catch((err) => {
           // on failure for this UID, record an empty object and continue
-          partialResults.push({});
+          partialResults.push({ uid: u, data: {} });
           if (firstMeaningfulSeen) {
             try { setCombinedData((_prev: any) => combineResults(partialResults)); } catch { setCombinedData(combineResults(partialResults)); }
           }
@@ -527,6 +599,10 @@ export default function UIDLookup() {
     }
     // Try to find sourceUids first, else extract from AssociatedUIDs
     const uids: string[] = Array.from(new Set([...(p.data?.sourceUids || []), ...(Array.isArray(p.data?.AssociatedUIDs) ? p.data.AssociatedUIDs.map((r: any) => String(r?.UID || r?.Uid || r?.uid || '')).filter(Boolean) : [])]));
+    // Clear any previous combinedData so the stored project snapshot is used
+    // immediately while we refresh the project's UIDs.
+    setCombinedData(null);
+    setProjectLoadError(null);
     setActiveProjectId(projectId);
     // kick off loading; progressive results will render as they come in
     void loadProjectData(uids);
@@ -679,7 +755,7 @@ export default function UIDLookup() {
           try {
             const key = `uidStatus:${keyUid}`;
             const raw = localStorage.getItem(key);
-            const base = raw ? JSON.parse(raw) : { configPush: "Unknown", circuitsQc: "Unknown", expectedDeliveryDate: null };
+            const base = raw ? JSON.parse(raw) : { configPush: "Not Started", circuitsQc: "Not Started", expectedDeliveryDate: null };
             const merged = { ...base, expectedDeliveryDate: normalized };
             localStorage.setItem(key, JSON.stringify(merged));
             // Also trigger a state update indirectly by touching `data` if present so panels re-read
@@ -910,12 +986,42 @@ export default function UIDLookup() {
   }, [data, lastSearched, lastPromptUid]);
 
   // Helper to get the dataset currently being viewed (live or project snapshot)
+  const viewHasMeaningfulContent = (v: any) => {
+    if (!v || typeof v !== 'object') return false;
+    if (Array.isArray(v.OLSLinks) && v.OLSLinks.length) return true;
+    if (Array.isArray(v.AssociatedUIDs) && v.AssociatedUIDs.length) return true;
+    if (Array.isArray(v.MGFXA) && v.MGFXA.length) return true;
+    if (Array.isArray(v.MGFXZ) && v.MGFXZ.length) return true;
+    if (Array.isArray(v.GDCOTickets) && v.GDCOTickets.length) return true;
+    if (Array.isArray(v.ReleatedTickets) && v.ReleatedTickets.length) return true;
+    if (v.KQLData && Object.keys(v.KQLData).length) return true;
+    return false;
+  };
+
   const getViewData = React.useCallback(() => {
-    // If we've loaded combined data for the active project, prefer it so tables render unified views.
-    if (activeProjectId && combinedData) return combinedData;
+  // Prefer combinedData only when it contains meaningful rows; otherwise fall back
+  // to the stored project snapshot so we don't blank the UI when a refresh
+  // returns empty/partial results. When combinedData contains per-UID groups
+  // prefer that grouped view so the UI can render separate Link Summary tables.
+  if (activeProjectId && combinedData && viewHasMeaningfulContent(combinedData)) return combinedData;
     const p = projects.find(p => p.id === activeProjectId) || null;
     return p ? p.data : data;
   }, [projects, activeProjectId, data, combinedData]);
+  // Helper to choose a primary UID for a given snapshot/view. When viewing a
+  // saved project there may be no `lastSearched`, so prefer the first
+  // `sourceUids` entry or the first AssociatedUID row's UID.
+  const primaryUidFor = (src: any): string | null => {
+    try {
+      if (lastSearched) return String(lastSearched);
+      if (!src) return null;
+      if (Array.isArray(src.sourceUids) && src.sourceUids.length) return String(src.sourceUids[0]);
+      if (Array.isArray(src.AssociatedUIDs) && src.AssociatedUIDs.length) {
+        const a = src.AssociatedUIDs[0];
+        return String(a?.UID ?? a?.Uid ?? a?.uid ?? '') || null;
+      }
+      return null;
+    } catch { return null; }
+  };
   const getActiveProject = () => projects.find(p => p.id === activeProjectId) || null;
   // Reset project note target when active project changes
   useEffect(() => {
@@ -965,6 +1071,15 @@ export default function UIDLookup() {
 
   // Associated UIDs view filter: show only In Progress by default
   const [showAllAssociatedWF, setShowAllAssociatedWF] = useState<boolean>(false);
+  // When creating a project from Associated UIDs we hold the UID list here
+  const [createFromAssocPendingUids, setCreateFromAssocPendingUids] = useState<string[] | null>(null);
+  const [createFromAssocMode, setCreateFromAssocMode] = useState<boolean>(false);
+  // UI progress state for the associated-UIDs project creation
+  const [createFromAssocRunning, setCreateFromAssocRunning] = useState<boolean>(false);
+  const [createFromAssocCurrent, setCreateFromAssocCurrent] = useState<number>(0);
+  const [createFromAssocTotal, setCreateFromAssocTotal] = useState<number>(0);
+  const [createFromAssocMessage, setCreateFromAssocMessage] = useState<string | null>(null);
+  const [createFromAssocFailedUids, setCreateFromAssocFailedUids] = useState<string[]>([]);
   // Track which view (UID or Project) we've auto-applied the default for, so user toggles aren't overridden
   const [associatedWFViewKey, setAssociatedWFViewKey] = useState<string | null>(null);
 
@@ -1089,6 +1204,66 @@ export default function UIDLookup() {
     };
     return snap;
   };
+  // Deep-clone the full normalized view object for project snapshots.
+  // This preserves all top-level keys (including arrays like OLSLinks, AssociatedUIDs)
+  // and also copies a few non-enumerable/internal properties that JSON.stringify
+  // would otherwise drop (e.g., __AllWorkflowStatus, __WFStatusByUid).
+  const deepCloneView = (src: any, srcUid: string) => {
+    const copy: any = JSON.parse(JSON.stringify(src || {}));
+    try {
+      if ((src as any)?.__AllWorkflowStatus) copy.__AllWorkflowStatus = (src as any).__AllWorkflowStatus;
+      if ((src as any)?.__WFStatusByUid) copy.__WFStatusByUid = (src as any).__WFStatusByUid;
+      if ((src as any)?.ReleatedTickets && !copy.ReleatedTickets) copy.ReleatedTickets = (src as any).ReleatedTickets;
+      // Ensure we have a sourceUids array so project listing can find UIDs quickly
+      if (!Array.isArray(copy.sourceUids)) copy.sourceUids = [srcUid].filter(Boolean);
+      // Ensure per-UID grouped links are preserved so projects show each UID's
+      // Link Summary as a separate table. Prefer existing grouped data when
+      // present; otherwise capture current OLSLinks/LinkSummary under the srcUid.
+      try {
+        const group = { uid: srcUid, links: Array.isArray(copy.OLSLinks) ? copy.OLSLinks : (Array.isArray(copy.LinkSummary) ? copy.LinkSummary : []) };
+        if (!Array.isArray(copy.OLSLinksByUid)) copy.OLSLinksByUid = [];
+        // avoid duplicating an existing uid entry
+        const exists = (copy.OLSLinksByUid || []).some((g: any) => String(g?.uid) === String(srcUid));
+        if (!exists && (group.links || []).length) copy.OLSLinksByUid.push(group);
+      } catch {}
+      // Ensure top-level OLSLinks is present (flatten per-UID groups when needed)
+      try {
+        if ((!Array.isArray(copy.OLSLinks) || !copy.OLSLinks.length) && Array.isArray(copy.OLSLinksByUid) && copy.OLSLinksByUid.length) {
+          const flat: any[] = [];
+          for (const g of copy.OLSLinksByUid) {
+            if (Array.isArray(g?.links)) flat.push(...g.links);
+          }
+          try {
+            const uniq = Array.from(new Set(flat.map((r: any) => JSON.stringify(r))));
+            copy.OLSLinks = uniq.map((s: string) => JSON.parse(s));
+          } catch { copy.OLSLinks = flat; }
+        }
+      } catch {}
+    } catch {
+      // best-effort copy; ignore errors
+    }
+    return copy;
+  };
+
+  // Expose a safe global helper so small helper components (outside this module)
+  // can create a full snapshot of the current view for local-only saves.
+  // This is intentionally minimal and guarded so callers can fallback if it
+  // isn't available in other contexts (tests, SSR, etc.).
+  useEffect(() => {
+    try {
+      // Provide a function returning the deep clone of the currently viewed data
+      // keyed to the current lastSearched UID. Consumers should call and copy
+      // the returned object rather than mutating it.
+      (window as any).getCurrentViewSnapshot = () => {
+        try {
+          const cur = getViewData();
+          return deepCloneView(cur || {}, lastSearched || '');
+        } catch { return null; }
+      };
+    } catch {}
+    return () => { try { delete (window as any).getCurrentViewSnapshot; } catch {} };
+    // intentionally only re-run on mount/unmount
+  }, []);
   const dedupMerge = (arrA: any[], arrB: any[]) => {
     const seen = new Set<string>();
     const push = (acc: any[], item: any) => {
@@ -1101,20 +1276,81 @@ export default function UIDLookup() {
     (arrB || []).forEach(i => push(acc, i));
     return acc;
   };
-  const mergeSnapshots = (base: Snapshot, add: Snapshot): Snapshot => {
-    return {
-      sourceUids: Array.from(new Set([...(base.sourceUids||[]), ...(add.sourceUids||[])])),
-      // Keep the first non-empty value for details; fallback to added if base empty
-      AExpansions: base.AExpansions && Object.keys(base.AExpansions).length ? base.AExpansions : add.AExpansions,
-      ZExpansions: base.ZExpansions && Object.keys(base.ZExpansions).length ? base.ZExpansions : add.ZExpansions,
-      KQLData: base.KQLData && Object.keys(base.KQLData).length ? base.KQLData : add.KQLData,
-      OLSLinks: dedupMerge(base.OLSLinks, add.OLSLinks),
-      AssociatedUIDs: dedupMerge(base.AssociatedUIDs, add.AssociatedUIDs),
-      GDCOTickets: dedupMerge(base.GDCOTickets, add.GDCOTickets),
-      MGFXA: dedupMerge(base.MGFXA, add.MGFXA),
-      MGFXZ: dedupMerge(base.MGFXZ, add.MGFXZ),
-      LinkWFs: dedupMerge(base.LinkWFs || [], add.LinkWFs || []),
-    };
+  // Merge two snapshots (or full view objects) without duplicating array entries.
+  // Keeps base scalar/structured fields when present and appends missing array
+  // entries from `add`. This is intentionally permissive to support both the
+  // Snapshot shape and full normalized viewData objects returned by the UI.
+  const mergeSnapshots = (base: any, add: any): any => {
+    if (!base) return add ? JSON.parse(JSON.stringify(add)) : {};
+    if (!add) return base ? JSON.parse(JSON.stringify(base)) : {};
+    const out: any = { ...(base || {}) };
+    // union sourceUids
+    out.sourceUids = Array.from(new Set([...(base.sourceUids || []), ...(add.sourceUids || [])]));
+
+    // Prefer base's detailed objects when they have meaningful content;
+    // otherwise fall back to add's values.
+    out.AExpansions = (base.AExpansions && Object.keys(base.AExpansions).length) ? base.AExpansions : (add.AExpansions || {});
+    out.ZExpansions = (base.ZExpansions && Object.keys(base.ZExpansions).length) ? base.ZExpansions : (add.ZExpansions || {});
+    out.KQLData = (base.KQLData && Object.keys(base.KQLData).length) ? base.KQLData : (add.KQLData || {});
+
+  // Merge arrays with deduplication by JSON identity. Known arrays we merge:
+  out.OLSLinks = dedupMerge(base.OLSLinks || [], add.OLSLinks || []);
+  out.AssociatedUIDs = dedupMerge(base.AssociatedUIDs || [], add.AssociatedUIDs || []);
+  out.GDCOTickets = dedupMerge(base.GDCOTickets || [], add.GDCOTickets || []);
+  out.MGFXA = dedupMerge(base.MGFXA || [], add.MGFXA || []);
+  out.MGFXZ = dedupMerge(base.MGFXZ || [], add.MGFXZ || []);
+  out.LinkWFs = dedupMerge(base.LinkWFs || [], add.LinkWFs || []);
+  out.ReleatedTickets = dedupMerge(base.ReleatedTickets || [], add.ReleatedTickets || []);
+  // Merge Utilization (capitalized or lowercase) so per-link admin/oper/speed
+  // values are preserved when merging snapshots from another UID.
+  const baseUtil = Array.isArray(base.Utilization) ? base.Utilization : (Array.isArray(base.utilization) ? base.utilization : []);
+  const addUtil = Array.isArray(add.Utilization) ? add.Utilization : (Array.isArray(add.utilization) ? add.utilization : []);
+  out.Utilization = dedupMerge(baseUtil || [], addUtil || []);
+
+  // Merge OLSLinksByUid: preserve per-UID groups and dedupe by uid; when same uid
+  // exists in both, merge their links (deduped).
+  try {
+    const baseBy = Array.isArray(base.OLSLinksByUid) ? base.OLSLinksByUid : [];
+    const addBy = Array.isArray(add.OLSLinksByUid) ? add.OLSLinksByUid : [];
+    const byMap = new Map<string, any[]>();
+    for (const g of baseBy) {
+      try { byMap.set(String(g.uid), Array.isArray(g.links) ? g.links.slice() : []); } catch { }
+    }
+    for (const g of addBy) {
+      try {
+        const k = String(g.uid);
+        const existing = byMap.get(k) || [];
+        const mergedLinks = dedupMerge(existing, Array.isArray(g.links) ? g.links : []);
+        byMap.set(k, mergedLinks);
+      } catch { }
+    }
+    // also ensure any single srcUid present in `add` as top-level sourceUids are represented
+    try {
+      const allSrc = Array.isArray(out.sourceUids) ? out.sourceUids : [];
+      for (const u of allSrc) {
+        const k = String(u);
+        if (!byMap.has(k)) {
+          // attempt to find a matching flat OLSLinks subset for this uid in add (best-effort)
+          const candidate = (Array.isArray(add.OLSLinks) && add.OLSLinks.length) ? add.OLSLinks : (Array.isArray(add.LinkSummary) ? add.LinkSummary : []);
+          if (candidate && candidate.length) byMap.set(k, candidate.slice());
+        }
+      }
+    } catch {}
+    out.OLSLinksByUid = Array.from(byMap.entries()).map(([uid, links]) => ({ uid, links: dedupeArray(links || []) }));
+  } catch {}
+
+  // Merge top-level structured fields shallowly so missing keys from base
+  // are filled in from the added snapshot (preserve base values when present).
+  out.AExpansions = { ...(add.AExpansions || {}), ...(base.AExpansions || {}) };
+  out.ZExpansions = { ...(add.ZExpansions || {}), ...(base.ZExpansions || {}) };
+  out.KQLData = { ...(add.KQLData || {}), ...(base.KQLData || {}) };
+
+    // For any other keys present in `add` that aren't in out, copy them over.
+    for (const k of Object.keys(add || {})) {
+      if (out[k] === undefined) out[k] = add[k];
+    }
+
+    return out;
   };
   const getFirstSites = (src: any, uidKey?: string): { a?: string|null; z?: string|null } => {
     try {
@@ -1176,13 +1412,26 @@ export default function UIDLookup() {
   };
   const computeProjectTitle = (src: any, uidKey: string): string => {
     try {
-      const sols = getSolutionIds(src).map(formatSolutionId).filter(Boolean);
-      const sol = sols[0] || '';
+      // Prefer SolutionId from the AssociatedUID matching uidKey when available
+      let sol = '';
+      try {
+        const assocRows: any[] = Array.isArray(src?.AssociatedUIDs) ? src.AssociatedUIDs : [];
+        const assoc = uidKey ? assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(uidKey)) : (assocRows[0] || null);
+        const assocSol = assoc?.SolutionId ?? assoc?.SolutionID ?? assoc?.Solution ?? null;
+        if (assocSol) {
+          if (Array.isArray(assocSol)) sol = (assocSol || []).map((v: any) => formatSolutionId(String(v))).filter(Boolean)[0] || '';
+          else sol = formatSolutionId(String(assocSol));
+        }
+      } catch {}
+      if (!sol) {
+        const sols = getSolutionIds(src).map(formatSolutionId).filter(Boolean);
+        sol = sols[0] || '';
+      }
       const sites = getFirstSites(src, uidKey);
       const a = (sites.a || '').toString().trim();
       const z = (sites.z || '').toString().trim();
-  if (sol && a && z) return `${sol}_${a} ↔ ${z}`;
-      if (sol && (a || z)) return `${sol}_${a || z}`;
+  if (sol && a && z) return `${sol} - ${a} ↔ ${z}`;
+      if (sol && (a || z)) return `${sol} - ${a || z}`;
       if (sol) return sol;
   if (a && z) return `${a} ↔ ${z}`;
       return uidKey;
@@ -1219,6 +1468,22 @@ export default function UIDLookup() {
     setCreateError(null);
     setModalType('create-project');
   };
+
+  // Helper: wait until a handleSearch-driven load for `targetUid` completes
+  const waitForUidLoad = (targetUid: string, timeoutMs = 40000) => {
+    return new Promise<void>((resolve) => {
+      const start = Date.now();
+      const poll = () => {
+        try {
+          // Consider load complete when lastSearched matches and loading is false
+          if (String(lastSearched) === String(targetUid) && !loading && data) { resolve(); return; }
+        } catch {}
+        if (Date.now() - start > timeoutMs) { resolve(); return; }
+        setTimeout(poll, 300);
+      };
+      poll();
+    });
+  };
   const addCurrentToProject = (targetId: string) => {
     if (!data || !targetId || !lastSearched) return;
     const p = projects.find(pp => pp.id === targetId);
@@ -1239,13 +1504,29 @@ export default function UIDLookup() {
         return;
       }
     } catch {}
-    // No warning needed, merge immediately
+    // No warning needed, merge immediately. Mark the merged project as locally
+    // modified (clear any __serverEntity marker) so it will be persisted to
+    // localStorage and survive reloads.
     setProjects(prev => prev.map(pp => {
       if (pp.id !== targetId) return pp;
-      const merged = mergeSnapshots(pp.data, buildSnapshotFrom(data, lastSearched));
-      return { ...pp, data: merged, notes: { ...(pp.notes || {}) } };
+      const merged = mergeSnapshots(pp.data, deepCloneView(data, lastSearched));
+      return { ...pp, data: merged, notes: { ...(pp.notes || {}) }, __serverEntity: undefined, __localModified: true } as any;
     }));
     setActiveProjectId(targetId);
+  };
+
+  // Initiate a Create Project flow which will sequentially open each Associated UID
+  // in the same tab (via handleSearch) and merge their snapshots into a new project.
+  // We trigger the modal first for section selection, then perform the sequence
+  // when the user confirms the modal.
+  const createProjectFromAssociatedUIDs = (uids: string[]) => {
+    if (!Array.isArray(uids) || !uids.length) return;
+    setCreateFromAssocPendingUids(uids.slice());
+    setCreateFromAssocMode(true);
+    setCreateSectionChoice("");
+    setCreateNewSection("");
+    setCreateError(null);
+    setModalType('create-project');
   };
   // removed unused deleteProject (deletion flows via requestDeleteProject + modal)
   const requestDeleteProject = (id: string) => {
@@ -1278,7 +1559,7 @@ export default function UIDLookup() {
     setModalType('new-section');
   };
   const closeModal = () => { setModalType(null); setModalProjectId(null); setModalValue(''); };
-  const saveModal = () => {
+  const saveModal = async () => {
     const value = (modalValue || '').trim();
     if (!modalType) return;
     if (modalType === 'confirm-merge' && modalProjectId) {
@@ -1287,14 +1568,140 @@ export default function UIDLookup() {
       if (!data || !lastSearched) { closeModal(); return; }
       setProjects(prev => prev.map(pp => {
         if (pp.id !== targetId) return pp;
-        const merged = mergeSnapshots(pp.data, buildSnapshotFrom(data, lastSearched));
-        return { ...pp, data: merged, notes: { ...(pp.notes || {}) } };
+        const merged = mergeSnapshots(pp.data, deepCloneView(data, lastSearched));
+        return { ...pp, data: merged, notes: { ...(pp.notes || {}) }, __serverEntity: undefined, __localModified: true } as any;
       }));
       setActiveProjectId(targetId);
       closeModal();
       return;
     }
     if (modalType === 'create-project') {
+      // If we're in create-from-associated mode, sequentially load each UID in
+      // the same tab (via handleSearch) and merge their snapshots into one project.
+      if (createFromAssocMode && Array.isArray(createFromAssocPendingUids) && createFromAssocPendingUids.length) {
+        const uids = createFromAssocPendingUids.slice();
+        const chosen = (createSectionChoice || '').trim();
+        const newName = (createNewSection || '').trim();
+        let finalSection: string | undefined = undefined;
+        if (newName) {
+          if (!sections.includes(newName)) setSections([...sections, newName]);
+          finalSection = newName;
+        } else if (chosen) {
+          finalSection = (chosen === 'Archives') ? undefined : chosen;
+        }
+        if (!newName && !chosen) {
+          setCreateError('Please choose a section or enter a new section name.');
+          return;
+        }
+
+        // Sequentially open each UID and merge
+        let mergedSnapshot: any = null;
+        // Helper to ensure top-level OLSLinks exist (flatten OLSLinksByUid if needed)
+        const ensureOlsLinks = (snap: any) => {
+          try {
+            if (!snap) return snap;
+            if (!Array.isArray(snap.OLSLinks) || !snap.OLSLinks.length) {
+              if (Array.isArray(snap.LinkSummary) && snap.LinkSummary.length) snap.OLSLinks = snap.LinkSummary.slice();
+              else if (Array.isArray(snap.OLSLinksByUid) && snap.OLSLinksByUid.length) {
+                const flat: any[] = [];
+                for (const g of snap.OLSLinksByUid) {
+                  if (Array.isArray(g?.links)) flat.push(...g.links);
+                }
+                try {
+                  const uniq = Array.from(new Set(flat.map((r: any) => JSON.stringify(r))));
+                  snap.OLSLinks = uniq.map((s: string) => JSON.parse(s));
+                } catch { snap.OLSLinks = flat; }
+              }
+            }
+          } catch {}
+          return snap;
+        };
+
+        // Close the modal immediately so the overlay can show and block input
+        closeModal();
+        setCreateFromAssocRunning(true);
+        setCreateFromAssocTotal(uids.length);
+        setCreateFromAssocCurrent(0);
+        setCreateFromAssocMessage(null);
+        setCreateFromAssocFailedUids([]);
+        // Create a provisional project that will be updated as each UID is merged
+        const provisionalId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const provisionalProject: Project = {
+          id: provisionalId,
+          name: `Building project...`,
+          createdAt: Date.now(),
+          data: { sourceUids: [], OLSLinks: [], AssociatedUIDs: [], GDCOTickets: [], MGFXA: [], MGFXZ: [] },
+          section: finalSection,
+        };
+        setProjects(prev => [provisionalProject, ...prev]);
+        setActiveProjectId(provisionalId);
+
+        const failedList: string[] = [];
+        for (let i = 0; i < uids.length; i++) {
+          const u = uids[i];
+          try {
+            // update progress index (1-based)
+            setCreateFromAssocCurrent(i + 1);
+            // trigger a UI search in the same tab
+            // eslint-disable-next-line no-await-in-loop
+            await handleSearch(u);
+            // small pause to allow React state to settle (faster than full wait helper)
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise(resolve => setTimeout(resolve, 100));
+            try {
+              const snapRaw = deepCloneView(getViewData() || data || {}, String(u));
+              const snap = ensureOlsLinks(snapRaw);
+              mergedSnapshot = mergedSnapshot ? mergeSnapshots(mergedSnapshot, snap) : snap;
+              // update provisional project incrementally so UI reflects additions immediately
+              setProjects(prev => prev.map(p => {
+                if (p.id !== provisionalId) return p;
+                try {
+                  const mergedNow = mergeSnapshots(p.data || {}, snap);
+                  const normalizedNow = ensureOlsLinks(mergedNow);
+                  return { ...p, data: normalizedNow } as Project;
+                } catch { return p; }
+              }));
+            } catch (err) {
+              failedList.push(String(u));
+            }
+          } catch (err) {
+            failedList.push(String(u));
+          }
+        }
+
+        // Update the provisional project with final merged snapshot and name
+        const id = provisionalId;
+        const primaryForTitle = (uids && uids.length) ? String(uids[0]) : (lastSearched || '');
+        const finalData = ensureOlsLinks(mergedSnapshot || {});
+        const updatedProj: Project = {
+          id,
+          name: computeProjectTitle(finalData, primaryForTitle),
+          createdAt: Date.now(),
+          data: finalData,
+          section: finalSection,
+        };
+        setProjects(prev => prev.map(p => p.id === provisionalId ? updatedProj : p));
+        setActiveProjectId(id);
+        // set failed uids state and show final success message then clear overlay after a short delay
+        setCreateFromAssocFailedUids(failedList);
+  setCreateFromAssocMessage(`Project created (${uids.length - failedList.length} succeeded${failedList.length ? `, ${failedList.length} failed` : ''})`);
+  setCreateFromAssocRunning(false);
+  // Ensure any running top-level progress bar is signalled complete and hidden
+  try { setProgressComplete(true); setProgressVisible(false); } catch (e) { /* ignore if states unavailable */ }
+        setCreateSectionChoice('');
+        setCreateNewSection('');
+        setCreateError(null);
+        setCreateFromAssocPendingUids(null);
+        setCreateFromAssocMode(false);
+        // hide the overlay message after a few seconds
+        setTimeout(() => {
+          setCreateFromAssocMessage(null);
+          setCreateFromAssocFailedUids([]);
+        }, 3500);
+        return;
+      }
+
+      // default single-UID create flow (existing behaviour)
       if (!data || !lastSearched) { closeModal(); return; }
       const chosen = (createSectionChoice || '').trim();
       const newName = (createNewSection || '').trim();
@@ -1318,80 +1725,18 @@ export default function UIDLookup() {
         id,
         name: computeProjectTitle(data, lastSearched),
         createdAt: Date.now(),
-        data: buildSnapshotFrom(data, lastSearched),
+        // Save a full deep clone of the current view so the project contains the
+        // whole page state (not just a reduced snapshot). This prevents fields
+        // from disappearing when viewing a saved project.
+        data: deepCloneView(data, lastSearched),
         section: finalSection,
         notes: Object.keys(notesMap).length ? notesMap : undefined,
       };
       setProjects((prev) => [proj, ...prev]);
-      // Fire-and-forget: persist this project snapshot to Table Storage (Projects table)
-      try {
-        const email = getEmail();
-        const alias = getAlias(email);
-        void saveToStorage({
-          endpoint: NOTES_ENDPOINT,
-          category: "Projects",
-          uid: lastSearched,
-          title: proj.name,
-          description: proj.name,
-          owner: alias || email || '',
-          extras: { projectJson: JSON.stringify(proj) },
-        }).catch((e) => {
-          // eslint-disable-next-line no-console
-          console.warn('Failed to persist project to server:', e?.message || e);
-        });
-      
-      // After saving, refresh Projects list from server so it persists across reloads/tabs
-      try {
-        void (async () => {
-          const remote = await getAllProjects();
-          if (remote && remote.length) {
-            const mapped: Project[] = remote.map((e: NoteEntity) => {
-              const id = e.rowKey || e.RowKey || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-              const name = e.title || e.Title || e.projectName || e.ProjectName || `Project ${id}`;
-              const createdAt = e.savedAt ? Date.parse(String(e.savedAt)) : Date.now();
-              const parsed = (e.projectJson || e.ProjectJson || e.description) ? (() => {
-                try { const raw = e.projectJson || e.ProjectJson || e.description || ''; return typeof raw === 'string' ? JSON.parse(raw) : raw; } catch { return null; }
-              })() : null;
-              let dataSnapshot: any = null;
-              let finalId = id;
-              let finalName = String(name || id);
-              let finalCreatedAt = Number.isFinite(createdAt) ? createdAt : Date.now();
-              let owners: string[] | undefined = undefined;
-              let sectionVal: string | undefined = undefined;
-              let notesVal: Record<string, any> | undefined = undefined;
-              if (parsed) {
-                if (parsed.data && (parsed.data.sourceUids || parsed.data.AssociatedUIDs || parsed.data.OLSLinks)) {
-                  dataSnapshot = parsed.data;
-                  finalId = parsed.id || finalId;
-                  finalName = String(parsed.name || finalName);
-                  finalCreatedAt = parsed.createdAt ? Number(parsed.createdAt) : finalCreatedAt;
-                  owners = parsed.owners;
-                  sectionVal = parsed.section;
-                  notesVal = parsed.notes;
-                } else {
-                  dataSnapshot = parsed;
-                }
-              }
-              return {
-                id: finalId,
-                name: finalName,
-                createdAt: Number.isFinite(finalCreatedAt) ? finalCreatedAt : Date.now(),
-                data: dataSnapshot || {},
-                owners,
-                section: sectionVal,
-                notes: notesVal,
-                __serverEntity: e,
-              } as any;
-            });
-            setProjects(prev => {
-              const existingIds = new Set(prev.map(p => p.id));
-              const toAdd = mapped.filter(m => !existingIds.has(m.id));
-              return toAdd.length ? [...toAdd, ...prev] : prev;
-            });
-          }
-        })();
-      } catch {}
-      } catch {}
+      // Persist locally only. We intentionally do NOT save created projects to the
+      // server anymore; local projects are kept in localStorage by the effect
+      // that watches `projects` (LOCAL_PROJECTS_KEY). This keeps the Projects
+      // side menu fully functional while avoiding server writes.
       setActiveProjectId(id);
       // reset create-project state
       setCreateSectionChoice('');
@@ -2077,8 +2422,28 @@ export default function UIDLookup() {
       const title = String(r?.CleanTitle ?? r?.Title ?? r?.cleanTitle ?? '').trim();
       const state = String(r?.State ?? r?.Status ?? '').trim();
       const assigned = String(r?.CleanAssignedTo ?? r?.AssignedTo ?? r?.Owner ?? r?.Assigned ?? '').trim();
+      let ticketUid = String(r?.UID ?? r?.Uid ?? r?.uid ?? r?.AssociatedUID ?? r?.SourceUID ?? '').trim();
       const link = String(r?.TicketLink ?? r?.TicketLinkUrl ?? r?.TicketURL ?? r?.TicketUrl ?? r?.Ticket_Link ?? r?.TicketLink ?? r?.Link ?? r?.link ?? r?.URL ?? r?.Url ?? '').trim() || null;
+      // Try to infer the owning UID when it's not present on the ticket row
+      try {
+        if (!ticketUid) {
+          // 1) Look through AssociatedUIDs (if present) to find a matching ticket by id/link/title
+          if (Array.isArray(src.AssociatedUIDs)) {
+            for (const ar of src.AssociatedUIDs) {
+              const candTicket = String(ar?.TicketId ?? ar?.TicketID ?? ar?.Ticket ?? ar?.CleanTitle ?? '').trim();
+              const candLink = String(ar?.TicketLink ?? ar?.TicketLinkUrl ?? ar?.TicketURL ?? ar?.Link ?? ar?.link ?? '').trim();
+              if (candTicket && ticketId && candTicket === ticketId) { ticketUid = String(ar?.UID ?? ar?.Uid ?? ar?.uid ?? ''); break; }
+              if (candLink && link && candLink === link) { ticketUid = String(ar?.UID ?? ar?.Uid ?? ar?.uid ?? ''); break; }
+              if (String(ar?.CleanTitle ?? '').trim() && title && String(ar?.CleanTitle ?? '').trim() === title) { ticketUid = String(ar?.UID ?? ar?.Uid ?? ar?.uid ?? ''); break; }
+            }
+          }
+          // 2) If still missing and the snapshot/project contains a single sourceUid, attribute to that
+          if (!ticketUid && Array.isArray(src.sourceUids) && src.sourceUids.length === 1) ticketUid = String(src.sourceUids[0] ?? '').trim();
+        }
+      } catch (e) { /* ignore inference errors */ }
       const obj: any = {
+        // Include UID where present so project view can surface ticket ownership
+        "UID": ticketUid,
         "Ticket Id": ticketId,
         "DC Code": dc,
         "Title": title,
@@ -2092,7 +2457,7 @@ export default function UIDLookup() {
     });
     // Filter out rows that have no visible content (all fields empty)
     return mapped.filter((m: any) => {
-      return (String(m['Ticket Id'] || '').trim() || String(m['Title'] || '').trim() || String(m['DC Code'] || '').trim() || String(m['State'] || '').trim() || String(m['Assigned To'] || '').trim());
+      return (String(m['Ticket Id'] || '').trim() || String(m['Title'] || '').trim() || String(m['DC Code'] || '').trim() || String(m['State'] || '').trim() || String(m['Assigned To'] || '').trim() || String(m['UID'] || '').trim());
     });
   };
 
@@ -2114,7 +2479,8 @@ export default function UIDLookup() {
 
     // Details
     try {
-      const rawStatus = String(getWFStatusFor(dataNow, lastSearched) || '').trim();
+  const fallbackUid = primaryUidFor(dataNow);
+  const rawStatus = String(getWFStatusFor(dataNow, fallbackUid) || '').trim();
       const isCancelled = /cancel|cancelled|canceled/i.test(rawStatus);
       const isDecom = /decom/i.test(rawStatus);
       const statusDisplay = isCancelled ? 'WF Cancelled' : isDecom ? 'DECOM' : (rawStatus || '—');
@@ -2123,7 +2489,13 @@ export default function UIDLookup() {
       const detailsHeaders = ["SRLGID", "SRLG", "SolutionID", "Status", "CIS Workflow"];
       // Prefer SRLG/SRLGID and JobId/SolutionId from the AssociatedUID matching the current UID when present
       const assocRows: any[] = Array.isArray((dataNow as any).AssociatedUIDs) ? (dataNow as any).AssociatedUIDs : [];
-      const assoc = lastSearched ? assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched ?? '')) : null;
+      // Prefer assoc matching the last searched UID; when viewing a project (no lastSearched)
+      // fall back to the first AssociatedUID so SolutionID / JobId (CIS Workflow) remain present.
+      let assoc: any = null;
+      try {
+        if (lastSearched) assoc = assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched ?? ''));
+        if (!assoc && assocRows.length) assoc = assocRows[0];
+      } catch { assoc = assocRows.length ? assocRows[0] : null; }
       // Prefer JobId from assoc if present (for CIS Workflow link)
       const jobIdPrefer = assoc?.JobId ?? dataNow?.KQLData?.JobId;
       const cisLinkPrefer = jobIdPrefer ? `https://azcis.trafficmanager.net/Public/NetworkingOptical/JobDetails/${jobIdPrefer}` : '';
@@ -2315,25 +2687,16 @@ export default function UIDLookup() {
     const dataNow = getViewData();
     if (!dataNow || !(uid || (projects.find(p=>p.id===activeProjectId)?.name))) return;
     const wb = XLSX.utils.book_new();
-    // First sheet: a consolidated "All Details" text export (one line per row)
-    try {
-      const all = buildAllText();
-      if (all) {
-        const lines = String(all).split(/\r?\n/).map(l => ({ Line: l }));
-        if (lines.length) {
-          const wsAll = XLSX.utils.json_to_sheet(lines);
-          XLSX.utils.book_append_sheet(wb, wsAll, 'All Details'.slice(0, 31));
-        }
-      }
-    } catch (e) {
-      // Do not block the rest of the export if building the All Details sheet fails
-      // eslint-disable-next-line no-console
-      console.warn('Failed to build All Details sheet for Excel export:', e);
-    }
     // include Details and Tools sheets as well
     // Prefer values from the AssociatedUID that matches lastSearched when present
     const assocRowsForExport: any[] = Array.isArray((dataNow as any).AssociatedUIDs) ? (dataNow as any).AssociatedUIDs : [];
-    const assocForExport = lastSearched ? assocRowsForExport.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched ?? '')) : null;
+    // Prefer assoc matching the primary UID for this view; fallback to first assoc row
+    let assocForExport: any = null;
+    try {
+      const pick = primaryUidFor(dataNow);
+      if (pick) assocForExport = assocRowsForExport.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(pick));
+      if (!assocForExport && assocRowsForExport.length) assocForExport = assocRowsForExport[0];
+    } catch { assocForExport = assocRowsForExport.length ? assocRowsForExport[0] : null; }
     const jobIdForExport = assocForExport?.JobId ?? assocForExport?.JobID ?? dataNow?.KQLData?.JobId ?? null;
     const solutionForExport = (() => {
       try {
@@ -2367,7 +2730,7 @@ export default function UIDLookup() {
         SRLGID: String(assocForExport?.SrlgId ?? assocForExport?.SRLGID ?? getSrlgIdFrom(dataNow, lastSearched) ?? ""),
         SRLG: String(assocForExport?.Srlg ?? assocForExport?.SRLG ?? getSrlgFrom(dataNow, lastSearched) ?? ""),
         SolutionID: solutionForExport,
-        Status: String(getWFStatusFor(dataNow, lastSearched) || ""),
+                Status: String(getWFStatusFor(dataNow, primaryUidFor(dataNow)) || ""),
         CIS_Workflow: jobIdForExport ? `https://azcis.trafficmanager.net/Public/NetworkingOptical/JobDetails/${jobIdForExport}` : "",
       },
     ];
@@ -2428,13 +2791,21 @@ export default function UIDLookup() {
       } catch { return (dataNow as any).AssociatedUIDs; }
     })();
 
-    const sections = {
+  const sections = {
       ...(Array.isArray((dataNow as any)?.sourceUids) && (dataNow as any).sourceUids.length ? {
         "Project UIDs": ((dataNow as any).sourceUids as any[]).map(u => ({ UID: String(u) }))
       } : {}),
       "Details": detailsRow,
       "Tools": toolsRows,
-  "Link Summary": dataNow.OLSLinks,
+  // When combinedData provides per-UID grouped links, render a separate Link Summary
+  // table for each UID so the UI shows the UID above each table.
+  ...(Array.isArray((dataNow as any)?.OLSLinksByUid) && (dataNow as any).OLSLinksByUid.length ? (() => {
+    const map: Record<string, any[]> = {};
+    for (const g of (dataNow as any).OLSLinksByUid) {
+      try { const key = `Link Summary — ${String(g.uid || '')}`; map[key] = Array.isArray(g.links) ? g.links : []; } catch { }
+    }
+    return map;
+  })() : { "Link Summary": dataNow.OLSLinks }),
   "Associated UIDs": associatedRows,
       "GDCO Tickets": ((): any[] => {
         try {
@@ -2445,9 +2816,94 @@ export default function UIDLookup() {
       "MGFX A-Side": dataNow.MGFXA,
       "MGFX Z-Side": dataNow.MGFXZ,
     } as Record<string, any[]>;
+
+    // Preferred header ordering for known sections (used for per-sheet and consolidated All Details)
+    const preferredHeaders: Record<string, string[]> = {
+      'Details': ['SRLGID', 'SRLG', 'SolutionID', 'Status', 'CIS Workflow'],
+      'Link Summary': [
+        'A Device','A Port','Z Device','Z Port','A Optical Device','A Optical Port','Z Optical Device','Z Optical Port','Wirecheck'
+      ],
+      'Associated UIDs': ['UID','SrlgId','Action','Type','Device A','Device Z','Site A','Site Z','WF Status'],
+      'GDCO Tickets': ['Ticket Id','DC Code','Title','State','Assigned To','Link'],
+      'MGFX A-Side': ['XOMT','C0 Device','C0 Port','Line','M0 Device','M0 Port','C0 DIFF','M0 DIFF'],
+      'MGFX Z-Side': ['XOMT','C0 Device','C0 Port','Line','M0 Device','M0 Port','C0 DIFF','M0 DIFF'],
+      'Tools': ['Tool','URL'],
+      'Project UIDs': ['UID'],
+    };
+
+    // Build consolidated "All Details" sheet by stacking each section as its own table
+    try {
+      const aoa: any[] = [];
+      for (const [title, rows] of Object.entries(sections)) {
+        if (!Array.isArray(rows) || !rows.length) continue;
+        // section title row
+        aoa.push([title]);
+
+        // compute headers for this section (preferred order + extras)
+        const keysSet = new Set<string>();
+        rows.forEach((r: any) => { if (r && typeof r === 'object') Object.keys(r).forEach(k => keysSet.add(k)); else keysSet.add('Value'); });
+        let headersForSection: string[];
+        if (preferredHeaders[title]) {
+          const pref = preferredHeaders[title];
+          const extras = Array.from(keysSet).filter(k => !pref.includes(k));
+          headersForSection = [...pref, ...extras];
+        } else {
+          headersForSection = Array.from(keysSet);
+        }
+
+        // header row for the section
+        aoa.push(headersForSection);
+
+        // data rows
+        for (const r of rows) {
+          if (r && typeof r === 'object') {
+            aoa.push(headersForSection.map(h => r[h] ?? ''));
+          } else {
+            const rowArr = headersForSection.map((_, idx) => idx === 0 ? String(r ?? '') : '');
+            aoa.push(rowArr);
+          }
+        }
+
+        // blank separator row
+        aoa.push([]);
+      }
+
+      if (aoa.length) {
+        const wsAll = XLSX.utils.aoa_to_sheet(aoa);
+        XLSX.utils.book_append_sheet(wb, wsAll, 'All Details'.slice(0, 31));
+      }
+    } catch (e) {
+      // non-fatal
+    }
+
+    // Export each section as its own sheet (match on-page tables)
     for (const [title, rows] of Object.entries(sections)) {
       if (!Array.isArray(rows) || !rows.length) continue;
-      const ws = XLSX.utils.json_to_sheet(rows);
+      // Determine a stable set of headers (union of keys) so columns are consistent.
+      const keysSet = new Set<string>();
+      rows.forEach((r: any) => { if (r && typeof r === 'object') Object.keys(r).forEach(k => keysSet.add(k)); else keysSet.add('Value'); });
+      let headers: string[];
+      if (preferredHeaders[title]) {
+        const pref = preferredHeaders[title];
+        const extras = Array.from(keysSet).filter(k => !pref.includes(k));
+        headers = [...pref, ...extras];
+      } else {
+        headers = Array.from(keysSet);
+      }
+
+      const normalized = (rows as any[]).map(r => {
+        if (r && typeof r === 'object') {
+          const out: any = {};
+          headers.forEach(h => out[h] = r[h] ?? '');
+          return out;
+        }
+        const out: any = {};
+        headers.forEach(h => out[h] = '');
+        out[headers[0]] = String(r ?? '');
+        return out;
+      });
+
+      const ws = XLSX.utils.json_to_sheet(normalized, { header: headers });
       XLSX.utils.book_append_sheet(wb, ws, title.slice(0, 31));
     }
     const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
@@ -2459,7 +2915,13 @@ export default function UIDLookup() {
     saveAs(blob, `${safeName}.xlsx`);
   };
 
-  const Table = ({ title, headers, rows, highlightUid, headerRight }: any) => {
+  // Global toggle to expand/collapse troubleshooting rows in the Link Summary table
+  const [troubleshootExpandedAll, setTroubleshootExpandedAll] = useState<boolean>(false);
+
+  // Track selected Associated UIDs for the Associated UIDs table (UID -> checked)
+  const [assocSelected, setAssocSelected] = useState<Record<string, boolean>>({});
+
+  const Table = ({ title, headers, rows, highlightUid, headerRight, contextUid }: any) => {
     // Determine keys from first row to ensure consistent ordering and sorting (safe fallback)
     const keys = rows && rows[0] ? Object.keys(rows[0]) : [];
 
@@ -2467,6 +2929,60 @@ export default function UIDLookup() {
     const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
     const effectiveHeaders = headers && headers.length === keys.length ? headers : keys;
+
+  const isLinkSummary = title === 'Link Summary';
+
+    // Build the list of displayed header/key indices for this table. For Link Summary
+    // we previously hid the Wirecheck column; restore it so Wirecheck/Open buttons
+    // are visible in the Link Summary table.
+    const displayIndices = effectiveHeaders.map((h: string, i: number) => i);
+  const displayHeaders = displayIndices.map((i: number) => effectiveHeaders[i]);
+  const displayKeys = displayIndices.map((i: number) => keys[i]);
+
+  // Column widths (only used for Link Summary). Persisted per-UID in localStorage.
+    const WIDTHS_KEY = `linkSummaryWidths:${(contextUid || lastSearched) || 'global'}`;
+    const [columnWidths, setColumnWidths] = useState<number[]>(() => {
+      try {
+        if (!isLinkSummary) return [];
+        const raw = localStorage.getItem(WIDTHS_KEY);
+        if (!raw) return [];
+        const parsed = JSON.parse(raw || '[]');
+        return Array.isArray(parsed) ? parsed : [];
+      } catch { return []; }
+    });
+    // Keep drag state in a ref so mousemove handler can access it without re-registering
+    const dragRef = React.useRef<{ index: number | null; startX: number; startWidth: number } | null>(null);
+
+    useEffect(() => {
+      if (!isLinkSummary) return;
+      try { localStorage.setItem(WIDTHS_KEY, JSON.stringify(columnWidths || [])); } catch {}
+    }, [columnWidths, WIDTHS_KEY, isLinkSummary]);
+
+    const onResizeStart = (e: React.MouseEvent, colIndex: number) => {
+      e.preventDefault();
+      const el = e.currentTarget as HTMLElement;
+      const th = el.closest('th') as HTMLElement | null;
+      const startWidth = th ? th.offsetWidth : 120;
+      dragRef.current = { index: colIndex, startX: e.clientX, startWidth };
+
+      const onMove = (ev: MouseEvent) => {
+        if (!dragRef.current) return;
+        const delta = ev.clientX - dragRef.current.startX;
+        const next = Math.max(40, Math.round(dragRef.current.startWidth + delta));
+        setColumnWidths(prev => {
+          const copy = prev ? prev.slice() : [];
+          copy[colIndex] = next;
+          return copy;
+        });
+      };
+      const onUp = () => {
+        dragRef.current = null;
+        window.removeEventListener('mousemove', onMove);
+        window.removeEventListener('mouseup', onUp);
+      };
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onUp);
+    };
 
     // Compute sortedRows as a hook (must run unconditionally before any return)
     const sortedRows = React.useMemo(() => {
@@ -2507,7 +3023,30 @@ export default function UIDLookup() {
       return hidden || null;
     };
 
-    const isLinkSummary = title === 'Link Summary';
+  // Per-table persisted troubleshooting comments (keyed by current UID + row content)
+    const storageKey = `troubleshootComments:${(contextUid || lastSearched) || 'global'}`;
+    const [comments, setComments] = useState<Record<string, any>>(() => {
+      try {
+        if (!isLinkSummary) return {};
+        return JSON.parse(localStorage.getItem(storageKey) || '{}');
+      } catch { return {}; }
+    });
+    useEffect(() => {
+      try {
+        if (!isLinkSummary) { setComments({}); return; }
+        setComments(JSON.parse(localStorage.getItem(storageKey) || '{}'));
+      } catch { setComments({}); }
+    }, [storageKey, isLinkSummary]);
+    const saveComments = (c: Record<string, any>) => {
+      try { localStorage.setItem(storageKey, JSON.stringify(c || {})); } catch {}
+      setComments(c || {});
+    };
+    // Per-table Troubleshoot expanded state (persisted per-context so each UID/table can expand independently)
+    const EXPANDED_KEY = `troubleshootExpanded:${(contextUid || lastSearched) || 'global'}`;
+    const [perTableExpanded, setPerTableExpanded] = useState<boolean>(() => {
+      try { const raw = localStorage.getItem(EXPANDED_KEY); return raw == null ? false : raw === '1'; } catch { return false; }
+    });
+    useEffect(() => { try { localStorage.setItem(EXPANDED_KEY, perTableExpanded ? '1' : '0'); } catch {} }, [perTableExpanded, EXPANDED_KEY]);
     const isScrollCandidate =
       title === 'GDCO Tickets' ||
       title === 'Associated UIDs' ||
@@ -2520,6 +3059,17 @@ export default function UIDLookup() {
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="section-title">{title}</Text>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            {/* Per-table troubleshoot toggle (operates per-UID when contextUid present). */}
+            {isLinkSummary && (
+              <button
+                className="sleek-btn repo"
+                onClick={() => setPerTableExpanded(v => !v)}
+                title={perTableExpanded ? 'Hide troubleshoot rows (this table)' : 'Show troubleshoot rows (this table)'}
+                style={{ marginRight: 8 }}
+              >
+                {perTableExpanded ? 'Hide Troubleshoot' : 'Troubleshoot'}
+              </button>
+            )}
             {headerRight}
             <CopyIconInline onCopy={() => copyTableText(title, rows, effectiveHeaders)} message="Table copied" />
           </div>
@@ -2528,28 +3078,63 @@ export default function UIDLookup() {
           <div style={{ padding: '8px 0', color: '#a6b7c6' }}>No rows to display.</div>
         ) : (
           <div style={shouldScroll ? { maxHeight: 360, overflowY: 'auto', marginTop: 4 } : undefined}>
-        <table className="data-table">
+  <table className={`data-table ${isLinkSummary ? 'compact-link-summary' : ''}`}>
           <thead>
             <tr>
-              {effectiveHeaders.map((h: string, i: number) => {
+              {/* Selection column for Associated UIDs (narrow, no title text) */}
+              {title === 'Associated UIDs' ? (
+                <th key="select-col" style={{ width: 44, minWidth: 44, textAlign: 'center' }}>
+                  {/* Select-all checkbox: checked when all visible rows are selected */}
+                  <input
+                    type="checkbox"
+                    aria-label="Select all"
+                    checked={Array.isArray(rows) && rows.length > 0 && rows.every((r: any) => !!assocSelected[String(r?.UID ?? r?.Uid ?? r?.uid ?? '')])}
+                    onChange={(e) => {
+                      try {
+                        const newMap = { ...assocSelected };
+                        const visible: string[] = (rows || []).map((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '').trim()).filter(Boolean);
+                        if (e.target.checked) visible.forEach(u => { if (u) newMap[u] = true; });
+                        else visible.forEach(u => { if (u) delete newMap[u]; });
+                        setAssocSelected(newMap);
+                      } catch {}
+                    }}
+                    style={{ accentColor: '#2fb85b' }}
+                  />
+                </th>
+              ) : null}
+              {displayHeaders.map((h: string, idx: number) => {
+                const i = displayIndices[idx];
                 const k = keys[i] ?? h;
                 const active = sortKey === k;
+                const headerLower = String(h || '').toLowerCase();
                 const isStatusMini = isLinkSummary && (/admin|oper|state/i.test(String(k)) || /admin|state/i.test(String(h)));
+                const isWirecheckHeader = isLinkSummary && headerLower.includes('wirecheck');
                 return (
                   <th
-                    key={i}
-                    onClick={() => toggleSort(k)}
-                    style={{
-                      cursor: 'pointer',
-                      userSelect: 'none',
-                      textAlign: isStatusMini ? 'center' : undefined,
-                      width: isStatusMini ? 24 : undefined,
-                      minWidth: isStatusMini ? 24 : undefined,
-                    }}
-                  >
-                    <span>{h}</span>
-                    <span style={{ marginLeft: 6 }}>{active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}</span>
-                  </th>
+                      key={i}
+                      onClick={() => toggleSort(k)}
+                      style={{
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        textAlign: isStatusMini ? 'center' : undefined,
+                        // Give the Wirecheck column more room to avoid ellipsis; still allow user resizing
+                        width: columnWidths && columnWidths[i] ? columnWidths[i] : (isStatusMini ? 24 : (isWirecheckHeader ? 120 : undefined)),
+                        minWidth: isStatusMini ? 24 : (isWirecheckHeader ? 96 : undefined),
+                        position: 'relative',
+                      }}
+                    >
+                      <span>{h}</span>
+                      <span style={{ marginLeft: 6 }}>{active ? (sortDir === 'asc' ? '▲' : '▼') : '↕'}</span>
+                      {/* Resizer handle (only show for Link Summary) */}
+                      {isLinkSummary && (
+                        <div
+                          onMouseDown={(ev) => onResizeStart(ev as any, i)}
+                          className="col-resizer"
+                          title="Resize column"
+                          style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 8, cursor: 'col-resize', zIndex: 4 }}
+                        />
+                      )}
+                    </th>
                 );
               })}
             </tr>
@@ -2559,36 +3144,56 @@ export default function UIDLookup() {
               const uidKey = keys.find((k) => k.toLowerCase() === 'uid');
               const uidVal = uidKey ? row[uidKey] : undefined;
               const highlight = highlightUid && String(uidVal ?? '') === highlightUid;
+              const rowKey = JSON.stringify(keys.map(k => row[k] ?? ''));
+              const rowComments = (comments && comments[rowKey]) || {};
+
               return (
-                <tr key={i} className={highlight ? 'highlight-row' : ''}>
-                  {keys.map((key: string, j: number) => {
-                    const val = row[key];
+                <React.Fragment key={i}>
+                  <tr className={highlight ? 'highlight-row' : ''}>
+                    {title === 'Associated UIDs' ? (
+                      <td style={{ width: 44, minWidth: 44, textAlign: 'center' }}>
+                        <input
+                          type="checkbox"
+                          checked={!!assocSelected[String(uidVal ?? '')]}
+                          onChange={(e) => {
+                            try {
+                              const id = String(uidVal ?? '');
+                              if (e.target.checked) setAssocSelected(prev => ({ ...(prev || {}), [id]: true }));
+                              else setAssocSelected(prev => { const copy = { ...(prev || {}) }; delete copy[id]; return copy; });
+                            } catch {}
+                          }}
+                          title={`Select UID ${String(uidVal ?? '')}`}
+                          style={{ accentColor: '#2fb85b' }}
+                        />
+                      </td>
+                    ) : null}
+                    {displayKeys.map((key: string, j: number) => {
+                      const val = row[key];
 
-                    // Render Admin/Oper arrow indicators compactly
-                    if (isLinkSummary && /admin|oper|state/i.test(String(key))) {
-                      const v = String(val ?? '').trim();
-                      const isUp = v === '1' || v.toLowerCase() === 'up' || v === 'true';
-                      const isDown = v === '0' || v.toLowerCase() === 'down' || v === 'false';
-                      return (
-                        <td key={j} style={{ textAlign: 'center', width: 24, minWidth: 24 }} title={isUp ? 'Up' : isDown ? 'Down' : String(val ?? '')}>
-                          <span style={{ color: isUp ? '#107c10' : isDown ? '#d13438' : '#a6b7c6', fontWeight: 800, fontSize: 12, lineHeight: '14px' }}>
-                            {isUp ? '▲' : isDown ? '▼' : ''}
-                          </span>
-                        </td>
-                      );
-                    }
+                      // Admin/Oper compact indicator
+                      if (isLinkSummary && /admin|oper|state/i.test(String(key))) {
+                        const v = String(val ?? '').trim();
+                        const isUp = v === '1' || v.toLowerCase() === 'up' || v === 'true';
+                        const isDown = v === '0' || v.toLowerCase() === 'down' || v === 'false';
+                        return (
+                          <td key={j} style={{ textAlign: 'center', width: 24, minWidth: 24 }} title={isUp ? 'Up' : isDown ? 'Down' : String(val ?? '')}>
+                            <span style={{ color: isUp ? '#107c10' : isDown ? '#d13438' : '#a6b7c6', fontWeight: 800, fontSize: 12, lineHeight: '14px' }}>
+                              {isUp ? '▲' : isDown ? '▼' : ''}
+                            </span>
+                          </td>
+                        );
+                      }
 
-                    // If column is a link-like field, show Open + Copy (include Wirecheck as link)
-                    {
+                      // Link-like columns (Open / Copy)
                       const keyLower = String(key).toLowerCase();
-                      const headerLower = String(effectiveHeaders[j] || '').toLowerCase();
+                      const headerLower = String(displayHeaders[j] || '').toLowerCase();
                       const looksLikeLink = ['workflow', 'diff', 'ticketlink', 'url', 'link', 'wirecheck'].some(s => keyLower.includes(s) || headerLower.includes(s));
                       if (looksLikeLink) {
                         const link = val;
                         const isWirecheckCol = keyLower.includes('wirecheck') || headerLower.includes('wirecheck');
                         const fromLinkWF = isWirecheckCol && (row as any).__wirecheckFrom === 'linkwfs';
                         return (
-                          <td key={j}>
+                          <td key={j} title={String(val ?? '')}>
                             {link ? (
                               <>
                                 <button
@@ -2599,108 +3204,143 @@ export default function UIDLookup() {
                                 >
                                   Open
                                 </button>
-                                <CopyIconInline onCopy={() => { navigator.clipboard.writeText(String(link)); }} message="Link copied" />
+                                {isWirecheckCol ? (
+                                  <CopyIconInline onCopy={() => { try { navigator.clipboard.writeText(String(link)); } catch {} }} message="Link copied" />
+                                ) : (
+                                  <CopyIconInline onCopy={() => { try { navigator.clipboard.writeText(String(link)); } catch {} }} message="Link copied" />
+                                )}
                               </>
                             ) : null}
                           </td>
                         );
                       }
-                    }
 
-                    // Special: Associated/Project UIDs clicking behavior
-                    if ((title === 'Associated UIDs' || title === 'Project UIDs') && key.toLowerCase() === 'uid') {
-                      const v = val;
-                      return (
-                        <td key={j}>
-                                <span
-                                  className="uid-click"
-                                  onClick={() => {
-                                    // Always open the clicked UID in a new tab so the current results remain
-                                    const url = `${window.location.pathname}?uid=${encodeURIComponent(String(v))}`;
-                                    window.open(url, '_blank');
-                                  }}
-                                  title={`Search UID ${v}`}
-                                >
-                                  {v}
-                                </span>
-                        </td>
-                      );
-                    }
-
-                    // Special: Colored WF Status badge in Associated UIDs
-                    if (title === 'Associated UIDs' && (String(key).toLowerCase() === 'wf status' || String(effectiveHeaders[j]).toLowerCase() === 'wf status')) {
-                      const s = String(val ?? '').trim();
-                      const isCancelled = /cancel|cancelled|canceled/i.test(s);
-                      const isDecom = /decom/i.test(s);
-                      const isFinished = /wf\s*finished|finished/i.test(s);
-                      const isInProgress = /in\s*-?\s*progress|running/i.test(s);
-                      const display = s || '—';
-                      if (isFinished) {
+                      // UID clickable behavior
+                      if ((title === 'Associated UIDs' || title === 'Project UIDs') && String(key).toLowerCase() === 'uid') {
+                        const v = val;
                         return (
-                          <td key={j} style={{ textAlign: 'center' }}>
+                          <td key={j} title={`Search UID ${v}`}>
                             <span
-                              className="wf-finished-badge wf-finished-pulse"
-                              style={{
-                                color: '#00c853',
-                                fontWeight: 900,
-                                fontSize: 12,
-                                padding: '2px 8px',
-                                borderRadius: 10,
-                                border: '1px solid rgba(0,200,83,0.45)'
+                              className="uid-click"
+                              onClick={() => {
+                                const url = `${window.location.pathname}?uid=${encodeURIComponent(String(v))}`;
+                                window.open(url, '_blank');
                               }}
                             >
-                              {display}
+                              {v}
                             </span>
                           </td>
                         );
                       }
-                      if (isInProgress) {
-                        return (
-                          <td key={j} style={{ textAlign: 'center' }}>
-                            <span
-                              className="wf-inprogress-badge wf-inprogress-pulse"
-                              style={{
-                                color: '#50b3ff',
-                                fontWeight: 800,
-                                fontSize: 11,
-                                padding: '1px 6px',
-                                borderRadius: 10,
-                                border: '1px solid rgba(80,179,255,0.28)'
-                              }}
-                            >
-                              {display}
-                            </span>
-                          </td>
-                        );
+
+                      // WF status badge for Associated UIDs
+                      if (title === 'Associated UIDs' && (String(key).toLowerCase() === 'wf status' || String(displayHeaders[j]).toLowerCase() === 'wf status')) {
+                        const s = String(val ?? '').trim();
+                        const isCancelled = /cancel|cancelled|canceled/i.test(s);
+                        const isDecom = /decom/i.test(s);
+                        const isFinished = /wf\s*finished|finished/i.test(s);
+                        const isInProgress = /in\s*-?\s*progress|running/i.test(s);
+                        const display = s || '—';
+                        if (isFinished) return (<td key={j} style={{ textAlign: 'center' }}><span className="wf-finished-badge wf-finished-pulse" style={{ color: '#00c853', fontWeight: 900, fontSize: 12, padding: '2px 8px', borderRadius: 10, border: '1px solid rgba(0,200,83,0.45)' }}>{display}</span></td>);
+                        if (isInProgress) return (<td key={j} style={{ textAlign: 'center' }}><span className="wf-inprogress-badge wf-inprogress-pulse" style={{ color: '#50b3ff', fontWeight: 800, fontSize: 11, padding: '1px 6px', borderRadius: 10, border: '1px solid rgba(80,179,255,0.28)' }}>{display}</span></td>);
+                        const color = (isCancelled || isDecom) ? '#d13438' : '#a6b7c6';
+                        const border = (isCancelled || isDecom) ? '1px solid rgba(209,52,56,0.45)' : '1px solid rgba(166,183,198,0.35)';
+                        return (<td key={j} style={{ textAlign: 'center' }}><span style={{ color, fontWeight: 700, fontSize: 12, padding: '2px 8px', borderRadius: 10, border }}>{display}</span></td>);
                       }
-                      const color = (isCancelled || isDecom) ? '#d13438' : '#a6b7c6';
-                      const border = (isCancelled || isDecom) ? '1px solid rgba(209,52,56,0.45)' : '1px solid rgba(166,183,198,0.35)';
+
+                      // Ticket link behavior
+                      if (String(key).toLowerCase().includes('ticket') || String(displayHeaders[j]).toLowerCase().includes('ticket')) {
+                        const link = findLinkForRow(row);
+                        if (link) return (<td key={j}><a className="uid-click" href={String(link)} target="_blank" rel="noopener noreferrer">{val}</a>{title !== 'GDCO Tickets' && (<button className="open-btn" onClick={() => window.open(String(link), '_blank')}>Open</button>)}</td>);
+                      }
+
+                      // Default cell — show notes icon for monitored columns
+                      const monitored = isLinkSummary && (key === 'A Device' || key === 'A Optical Device' || key === 'Z Device' || key === 'Z Optical Device');
+                      const hasNote = Boolean(rowComments && (rowComments.aDevice || rowComments.aOpt || rowComments.zDevice || rowComments.zOpt));
                       return (
-                        <td key={j} style={{ textAlign: 'center' }}>
-                          <span style={{ color, fontWeight: 700, fontSize: 12, padding: '2px 8px', borderRadius: 10, border }}>{display}</span>
+                        <td key={j} title={String(val ?? '')}>
+                          {val}
+                          {monitored && hasNote ? (<span title="Troubleshoot notes present" style={{ marginLeft: 6, color: '#ffd166', fontSize: 12 }}>📝</span>) : null}
                         </td>
                       );
-                    }
+                    })}
+                  </tr>
 
-                    // If this is a Ticket Id cell, try to hyperlink to the ticket URL if available
-                    if (String(key).toLowerCase().includes('ticket') || String(effectiveHeaders[j]).toLowerCase().includes('ticket')) {
-                      const link = findLinkForRow(row);
-                      if (link) {
-                        return (
-                          <td key={j}>
-                            <a className="uid-click" href={String(link)} target="_blank" rel="noopener noreferrer">{val}</a>
-                            {title !== 'GDCO Tickets' && (
-                              <button className="open-btn" onClick={() => window.open(String(link), '_blank')}>Open</button>
-                            )}
-                          </td>
-                        );
-                      }
-                    }
-
-                    // Default cell
-                    return <td key={j}>{val}</td>;
-                  })}
-                </tr>
+                  {isLinkSummary && (
+                    <tr className="troubleshoot-row" style={{ display: (troubleshootExpandedAll || perTableExpanded) ? 'table-row' : 'none', background: 'rgba(13,20,28,0.65)' }}>
+                      {(() => {
+                        const cells: any[] = [];
+                        for (let idx = 0; idx < displayHeaders.length; idx++) {
+                          const header = String(displayHeaders[idx] || '').toLowerCase();
+                          // A Device + A Port
+                          if (header === 'a device') {
+                            cells.push(
+                              <td key={`a-dev-${idx}`} colSpan={2}>
+                                <input
+                                  className="troubleshoot-input"
+                                  value={rowComments.aDevice || ''}
+                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), aDevice: ev.target.value }; saveComments(next); }}
+                                  onKeyDown={(e) => { if ((e as any).key === 'Enter') try { (e.target as HTMLInputElement).blur(); } catch {} }}
+                                  style={{ width: '100%', padding: '4px 6px', borderRadius: 2, border: '1px solid rgba(166,183,198,0.10)', background: 'transparent', color: '#d0e7ff', fontSize: 13, lineHeight: '16px' }}
+                                />
+                              </td>
+                            );
+                            idx++; // skip next (A Port)
+                            continue;
+                          }
+                          if (header === 'a optical device') {
+                            cells.push(
+                              <td key={`a-opt-${idx}`} colSpan={2}>
+                                <input
+                                  className="troubleshoot-input"
+                                  value={rowComments.aOpt || ''}
+                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), aOpt: ev.target.value }; saveComments(next); }}
+                                  onKeyDown={(e) => { if ((e as any).key === 'Enter') try { (e.target as HTMLInputElement).blur(); } catch {} }}
+                                  style={{ width: '100%', padding: '4px 6px', borderRadius: 2, border: '1px solid rgba(166,183,198,0.10)', background: 'transparent', color: '#d0e7ff', fontSize: 13, lineHeight: '16px' }}
+                                />
+                              </td>
+                            );
+                            idx++; // skip A Optical Port
+                            continue;
+                          }
+                          if (header === 'z device') {
+                            cells.push(
+                              <td key={`z-dev-${idx}`} colSpan={2}>
+                                <input
+                                  className="troubleshoot-input"
+                                  value={rowComments.zDevice || ''}
+                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), zDevice: ev.target.value }; saveComments(next); }}
+                                  onKeyDown={(e) => { if ((e as any).key === 'Enter') try { (e.target as HTMLInputElement).blur(); } catch {} }}
+                                  style={{ width: '100%', padding: '4px 6px', borderRadius: 2, border: '1px solid rgba(166,183,198,0.10)', background: 'transparent', color: '#d0e7ff', fontSize: 13, lineHeight: '16px' }}
+                                />
+                              </td>
+                            );
+                            idx++; // skip Z Port
+                            continue;
+                          }
+                          if (header === 'z optical device') {
+                            cells.push(
+                              <td key={`z-opt-${idx}`} colSpan={2}>
+                                <input
+                                  className="troubleshoot-input"
+                                  value={rowComments.zOpt || ''}
+                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), zOpt: ev.target.value }; saveComments(next); }}
+                                  onKeyDown={(e) => { if ((e as any).key === 'Enter') try { (e.target as HTMLInputElement).blur(); } catch {} }}
+                                  style={{ width: '100%', padding: '4px 6px', borderRadius: 2, border: '1px solid rgba(166,183,198,0.10)', background: 'transparent', color: '#d0e7ff', fontSize: 13, lineHeight: '16px' }}
+                                />
+                              </td>
+                            );
+                            idx++; // skip Z Optical Port
+                            continue;
+                          }
+                          // keep table alignment
+                          cells.push(<td key={`empty-${idx}`} />);
+                        }
+                        return cells;
+                      })()}
+                    </tr>
+                  )}
+                </React.Fragment>
               );
             })}
           </tbody>
@@ -2790,8 +3430,12 @@ export default function UIDLookup() {
 
     // Prefer Increment from the AssociatedUID that matches the current UID (this is where Optic/Increment are placed by Logic Apps)
     try {
-  const assocRows: any[] = Array.isArray(viewData?.AssociatedUIDs) ? viewData.AssociatedUIDs : [];
-  const assoc = assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched ?? '')) || null;
+      const assocRows: any[] = Array.isArray(viewData?.AssociatedUIDs) ? viewData.AssociatedUIDs : [];
+      // Prefer an AssociatedUID that matches the currently searched UID when available.
+      // When viewing a saved project there may be no `lastSearched`, so fall back
+      // to the first AssociatedUID row to recover Increment/OpticalSpeed values.
+      const assocMatch = assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched ?? '')) || null;
+      const assoc = assocMatch || (assocRows.length ? assocRows[0] : null);
       const incCandidate = assoc?.Increment ?? assoc?.increment ?? assoc?.OpticalSpeed ?? assoc?.IncrementGb ?? assoc?.OpticalSpeedGb ?? assoc?.Speed ?? null;
       const incNum = incCandidate != null && incCandidate !== '' && !isNaN(Number(incCandidate)) ? Number(incCandidate) : null;
       if (incNum != null && effectiveLinks.length) {
@@ -2845,7 +3489,16 @@ export default function UIDLookup() {
       if (!viewData) return '';
       // 1) Prefer SolutionId from the AssociatedUID that matches the current UID
       const assocRows: any[] = Array.isArray(viewData?.AssociatedUIDs) ? viewData.AssociatedUIDs : [];
-      const assoc = lastSearched ? assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched)) : null;
+      // Prefer the assoc row matching the current UID. When viewing a saved project
+      // there may be no `lastSearched`; in that case prefer the first AssociatedUID
+      // as the representative source so SolutionID / JobId (CIS Workflow) are preserved.
+      let assoc: any = null;
+      try {
+        if (lastSearched) {
+          assoc = assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched));
+        }
+        if (!assoc && assocRows.length) assoc = assocRows[0];
+      } catch { assoc = assocRows.length ? assocRows[0] : null; }
       const assocSol = assoc?.SolutionId ?? assoc?.SolutionID ?? assoc?.Solution ?? null;
       if (assocSol) {
         if (Array.isArray(assocSol)) return assocSol.map((v: any) => formatSolutionId(String(v))).filter(Boolean).join(', ');
@@ -3442,8 +4095,7 @@ export default function UIDLookup() {
               {/* Only allow creating/adding when viewing live results */}
               {!activeProjectId && data && (
                 <>
-                  <button className="sleek-btn repo" onClick={createProjectFromCurrent}>Create Project</button>
-                  <button className="sleek-btn repo" onClick={addSection} title="Create a personal section">New Section</button>
+                  <button className="sleek-btn repo accent-cta" onClick={createProjectFromCurrent} title="Create a new project from the current UID">Create Project</button>
                   {projects.length > 0 && (
                     <>
                       <select
@@ -3509,6 +4161,8 @@ export default function UIDLookup() {
           {activeProjectId && (() => {
             const ap = getActiveProject();
             const uids: string[] = Array.from(new Set(ap?.data?.sourceUids || [])).filter(Boolean);
+            // Ensure a stable, numeric-aware ascending order for project UIDs
+            uids.sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
             const listText = uids.join(' | ');
             return (
               <div className="table-container" style={{ marginBottom: 12 }}>
@@ -3569,7 +4223,7 @@ export default function UIDLookup() {
                   <td>{solutionIdDisplay || '—'}</td>
                   <td style={{ textAlign: 'center' }}>
                     {(() => {
-                      const raw = String(getWFStatusFor(viewData, lastSearched) || '').trim();
+                      const raw = String(getWFStatusFor(viewData, primaryUidFor(viewData)) || '').trim();
                       const isCancelled = /cancel|cancelled|canceled/i.test(raw);
                       const isDecom = /decom/i.test(raw);
                       const isFinished = /wffinished|wf finished|finished/i.test(raw);
@@ -3623,9 +4277,16 @@ export default function UIDLookup() {
                   </td>
                   <td>
                     {(() => {
-                      // Prefer JobId from the AssociatedUID that matches the current searched UID; fallback to KQLData.JobId
+                      // Prefer JobId from the AssociatedUID that matches the primary UID for this view;
+                      // when viewing a saved project there may be no lastSearched so primaryUidFor
+                      // will choose a sensible fallback (sourceUids[0] or first AssociatedUID).
                       const assocRows: any[] = Array.isArray(viewData?.AssociatedUIDs) ? viewData.AssociatedUIDs : [];
-                      const assoc = lastSearched ? assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(lastSearched)) : null;
+                      const pickUid = primaryUidFor(viewData);
+                      let assoc: any = null;
+                      try {
+                        if (pickUid) assoc = assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(pickUid));
+                        if (!assoc && assocRows.length) assoc = assocRows[0];
+                      } catch { assoc = assocRows.length ? assocRows[0] : null; }
                       const jobId = assoc?.JobId ?? assoc?.JobID ?? viewData?.KQLData?.JobId;
                       const link = jobId ? `https://azcis.trafficmanager.net/Public/NetworkingOptical/JobDetails/${jobId}` : null;
                       return link ? (
@@ -3685,74 +4346,77 @@ export default function UIDLookup() {
             </table>
           </div>
 
-          {/* WAN Buttons (formulated links) */}
-          <div className="button-header-align-left">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Text className="side-label">A Side:</Text>
-                  {(() => { const url = getWanLinkForSide(viewData, 'A'); return url; })() && (
-                    <>
-                      <button
-                        className="sleek-btn wan"
-                        onClick={() => { const u = getWanLinkForSide(viewData, 'A'); if (u) window.open(u, "_blank"); }}
-                      >
-                        WAN Checker
-                      </button>
-                      <CopyIconInline onCopy={() => { const u = getWanLinkForSide(viewData, 'A'); if (u) navigator.clipboard.writeText(String(u)); }} message="Link copied" />
-                    </>
-                  )}
+          {/* WAN Buttons (formulated links) - only show for single-UID live searches, not when viewing a saved project */}
+          {!activeProjectId && (
+            <div className="button-header-align-left">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Text className="side-label">A Side:</Text>
+                    {(() => { const url = getWanLinkForSide(viewData, 'A'); return url; })() && (
+                      <>
+                        <button
+                          className="sleek-btn wan"
+                          onClick={() => { const u = getWanLinkForSide(viewData, 'A'); if (u) window.open(u, "_blank"); }}
+                        >
+                          WAN Checker
+                        </button>
+                        <CopyIconInline onCopy={() => { const u = getWanLinkForSide(viewData, 'A'); if (u) navigator.clipboard.writeText(String(u)); }} message="Link copied" />
+                      </>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {(() => { const url = getDeploymentValidatorLinkForSide(viewData, 'A'); return url; })() && (
+                      <>
+                        <button
+                          className="sleek-btn optical"
+                          onClick={() => { const u = getDeploymentValidatorLinkForSide(viewData, 'A'); if (u) window.open(u, "_blank"); }}
+                        >
+                          Deployment Validator
+                        </button>
+                        <CopyIconInline onCopy={() => { const u = getDeploymentValidatorLinkForSide(viewData, 'A'); if (u) navigator.clipboard.writeText(String(u)); }} message="Link copied" />
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {(() => { const url = getDeploymentValidatorLinkForSide(viewData, 'A'); return url; })() && (
-                    <>
-                      <button
-                        className="sleek-btn optical"
-                        onClick={() => { const u = getDeploymentValidatorLinkForSide(viewData, 'A'); if (u) window.open(u, "_blank"); }}
-                      >
-                        Deployment Validator
-                      </button>
-                      <CopyIconInline onCopy={() => { const u = getDeploymentValidatorLinkForSide(viewData, 'A'); if (u) navigator.clipboard.writeText(String(u)); }} message="Link copied" />
-                    </>
-                  )}
-                </div>
-              </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <Text className="side-label">Z Side:</Text>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {(() => { const url = getWanLinkForSide(viewData, 'Z'); return url; })() && (
-                    <>
-                      <button
-                        className="sleek-btn wan"
-                        onClick={() => { const u = getWanLinkForSide(viewData, 'Z'); if (u) window.open(u, "_blank"); }}
-                      >
-                        WAN Checker
-                      </button>
-                      <CopyIconInline onCopy={() => { const u = getWanLinkForSide(viewData, 'Z'); if (u) navigator.clipboard.writeText(String(u)); }} message="Link copied" />
-                    </>
-                  )}
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {(() => { const url = getDeploymentValidatorLinkForSide(viewData, 'Z'); return url; })() && (
-                    <>
-                      <button
-                        className="sleek-btn optical"
-                        onClick={() => { const u = getDeploymentValidatorLinkForSide(viewData, 'Z'); if (u) window.open(u, "_blank"); }}
-                      >
-                        Deployment Validator
-                      </button>
-                      <CopyIconInline onCopy={() => { const u = getDeploymentValidatorLinkForSide(viewData, 'Z'); if (u) navigator.clipboard.writeText(String(u)); }} message="Link copied" />
-                    </>
-                  )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <Text className="side-label">Z Side:</Text>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {(() => { const url = getWanLinkForSide(viewData, 'Z'); return url; })() && (
+                      <>
+                        <button
+                          className="sleek-btn wan"
+                          onClick={() => { const u = getWanLinkForSide(viewData, 'Z'); if (u) window.open(u, "_blank"); }}
+                        >
+                          WAN Checker
+                        </button>
+                        <CopyIconInline onCopy={() => { const u = getWanLinkForSide(viewData, 'Z'); if (u) navigator.clipboard.writeText(String(u)); }} message="Link copied" />
+                      </>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {(() => { const url = getDeploymentValidatorLinkForSide(viewData, 'Z'); return url; })() && (
+                      <>
+                        <button
+                          className="sleek-btn optical"
+                          onClick={() => { const u = getDeploymentValidatorLinkForSide(viewData, 'Z'); if (u) window.open(u, "_blank"); }}
+                        >
+                          Deployment Validator
+                        </button>
+                        <CopyIconInline onCopy={() => { const u = getDeploymentValidatorLinkForSide(viewData, 'Z'); if (u) navigator.clipboard.writeText(String(u)); }} message="Link copied" />
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Tables */}
-          <Table
-            title="Link Summary"
+                  {!(Array.isArray((viewData as any)?.OLSLinksByUid) && (viewData as any).OLSLinksByUid.length > 0) && (
+                  <Table
+                    title="Link Summary"
             headers={[
               "A Device",
               "A Port",
@@ -3948,7 +4612,7 @@ export default function UIDLookup() {
               const latestIso = '2025-11-11T10:00:00Z';
               const latestLocal = formatTimestamp(latestIso);
               const ts = formatTimestamp(getTimestamp(viewData));
-              return (
+                return (
                 <>
                   {latestLocal ? (
                     <span style={{ color: '#a6b7c6', fontSize: 12, marginRight: 8 }} title={latestIso}>
@@ -3960,9 +4624,244 @@ export default function UIDLookup() {
                     <span style={{ color: '#a6b7c6', fontSize: 12 }} title={ts}><b style={{ color: '#d0e7ff' }}>{ts}</b></span>
                   ) : null}
                 </>
-              );
+                );
             })()}
           />
+          )}
+
+          {/* Per-UID Link Summary tables (appear below the main Link Summary) */}
+          {Array.isArray((viewData as any)?.OLSLinksByUid) && (viewData as any).OLSLinksByUid.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              {(() => {
+                // make a numeric-ascending copy of the per-UID groups
+                const groups = Array.isArray((viewData as any).OLSLinksByUid) ? Array.from((viewData as any).OLSLinksByUid) : [];
+                groups.sort((a: any, b: any) => {
+                  const na = Number(a?.uid);
+                  const nb = Number(b?.uid);
+                  if (!isNaN(na) && !isNaN(nb)) return na - nb;
+                  return String(a?.uid ?? '').localeCompare(String(b?.uid ?? ''));
+                });
+                return groups.map((g: any, idx: number) => {
+                  const uidLabel = `UID: ${String(g?.uid || `UID-${idx}`)}`;
+                  const links = Array.isArray(g?.links) ? g.links : [];
+                // Reuse main Link Summary mapping logic: produce rows suitable for the Table component
+                const mapLinksToRows = (linksArr: any[]) => {
+                  try {
+                    const utilRows: any[] = Array.isArray(viewData?.Utilization) ? viewData.Utilization : (Array.isArray(viewData?.utilization) ? viewData.utilization : []);
+                    const rawWorkflows: any = viewData?.WorkflowsString ?? viewData?.WorkflowsStringRaw ?? viewData?.Workflows ?? viewData?.WorkflowUrls ?? null;
+                    let workflowsArr: string[] = [];
+                    try {
+                      if (typeof rawWorkflows === 'string') workflowsArr = rawWorkflows.split(/\r?\n/).map((s: string) => String(s || '').trim()).filter(Boolean);
+                      else if (Array.isArray(rawWorkflows)) workflowsArr = rawWorkflows.map((s: any) => String(s || '').trim()).filter(Boolean);
+                    } catch { workflowsArr = []; }
+                    const linkWFs: any[] = Array.isArray((viewData as any)?.LinkWFs) ? (viewData as any).LinkWFs : [];
+                    const makeKey = (ad: string, ap: string, zd: string, zp: string) => `${(ad||'').toLowerCase().replace(/\s+/g,'').trim()}|${(ap||'').toLowerCase().replace(/\s+/g,'').trim()}|${(zd||'').toLowerCase().replace(/\s+/g,'').trim()}|${(zp||'').toLowerCase().replace(/\s+/g,'').trim()}`;
+                    const mapWF = (() => {
+                      const m = new Map<string,string>();
+                      for (const it of linkWFs) {
+                        const ad = String(it?.ADevice ?? it?.Adevice ?? it?.adevice ?? '').trim();
+                        const ap = String(it?.APort ?? it?.Aport ?? it?.aport ?? '').trim();
+                        const zd = String(it?.ZDevice ?? it?.Zdevice ?? it?.zdevice ?? '').trim();
+                        const zp = String(it?.ZPort ?? it?.Zport ?? it?.zport ?? '').trim();
+                        const url = String(it?.Workflow ?? it?.workflow ?? it?.Link ?? it?.URL ?? it?.Url ?? '').trim();
+                        if (!ad || !ap || !zd || !zp || !url) continue;
+                        const k1 = makeKey(ad, ap, zd, zp);
+                        const k2 = makeKey(zd, zp, ad, ap);
+                        m.set(k1, url);
+                        if (!m.has(k2)) m.set(k2, url);
+                      }
+                      return m;
+                    })();
+
+                    return linksArr.map((r: any) => {
+                      const aDevRaw = r["ADevice"] ?? r["A Device"] ?? r["A_Device"] ?? r["DeviceA"] ?? r["Device A"] ?? "";
+                      const aPort = r["APort"] ?? r["A Port"] ?? r["A_Port"] ?? r["PortA"] ?? r["Port A"] ?? "";
+                      const zDevRaw = r["ZDevice"] ?? r["Z Device"] ?? r["Z_Device"] ?? r["DeviceZ"] ?? r["Device Z"] ?? "";
+                      const zPort = r["ZPort"] ?? r["Z Port"] ?? r["Z_Port"] ?? r["PortZ"] ?? r["Port Z"] ?? "";
+                      const aOptDev = r["AOpticalDevice"] ?? r["A Optical Device"] ?? r["A_Optical_Device"] ?? r["A OpticalDevice"] ?? r["A Optical"] ?? "";
+                      const aOptPort = r["AOpticalPort"] ?? r["A Optical Port"] ?? r["A_Optical_Port"] ?? r["A OpticalPort"] ?? "";
+                      const zOptDev = r["ZOpticalDevice"] ?? r["Z Optical Device"] ?? r["Z_Optical_Device"] ?? r["Z OpticalDevice"] ?? r["Z Optical"] ?? "";
+                      const zOptPort = r["ZOpticalPort"] ?? r["Z Optical Port"] ?? r["Z_Optical_Port"] ?? r["Z OpticalPort"] ?? "";
+                      const idx = Array.isArray(linksArr) ? linksArr.indexOf(r) : 0;
+                      const wfFromArr = (workflowsArr && workflowsArr.length && typeof idx === 'number') ? (workflowsArr[idx] ?? null) : null;
+                      const aDevNorm = String(aDevRaw ?? '').trim();
+                      const zDevNorm = String(zDevRaw ?? '').trim();
+                      const k = makeKey(aDevNorm, String(aPort||''), zDevNorm, String(zPort||''));
+                      const wfMatched = mapWF.get(k) || null;
+                      const workflow = (wfMatched ? String(wfMatched).trim() : '') || (wfFromArr ? String(wfFromArr).trim() : '') || (r["Workflow"] ?? r["workflow"] ?? r["Link"] ?? r["link"] ?? r["URL"] ?? r["Url"] ?? "");
+
+                      // Fallbacks
+                      const assocRows: any[] = Array.isArray((viewData as any)?.AssociatedUIDs) ? (viewData as any).AssociatedUIDs : [];
+                      // Prefer the AssociatedUID that corresponds to this per-UID group (g.uid).
+                      // Fall back to lastSearched or the first AssociatedUID when necessary.
+                      const pickUid = String(g?.uid ?? lastSearched ?? '');
+                      const assocMatch = pickUid ? (assocRows.find((ar: any) => String(ar?.UID ?? ar?.Uid ?? ar?.uid ?? '') === String(pickUid)) || null) : (assocRows.length ? assocRows[0] : null);
+                      const aDevAssoc = assocMatch ? String(assocMatch['A Device'] ?? assocMatch['Device A'] ?? assocMatch.ADevice ?? assocMatch.DeviceA ?? '').trim() : '';
+                      const zDevAssoc = assocMatch ? String(assocMatch['Z Device'] ?? assocMatch['Device Z'] ?? assocMatch.ZDevice ?? assocMatch.DeviceZ ?? '').trim() : '';
+                      const aDev = (String(aDevRaw ?? '').trim() || aDevAssoc || String(viewData?.KQLData?.DeviceA ?? '').trim());
+                      const zDev = (String(zDevRaw ?? '').trim() || zDevAssoc || String(viewData?.KQLData?.DeviceZ ?? '').trim());
+
+                      // Admin/Oper and Utilization matching
+                      const aDevL = String(aDev || '').toLowerCase();
+                      const aPortL = String(aPort || '').toLowerCase();
+                      const zDevL = String(zDev || '').toLowerCase();
+                      const zPortL = String(zPort || '').toLowerCase();
+                      const utilMatch = utilRows.find((u: any) => {
+                        const sd = String(u.StartDevice ?? u.startDevice ?? '').toLowerCase();
+                        const sp = String(u.StartPort ?? u.startPort ?? '').toLowerCase();
+                        const ed = String(u.EndDevice ?? u.endDevice ?? '').toLowerCase();
+                        const ep = String(u.EndPort ?? u.endPort ?? '').toLowerCase();
+                        if (sd === aDevL && sp === aPortL && ed === zDevL && ep === zPortL) return true;
+                        if (sd === zDevL && sp === zPortL && ed === aDevL && ep === aPortL) return true;
+                        if (sd === aDevL && sp === aPortL) return true;
+                        if (ed === zDevL && ep === zPortL) return true;
+                        return false;
+                      }) || null;
+                      let opticalGb: number | null = null;
+                      let aAdmin = r["AAdminStatus"] ?? r["AdminStatusA"] ?? r["AdminStatus_A"] ?? r["A_AdminStatus"] ?? r["A AdminStatus"] ?? r["AdminStatus"] ?? '';
+                      let aOper = r["AOperStatus"] ?? r["OperStatusA"] ?? r["OperStatus_A"] ?? r["A_OperStatus"] ?? r["A OperStatus"] ?? r["OperStatus"] ?? '';
+                      let zAdmin = r["ZAdminStatus"] ?? r["AdminStatusZ"] ?? r["AdminStatus_Z"] ?? r["Z_AdminStatus"] ?? r["Z AdminStatus"] ?? r["AdminStatus"] ?? '';
+                      let zOper = r["ZOperStatus"] ?? r["OperStatusZ"] ?? r["OperStatus_Z"] ?? r["Z_OperStatus"] ?? r["Z OperStatus"] ?? r["OperStatus"] ?? '';
+                      if (utilMatch) {
+                        const opticalSpeedRaw = utilMatch.OpticalSpeed ?? utilMatch.opticalSpeed ?? utilMatch.Optical_Speed ?? null;
+                        if (opticalSpeedRaw != null && opticalSpeedRaw !== '' && !isNaN(Number(opticalSpeedRaw))) {
+                          const n = Number(opticalSpeedRaw);
+                          opticalGb = n > 1000 ? Math.round(n / 1000) : Math.round(n);
+                        }
+                        aAdmin = utilMatch.AdminStatus ?? utilMatch.Admin ?? aAdmin;
+                        aOper = utilMatch.OperStatus ?? utilMatch.Oper ?? aOper;
+                        zAdmin = utilMatch.AdminStatus ?? utilMatch.Admin ?? zAdmin;
+                        zOper = utilMatch.OperStatus ?? utilMatch.Oper ?? zOper;
+                      }
+                      const defaultInc = viewData?.KQLData?.Increment ?? null;
+                      const speedDisplay = opticalGb != null ? `${opticalGb}G` : (defaultInc ? `${defaultInc}G` : '');
+                      return {
+                        "A Device": aDev,
+                        "A Port": aPort,
+                        "A Admin": aAdmin,
+                        "A Oper": aOper,
+                        "A Optical Device": aOptDev,
+                        "A Optical Port": aOptPort,
+                        "Z Device": zDev,
+                        "Z Port": zPort,
+                        "Z Admin": zAdmin,
+                        "Z Oper": zOper,
+                        "Z Optical Device": zOptDev,
+                        "Z Optical Port": zOptPort,
+                        "Speed": speedDisplay,
+                        "Wirecheck": workflow,
+                      };
+                    });
+                  } catch (e) { return []; }
+                };
+
+                const rows = mapLinksToRows(links || []);
+                // Precompute per-UID headerRight buttons (null when not applicable)
+                let headerRightButtonsVar: any = null;
+                try {
+                  // Always compute per-UID header controls so each UID table can render them
+                  // inside its own header (including the primary/first UID). Previously we
+                  // only showed them for additional UIDs which caused the first UID's
+                  // controls to appear elsewhere on the page.
+                  const groups = Array.isArray((viewData as any).OLSLinksByUid) ? Array.from((viewData as any).OLSLinksByUid) : [];
+                  const primaryUid = Array.isArray((viewData as any)?.sourceUids) && (viewData as any).sourceUids.length ? String((viewData as any).sourceUids[0]) : '';
+                  const showPerUidControls = true; // always show in-table for clarity
+                  if (showPerUidControls) {
+                    const assocRows: any[] = Array.isArray((viewData as any)?.AssociatedUIDs) ? (viewData as any).AssociatedUIDs : [];
+                    const assocMatch = assocRows.find((r: any) => String(r?.UID ?? r?.Uid ?? r?.uid ?? '') === String(g?.uid));
+                    const uidView = {
+                      ...(viewData || {}),
+                      OLSLinks: Array.isArray(links) ? links : [],
+                      KQLData: {
+                        ...(viewData?.KQLData || {}),
+                        DeviceA: assocMatch ? (assocMatch['A Device'] ?? assocMatch.ADevice ?? assocMatch.DeviceA) : (viewData?.KQLData?.DeviceA),
+                        DeviceZ: assocMatch ? (assocMatch['Z Device'] ?? assocMatch.ZDevice ?? assocMatch.DeviceZ) : (viewData?.KQLData?.DeviceZ),
+                      },
+                    };
+                    const uidWanA = getWanLinkForSide(uidView, 'A');
+                    const uidWanZ = getWanLinkForSide(uidView, 'Z');
+                    const uidDeployA = getDeploymentValidatorLinkForSide(viewData, 'A');
+                    const uidDeployZ = getDeploymentValidatorLinkForSide(viewData, 'Z');
+                    const sites = getFirstSites(viewData, String(g?.uid));
+                    const showSitesLabel = !activeProjectId;
+                    headerRightButtonsVar = (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Text className="side-label">A Side:</Text>
+                          {uidWanA && (
+                            <>
+                              <button className="sleek-btn wan" onClick={() => { if (uidWanA) window.open(uidWanA, '_blank'); }}>
+                                WAN Checker
+                              </button>
+                              <CopyIconInline onCopy={() => { try { navigator.clipboard.writeText(String(uidWanA)); } catch {} }} message="Link copied" />
+                            </>
+                          )}
+                          {uidDeployA && (
+                            <>
+                              <button className="sleek-btn optical" onClick={() => { if (uidDeployA) window.open(uidDeployA, '_blank'); }}>
+                                Deployment Validator
+                              </button>
+                              <CopyIconInline onCopy={() => { try { navigator.clipboard.writeText(String(uidDeployA)); } catch {} }} message="Link copied" />
+                            </>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          {showSitesLabel ? (<div style={{ marginRight: 8, color: '#98b6d4' }}>{sites?.a || ''}{sites?.a && sites?.z ? ' ↔ ' : ''}{sites?.z || ''}</div>) : null}
+                          <Text className="side-label">Z Side:</Text>
+                          {uidWanZ && (
+                            <>
+                              <button className="sleek-btn wan" onClick={() => { if (uidWanZ) window.open(uidWanZ, '_blank'); }}>
+                                WAN Checker
+                              </button>
+                              <CopyIconInline onCopy={() => { try { navigator.clipboard.writeText(String(uidWanZ)); } catch {} }} message="Link copied" />
+                            </>
+                          )}
+                          {uidDeployZ && (
+                            <>
+                              <button className="sleek-btn optical" onClick={() => { if (uidDeployZ) window.open(uidDeployZ, '_blank'); }}>
+                                Deployment Validator
+                              </button>
+                              <CopyIconInline onCopy={() => { try { navigator.clipboard.writeText(String(uidDeployZ)); } catch {} }} message="Link copied" />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                } catch {}
+                return (
+                  <div key={`uid-links-${idx}`} style={{ marginTop: 6 }}>
+                    <div style={{ color: '#cfe7ff', fontWeight: 700, margin: '6px 0' }}>{uidLabel}</div>
+                    {/* per-UID headerRight computed above (headerRightButtonsVar) */}
+                    <Table
+                      contextUid={String(g?.uid ?? '')}
+                      title={`Link Summary`}
+                      headerRight={headerRightButtonsVar}
+                      headers={[
+                        "A Device",
+                        "A Port",
+                        "A Admin",
+                        "A Oper",
+                        "A Optical Device",
+                        "A Optical Port",
+                        "Z Device",
+                        "Z Port",
+                        "Z Admin",
+                        "Z Oper",
+                        "Z Optical Device",
+                        "Z Optical Port",
+                        "Speed",
+                        "Wirecheck",
+                      ]}
+                      rows={rows}
+                      highlightUid={lastSearched || String(g?.uid ?? '')}
+                    />
+                  </div>
+                );
+                });
+              })()}
+            </div>
+          )}
 
           <Stack horizontal tokens={{ childrenGap: 20 }} styles={{ root: { width: '100%' } }} className="equal-tables-row">
             <Table
@@ -4018,20 +4917,49 @@ export default function UIDLookup() {
                 return base;
               })()}
               headerRight={(
-                <button
-                  className="sleek-btn repo"
-                  onClick={() => setShowAllAssociatedWF(v => !v)}
-                  title={showAllAssociatedWF ? 'Show only In Progress' : 'Show all UIDs'}
-                >
-                  {showAllAssociatedWF ? 'Show In Progress only' : 'Show All'}
-                </button>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <button
+                    className="sleek-btn repo"
+                    onClick={() => setShowAllAssociatedWF(v => !v)}
+                    title={showAllAssociatedWF ? 'Show only In Progress' : 'Show all UIDs'}
+                  >
+                    {showAllAssociatedWF ? 'Show In Progress only' : 'Show All'}
+                  </button>
+                  <button
+                    className="sleek-btn repo accent-cta"
+                    onClick={() => {
+                      try {
+                        const selected = Object.keys(assocSelected || {}).filter(k => !!assocSelected[k]);
+                        if (!selected.length) {
+                          setProjectLoadError('Select at least one Associated UID to create a project.');
+                          return;
+                        }
+                        createProjectFromAssociatedUIDs(selected);
+                      } catch (e) {
+                        setProjectLoadError('Failed to start create-from-associated flow.');
+                      }
+                    }}
+                    title={Object.keys(assocSelected || {}).filter(k => !!assocSelected[k]).length ? 'Create project from selected Associated UIDs' : 'Select at least one Associated UID to create a project'}
+                    disabled={Object.keys(assocSelected || {}).filter(k => !!assocSelected[k]).length === 0}
+                    style={Object.keys(assocSelected || {}).filter(k => !!assocSelected[k]).length === 0 ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+                  >
+                    Create Project
+                  </button>
+                </div>
               )}
-              highlightUid={uid}
+              highlightUid={lastSearched || uid}
             />
             <Table
               title="GDCO Tickets"
-              headers={["Ticket Id", "DC Code", "Title", "State", "Assigned To"]}
-              rows={getGdcoRows(viewData || {})}
+              headers={(activeProjectId ? ["UID", "Ticket Id", "DC Code", "Title", "State", "Assigned To"] : ["Ticket Id", "DC Code", "Title", "State", "Assigned To"]) }
+              rows={(() => {
+                const rows = getGdcoRows(viewData || {}) || [];
+                if (activeProjectId) {
+                  // sort ascending by UID when viewing a project
+                  return rows.slice().sort((a: any, b: any) => String(a?.UID || '').localeCompare(String(b?.UID || ''), undefined, { numeric: true }));
+                }
+                return rows;
+              })()}
             />
           </Stack>
 
@@ -4354,6 +5282,24 @@ export default function UIDLookup() {
             return (
               <>
                 <div className="projects-rail-filter">
+                  <div className="notice-banner warning" style={{ marginBottom: 8 }}>
+                    <div className="banner-icon">!</div>
+                    <div
+                      className="banner-text"
+                      style={{
+                        fontSize: 12,
+                        lineHeight: '1.15',
+                        maxHeight: '2.3em',
+                        overflow: 'hidden',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
+                      Projects are only saved locally - ensure you export them.
+                    </div>
+                  </div>
                   <input
                     className="projects-filter-input"
                     placeholder="Filter projects…"
@@ -4498,6 +5444,7 @@ export default function UIDLookup() {
                                       <span className="proj-dist">{dist ? `${dist} Links` : `${count} link${count===1?'':'s'}`}</span>
                                       <span className="proj-sep">|</span>
                                       <span className="proj-cap">{total} CAP</span>
+                                      <span className="proj-cap-total" title="Total capacity" style={{ marginLeft: 6, fontSize: 11, color: '#9adfbf' }}>{cap?.main || ''}</span>
                                     </div>
                                   );
                                 })()}
@@ -4538,6 +5485,7 @@ export default function UIDLookup() {
       <Dialog
         hidden={!modalType}
         onDismiss={closeModal}
+        className={modalType === 'create-project' ? 'dialog-create-project' : undefined}
         dialogContentProps={{
           type: DialogType.normal,
           title:
@@ -4647,10 +5595,45 @@ export default function UIDLookup() {
           )}
         </div>
         <DialogFooter>
-          <PrimaryButton onClick={saveModal} text={(modalType === 'delete-section' || modalType === 'delete-project') ? 'Delete' : modalType === 'move-section' ? 'Move' : modalType === 'create-project' ? 'Create' : modalType === 'confirm-merge' ? 'Merge' : 'Save'} />
+          <PrimaryButton
+            className={modalType === 'create-project' ? 'accent-cta' : undefined}
+            onClick={saveModal}
+            text={(modalType === 'delete-section' || modalType === 'delete-project') ? 'Delete' : modalType === 'move-section' ? 'Move' : modalType === 'create-project' ? 'Create' : modalType === 'confirm-merge' ? 'Merge' : 'Save'}
+          />
           <DefaultButton onClick={closeModal} text="Cancel" />
         </DialogFooter>
       </Dialog>
+      {/* Overlay shown while creating project from Associated UIDs */}
+      {(createFromAssocRunning || createFromAssocMessage) && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto' }}>
+          <div style={{
+            background: createFromAssocRunning ? '#01121a' : '#072b12',
+            border: `1px solid ${createFromAssocRunning ? '#234' : '#1f7a3f'}`,
+            padding: 24,
+            borderRadius: 8,
+            minWidth: 320,
+            maxWidth: '80%',
+            color: createFromAssocRunning ? '#e6f6ff' : '#dff6e6',
+            textAlign: 'center'
+          }}>
+            {createFromAssocRunning ? (
+              <>
+                <Spinner size={SpinnerSize.large} label={`Adding ${createFromAssocCurrent || 0} of ${createFromAssocTotal || 0} UID${(createFromAssocTotal || 0) === 1 ? '' : 's'}`} />
+                <div style={{ marginTop: 12, fontSize: 13, color: '#bfe6ff' }}>Please wait — the project is being assembled. This will process each UID one-by-one.</div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: '#c8ffd6' }}>✓ {createFromAssocMessage}</div>
+                {createFromAssocFailedUids && createFromAssocFailedUids.length > 0 && (
+                  <div style={{ fontSize: 12, color: '#ffb3b3', marginTop: 6 }}>
+                    Failed UIDs: {createFromAssocFailedUids.join(', ')}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </Stack>
   );
 }

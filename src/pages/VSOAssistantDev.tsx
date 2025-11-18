@@ -199,7 +199,11 @@ const VSOAssistantDev: React.FC = () => {
       : base.filter((opt) => opt.key.toString().toLowerCase().includes(search) || opt.text.toString().toLowerCase().includes(search));
   }, [dcSearch]);
 
-  const filteredResults = showAll ? result : result.filter((r) => (r.Status || "").toLowerCase() === "inproduction");
+  const filteredResults = showAll ? result : result.filter((r) => {
+    const state = (((r as any).State || '') as string).toLowerCase();
+    if (state === 'new') return false;
+    return ((r.Status || '') as string).toLowerCase() === 'inproduction';
+  });
   const [sortBy, setSortBy] = useState<string>("");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const getSortValue = (row: SpanData, key: string): string | number => {
@@ -517,7 +521,14 @@ const VSOAssistantDev: React.FC = () => {
                         <td>{row.IDF_A}</td>
                         <td>{row.SpliceRackA}</td>
                         <td>{row.WiringScope}</td>
-                        <td><span className={`status-label ${getStatusClass(row.Status)}`}>{row.Status}</span></td>
+                        <td>
+                          {(() => {
+                            const stateVal = (((row as any).State || '') as string).toLowerCase();
+                            const isNew = stateVal === 'new';
+                            const display = isNew ? 'New' : (row.Status || '');
+                            return <span className={`status-label ${getStatusClass(display)}`}>{display}</span>;
+                          })()}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

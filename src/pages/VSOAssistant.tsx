@@ -465,6 +465,9 @@ const VSOAssistant: React.FC = () => {
     { key: "South", text: "South" },
     { key: "Y", text: "Y" },
     { key: "Z", text: "Z" },
+    // Combined options (display differs from value)
+    { key: "West,North,Z", text: "West / North / Z" },
+    { key: "East,South,Y", text: "East / South / Y" },
   ];
 
   // === Filter DCs based on input ===
@@ -571,8 +574,9 @@ const VSOAssistant: React.FC = () => {
       const diversityValue = (() => {
         const raw = (diversity || "").toString();
         if (!raw) return "N";
-        const parsed = raw.split(",")[0].trim().replace(/,$/, "");
-        return parsed.replace(/[^A-Za-z0-9 ]/g, "").trim() || "N";
+        // Preserve comma-separated groups and normalize spacing: "A, B, C"
+        const normalized = raw.split(',').map((s) => s.trim()).filter(Boolean).join(', ');
+        return normalized || "N";
       })();
       const stage = computeScopeStage({
         facilityA: facilityCodeA,
@@ -682,7 +686,12 @@ const VSOAssistant: React.FC = () => {
 
   const filteredResultsBase = showAll
     ? result
-    : result.filter((r) => ((r && (r.Status || "")).toString().toLowerCase() === "inproduction"));
+    : result.filter((r) => {
+        // Exclude spans with State === 'New' from the main (production) results
+        const state = ((r as any)?.State || "").toString().toLowerCase();
+        if (state === "new") return false;
+        return ((r && (r.Status || "")).toString().toLowerCase() === "inproduction");
+      });
 
   // Accessor for sorting
   const getSortValue = (row: SpanData, key: string): string | number => {
@@ -1142,8 +1151,8 @@ const VSOAssistant: React.FC = () => {
           (() => {
             const raw = (diversity || "").toString();
             if (!raw) return "";
-            const parsed = raw.split(",")[0].trim().replace(/,$/, "");
-            return parsed.replace(/[^A-Za-z0-9 ]/g, "").trim() || "";
+            // Preserve comma-separated groups and normalize spacing
+            return raw.split(',').map((s) => s.trim()).filter(Boolean).join(', ');
           })(),
         SpliceRackA: spliceRackA || "",
         Stage: "9",
@@ -1680,7 +1689,11 @@ const VSOAssistant: React.FC = () => {
               <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start' }}>
                 {(() => {
                   const totalSpans = result.length;
-                  const productionCount = result.filter(r => (r.Status || '').toString().toLowerCase() === 'inproduction').length;
+                  const productionCount = result.filter(r => {
+                    const state = (((r as any).State || '') as string).toString().toLowerCase();
+                    if (state === 'new') return false;
+                    return ((r.Status || '') as string).toString().toLowerCase() === 'inproduction';
+                  }).length;
                   return (
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <div style={{ background: '#071821', border: '1px solid #20343f', padding: '6px 10px', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}>
@@ -1835,15 +1848,20 @@ const VSOAssistant: React.FC = () => {
                 { key: 'OpticalDeviceZ', label: 'Optical Z' },
                 { key: 'OpticalRackZ_Unit', label: 'Rack Z' },
                 { key: 'WiringScope', label: 'Scope' },
-                { key: 'Status', label: 'Status', render: (row: SpanData) => (
-                  <span
-                    className={`status-label ${getStatusClass(row.Status)}`}
-                    style={{ display: 'inline-block', padding: '1px 6px', whiteSpace: 'nowrap' }}
-                    title={row.Status}
-                  >
-                    {row.Status}
-                  </span>
-                ) },
+                { key: 'Status', label: 'Status', render: (row: SpanData) => {
+                  const stateVal = (((row as any).State || '') as string).toString().toLowerCase();
+                  const isNewState = stateVal === 'new';
+                  const displayStatus = isNewState ? 'New' : (row.Status || '');
+                  return (
+                    <span
+                      className={`status-label ${getStatusClass(displayStatus)}`}
+                      style={{ display: 'inline-block', padding: '1px 6px', whiteSpace: 'nowrap' }}
+                      title={displayStatus}
+                    >
+                      {displayStatus}
+                    </span>
+                  );
+                } },
               ];
               // Determine which columns to show depending on simplifiedView
               // Prefer the unit-level splice column when the user searched by Facility Code A

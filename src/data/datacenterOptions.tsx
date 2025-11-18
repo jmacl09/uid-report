@@ -307,6 +307,7 @@ export const datacenterOptions: IDropdownOption[] = [
   { key: "LON63", text: "LON63" },
   { key: "LON65", text: "LON65" },
   { key: "LON66", text: "LON66" },
+  { key: "LON67", text: "LON67" },
   { key: "LON68", text: "LON68" },
   { key: "LOS31", text: "LOS31" },
   { key: "LOS33", text: "LOS33" },

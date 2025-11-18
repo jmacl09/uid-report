@@ -3009,6 +3009,67 @@ export default function UIDLookup() {
       try { localStorage.setItem(storageKey, JSON.stringify(c || {})); } catch {}
       setComments(c || {});
     };
+    // Persist a single row's comments to the Troubleshooting table when in UID or Project context
+    const persistSingle = async (rowKey: string, rowObj: any) => {
+      try {
+        // Determine server-side uid param and partition
+        const serverUid = contextUid ? String(contextUid) : (activeProjectId ? `PROJECT_${activeProjectId}` : null);
+        if (!serverUid) return;
+        const partition = contextUid ? `UID_${String(contextUid)}` : `PROJECT_${activeProjectId}`;
+        const alias = getAlias(getEmail());
+        const payload = {
+          aDevice: rowObj.aDevice || '',
+          aOpt: rowObj.aOpt || '',
+          zDevice: rowObj.zDevice || '',
+          zOpt: rowObj.zOpt || '',
+        } as any;
+
+        // If payload is empty and we have an existing rowKey, attempt delete
+        const isEmpty = !payload.aDevice && !payload.aOpt && !payload.zDevice && !payload.zOpt;
+        if (isEmpty && rowObj.rowKey) {
+          try {
+            await deleteNoteApi(partition, rowObj.rowKey, NOTES_ENDPOINT, 'Troubleshooting');
+          } catch (e) { /* best-effort */ }
+          // remove local copy
+          const next = { ...(comments || {}) };
+          delete next[rowKey];
+          saveComments(next);
+          return;
+        }
+
+        const resText = await saveToStorage({
+          endpoint: NOTES_ENDPOINT,
+          category: 'Troubleshooting',
+          uid: serverUid,
+          title: 'Troubleshooting',
+          description: JSON.stringify(payload),
+          owner: alias || '',
+          rowKey: rowObj.rowKey,
+          extras: {
+            LinkKey: rowKey,
+            TableName: 'Troubleshooting',
+            tableName: 'Troubleshooting',
+            targetTable: 'Troubleshooting',
+            ContextType: contextUid ? 'uid' : 'project',
+            ContextId: contextUid ? String(contextUid) : String(activeProjectId),
+          },
+        });
+        try {
+          const parsed = JSON.parse(resText);
+          const entity = parsed?.entity || parsed?.Entity;
+          const rk = entity ? (entity.RowKey || entity.rowKey) : undefined;
+          const ts = entity ? (entity.Timestamp || entity.timestamp) : undefined;
+          const next = { ...(comments || {}) };
+          next[rowKey] = { ...(next[rowKey] || {}), ...(rowObj || {}), rowKey: rk, savedAt: ts };
+          saveComments(next);
+        } catch (e) {
+          // ignore parse errors but keep local
+        }
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[Table] persistSingle failed', e);
+      }
+    };
     // Per-table Troubleshoot expanded state (persisted per-context so each UID/table can expand independently)
     const EXPANDED_KEY = `troubleshootExpanded:${(contextUid || lastSearched) || 'global'}`;
     const [perTableExpanded, setPerTableExpanded] = useState<boolean>(() => {
@@ -3247,7 +3308,7 @@ export default function UIDLookup() {
                                 <input
                                   className="troubleshoot-input"
                                   value={rowComments.aDevice || ''}
-                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), aDevice: ev.target.value }; saveComments(next); }}
+                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), aDevice: ev.target.value }; saveComments(next); void persistSingle(rowKey, next[rowKey]); }}
                                   onKeyDown={(e) => { if ((e as any).key === 'Enter') try { (e.target as HTMLInputElement).blur(); } catch {} }}
                                   style={{ width: '100%', padding: '4px 6px', borderRadius: 2, border: '1px solid rgba(166,183,198,0.10)', background: 'transparent', color: '#d0e7ff', fontSize: 13, lineHeight: '16px' }}
                                 />
@@ -3262,7 +3323,7 @@ export default function UIDLookup() {
                                 <input
                                   className="troubleshoot-input"
                                   value={rowComments.aOpt || ''}
-                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), aOpt: ev.target.value }; saveComments(next); }}
+                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), aOpt: ev.target.value }; saveComments(next); void persistSingle(rowKey, next[rowKey]); }}
                                   onKeyDown={(e) => { if ((e as any).key === 'Enter') try { (e.target as HTMLInputElement).blur(); } catch {} }}
                                   style={{ width: '100%', padding: '4px 6px', borderRadius: 2, border: '1px solid rgba(166,183,198,0.10)', background: 'transparent', color: '#d0e7ff', fontSize: 13, lineHeight: '16px' }}
                                 />
@@ -3277,7 +3338,7 @@ export default function UIDLookup() {
                                 <input
                                   className="troubleshoot-input"
                                   value={rowComments.zDevice || ''}
-                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), zDevice: ev.target.value }; saveComments(next); }}
+                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), zDevice: ev.target.value }; saveComments(next); void persistSingle(rowKey, next[rowKey]); }}
                                   onKeyDown={(e) => { if ((e as any).key === 'Enter') try { (e.target as HTMLInputElement).blur(); } catch {} }}
                                   style={{ width: '100%', padding: '4px 6px', borderRadius: 2, border: '1px solid rgba(166,183,198,0.10)', background: 'transparent', color: '#d0e7ff', fontSize: 13, lineHeight: '16px' }}
                                 />
@@ -3292,7 +3353,7 @@ export default function UIDLookup() {
                                 <input
                                   className="troubleshoot-input"
                                   value={rowComments.zOpt || ''}
-                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), zOpt: ev.target.value }; saveComments(next); }}
+                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), zOpt: ev.target.value }; saveComments(next); void persistSingle(rowKey, next[rowKey]); }}
                                   onKeyDown={(e) => { if ((e as any).key === 'Enter') try { (e.target as HTMLInputElement).blur(); } catch {} }}
                                   style={{ width: '100%', padding: '4px 6px', borderRadius: 2, border: '1px solid rgba(166,183,198,0.10)', background: 'transparent', color: '#d0e7ff', fontSize: 13, lineHeight: '16px' }}
                                 />
@@ -3518,11 +3579,21 @@ export default function UIDLookup() {
   useEffect(() => { try { localStorage.setItem(STORE_KEY, JSON.stringify(map)); } catch {} }, [map, STORE_KEY]);
   useEffect(() => { try { localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0'); } catch {} }, [collapsed, COLLAPSE_KEY]);
 
-    // If contextKey represents a UID (contextKey === `uid:<UID>`), persist/load to server Table Storage
-    const uidFromContext = (() => {
+    // If contextKey represents a UID (contextKey === `uid:<UID>`) or a project (project:<id>),
+    // persist/load to server Table Storage. Normalize into an object with type and serverUid
+    const contextInfo = (() => {
       try {
-        if (!contextKey || !contextKey.startsWith('uid:')) return null;
-        return contextKey.split(':')[1] || null;
+        if (!contextKey) return null;
+        if (contextKey.startsWith('uid:')) {
+          const id = contextKey.split(':')[1] || null;
+          return id ? { type: 'uid' as const, id, serverUid: String(id), partitionPrefix: `UID_${id}` } : null;
+        }
+        if (contextKey.startsWith('project:')) {
+          const id = contextKey.split(':')[1] || null;
+          // Persist project-scoped troubleshooting under a project-specific uid so backend can query it
+          return id ? { type: 'project' as const, id, serverUid: `PROJECT_${id}`, partitionPrefix: `PROJECT_${id}` } : null;
+        }
+        return null;
       } catch { return null; }
     })();
 
@@ -3530,7 +3601,7 @@ export default function UIDLookup() {
     // Prefer parent-supplied `remoteItems` when available; otherwise perform
     // an internal GET like before.
     useEffect(() => {
-      if (!uidFromContext) return;
+      if (!contextInfo) return;
       let cancelled = false;
 
       const processItems = (items: NoteEntity[] | null | undefined) => {
@@ -3568,8 +3639,8 @@ export default function UIDLookup() {
             if (!cancelled) processItems(remoteItems);
             return;
           }
-          // Fallback: perform internal GET as before
-          const items = await getTroubleshootingForUid(uidFromContext, NOTES_ENDPOINT);
+          // Fallback: perform internal GET as before using normalized serverUid
+          const items = await getTroubleshootingForUid(contextInfo.serverUid, NOTES_ENDPOINT);
           if (cancelled) return;
           processItems(items || []);
         } catch (e) {
@@ -3580,11 +3651,11 @@ export default function UIDLookup() {
       })();
 
       return () => { cancelled = true; };
-    }, [uidFromContext, remoteItems]);
+  }, [contextInfo, remoteItems]);
 
-    // Persist an item to server when running under a UID context
+    // Persist an item to server when running under a UID or Project context
     const persistToServer = async (id: string, item: TItem) => {
-      if (!uidFromContext) return;
+      if (!contextInfo) return;
       try {
         const payload = {
           notes: Array.isArray(item.notes) ? item.notes : (item.note ? [{ id: `legacy-${Date.now()}`, text: String(item.note) }] : []),
@@ -3595,21 +3666,19 @@ export default function UIDLookup() {
         const resText = await saveToStorage({
           endpoint: NOTES_ENDPOINT,
           category: 'Troubleshooting',
-          uid: uidFromContext,
+          uid: contextInfo.serverUid,
           title: 'Troubleshooting',
           description: JSON.stringify(payload),
           owner: alias || '',
           rowKey: item.rowKey,
-          // Explicitly request the Troubleshooting table on the backend by
-          // providing multiple commonly-recognised extra keys. Some deployed
-          // Function implementations map category->table but others honour an
-          // explicit table name in the payload. Providing these extras makes
-          // the intent clear and avoids writing into the VsoCalendar table.
+          // Request the Troubleshooting table explicitly
           extras: {
             LinkKey: id,
             TableName: 'Troubleshooting',
             tableName: 'Troubleshooting',
             targetTable: 'Troubleshooting',
+            ContextType: contextInfo.type,
+            ContextId: contextInfo.id,
           },
         });
         try {
@@ -3645,8 +3714,8 @@ export default function UIDLookup() {
     const setField = (id: string, patch: Partial<TItem>) => {
       setMap(prev => {
         const merged = { ...(prev[id] || {}), ...patch };
-        // Persist to server when operating in a UID context
-        if (uidFromContext) {
+        // Persist to server when operating in a UID or Project context
+        if (contextInfo) {
           void persistToServer(id, merged);
         }
         return { ...prev, [id]: merged };
@@ -3656,11 +3725,12 @@ export default function UIDLookup() {
     const clearRow = (id: string) => {
       // If this row was saved server-side, attempt server delete
       const rk = map[id]?.rowKey;
-      if (uidFromContext && rk) {
+      if (contextInfo && rk) {
+        const partition = contextInfo.partitionPrefix; // e.g. UID_123 or PROJECT_abc
         // best-effort delete
         void (async () => {
-            try {
-            await deleteNoteApi(`UID_${uidFromContext}`, rk, NOTES_ENDPOINT, 'Troubleshooting');
+          try {
+            await deleteNoteApi(partition, rk, NOTES_ENDPOINT, 'Troubleshooting');
           } catch (e) {
             // eslint-disable-next-line no-console
             console.warn('[Troubleshooting] Failed to delete remote row', e);
@@ -5094,10 +5164,7 @@ export default function UIDLookup() {
             </div>
           )}
 
-          {/* Troubleshooting (below UID notes) */}
-          {lastSearched && !activeProjectId && (
-            <TroubleshootingSection contextKey={`uid:${lastSearched}`} rows={Array.isArray(viewData?.OLSLinks) ? viewData.OLSLinks : []} remoteItems={troubleshootingItems} />
-          )}
+
 
           {/* Project Notes (when viewing a saved project) */}
           {activeProjectId && (() => {
@@ -5166,10 +5233,7 @@ export default function UIDLookup() {
             );
           })()}
 
-          {/* Troubleshooting (below Project notes) */}
-          {activeProjectId && (
-            <TroubleshootingSection contextKey={`project:${activeProjectId}`} rows={Array.isArray(viewData?.OLSLinks) ? viewData.OLSLinks : []} />
-          )}
+
         </>
       )}
 

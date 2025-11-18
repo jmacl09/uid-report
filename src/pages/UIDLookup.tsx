@@ -1189,21 +1189,6 @@ export default function UIDLookup() {
   // ---- Project helpers ----
   const sanitizeArrays = (obj: any) => JSON.parse(JSON.stringify(obj ?? {}));
   const stripSide = (rows: any[]) => (rows || []).map(({ Side, ...keep }) => keep);
-  const buildSnapshotFrom = (src: any, srcUid: string): Snapshot => {
-    const snap: Snapshot = {
-      sourceUids: [srcUid].filter(Boolean),
-      AExpansions: sanitizeArrays(src?.AExpansions),
-      ZExpansions: sanitizeArrays(src?.ZExpansions),
-      KQLData: sanitizeArrays(src?.KQLData),
-      OLSLinks: Array.isArray(src?.OLSLinks) ? sanitizeArrays(src.OLSLinks) : [],
-      AssociatedUIDs: Array.isArray(src?.AssociatedUIDs) ? sanitizeArrays(src.AssociatedUIDs) : [],
-      GDCOTickets: Array.isArray(src?.GDCOTickets) ? sanitizeArrays(src.GDCOTickets) : [],
-      MGFXA: Array.isArray(src?.MGFXA) ? stripSide(sanitizeArrays(src.MGFXA)) : [],
-      MGFXZ: Array.isArray(src?.MGFXZ) ? stripSide(sanitizeArrays(src.MGFXZ)) : [],
-      LinkWFs: Array.isArray(src?.LinkWFs) ? sanitizeArrays(src.LinkWFs) : [],
-    };
-    return snap;
-  };
   // Deep-clone the full normalized view object for project snapshots.
   // This preserves all top-level keys (including arrays like OLSLinks, AssociatedUIDs)
   // and also copies a few non-enumerable/internal properties that JSON.stringify
@@ -1249,6 +1234,7 @@ export default function UIDLookup() {
   // can create a full snapshot of the current view for local-only saves.
   // This is intentionally minimal and guarded so callers can fallback if it
   // isn't available in other contexts (tests, SSR, etc.).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     try {
       // Provide a function returning the deep clone of the currently viewed data
@@ -1470,20 +1456,7 @@ export default function UIDLookup() {
   };
 
   // Helper: wait until a handleSearch-driven load for `targetUid` completes
-  const waitForUidLoad = (targetUid: string, timeoutMs = 40000) => {
-    return new Promise<void>((resolve) => {
-      const start = Date.now();
-      const poll = () => {
-        try {
-          // Consider load complete when lastSearched matches and loading is false
-          if (String(lastSearched) === String(targetUid) && !loading && data) { resolve(); return; }
-        } catch {}
-        if (Date.now() - start > timeoutMs) { resolve(); return; }
-        setTimeout(poll, 300);
-      };
-      poll();
-    });
-  };
+  // (Removed unused wait helper to satisfy lint rules)
   const addCurrentToProject = (targetId: string) => {
     if (!data || !targetId || !lastSearched) return;
     const p = projects.find(pp => pp.id === targetId);
@@ -1552,12 +1525,7 @@ export default function UIDLookup() {
   const toggleUrgent = (id: string) => {
     setProjects(prev => prev.map(x => x.id === id ? { ...x, urgent: !x.urgent } : x));
   };
-  const addSection = () => {
-    setModalProjectId(null);
-    setModalSection(null);
-    setModalValue('');
-    setModalType('new-section');
-  };
+  // addSection removed (unused) to satisfy lint rules
   const closeModal = () => { setModalType(null); setModalProjectId(null); setModalValue(''); };
   const saveModal = async () => {
     const value = (modalValue || '').trim();
@@ -2916,7 +2884,7 @@ export default function UIDLookup() {
   };
 
   // Global toggle to expand/collapse troubleshooting rows in the Link Summary table
-  const [troubleshootExpandedAll, setTroubleshootExpandedAll] = useState<boolean>(false);
+  const [troubleshootExpandedAll] = useState<boolean>(false);
 
   // Track selected Associated UIDs for the Associated UIDs table (UID -> checked)
   const [assocSelected, setAssocSelected] = useState<Record<string, boolean>>({});
@@ -4763,8 +4731,6 @@ export default function UIDLookup() {
                   // inside its own header (including the primary/first UID). Previously we
                   // only showed them for additional UIDs which caused the first UID's
                   // controls to appear elsewhere on the page.
-                  const groups = Array.isArray((viewData as any).OLSLinksByUid) ? Array.from((viewData as any).OLSLinksByUid) : [];
-                  const primaryUid = Array.isArray((viewData as any)?.sourceUids) && (viewData as any).sourceUids.length ? String((viewData as any).sourceUids[0]) : '';
                   const showPerUidControls = true; // always show in-table for clarity
                   if (showPerUidControls) {
                     const assocRows: any[] = Array.isArray((viewData as any)?.AssociatedUIDs) ? (viewData as any).AssociatedUIDs : [];

@@ -1187,8 +1187,6 @@ export default function UIDLookup() {
   };
 
   // ---- Project helpers ----
-  const sanitizeArrays = (obj: any) => JSON.parse(JSON.stringify(obj ?? {}));
-  const stripSide = (rows: any[]) => (rows || []).map(({ Side, ...keep }) => keep);
   // Deep-clone the full normalized view object for project snapshots.
   // This preserves all top-level keys (including arrays like OLSLinks, AssociatedUIDs)
   // and also copies a few non-enumerable/internal properties that JSON.stringify
@@ -1230,25 +1228,27 @@ export default function UIDLookup() {
     return copy;
   };
 
+  // Keep refs to the latest getViewData and lastSearched so we can expose
+  // a mount-only global helper without creating a hook dependency cycle.
+  const getViewDataRef = React.useRef(getViewData);
+  useEffect(() => { getViewDataRef.current = getViewData; }, [getViewData]);
+  const lastSearchedRef = React.useRef(lastSearched);
+  useEffect(() => { lastSearchedRef.current = lastSearched; }, [lastSearched]);
+
   // Expose a safe global helper so small helper components (outside this module)
   // can create a full snapshot of the current view for local-only saves.
-  // This is intentionally minimal and guarded so callers can fallback if it
-  // isn't available in other contexts (tests, SSR, etc.).
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // This effect intentionally runs only on mount/unmount and reads the
+  // up-to-date values via refs to avoid lint dependency warnings.
   useEffect(() => {
     try {
-      // Provide a function returning the deep clone of the currently viewed data
-      // keyed to the current lastSearched UID. Consumers should call and copy
-      // the returned object rather than mutating it.
       (window as any).getCurrentViewSnapshot = () => {
         try {
-          const cur = getViewData();
-          return deepCloneView(cur || {}, lastSearched || '');
+          const cur = getViewDataRef.current ? getViewDataRef.current() : null;
+          return deepCloneView(cur || {}, lastSearchedRef.current || '');
         } catch { return null; }
       };
     } catch {}
     return () => { try { delete (window as any).getCurrentViewSnapshot; } catch {} };
-    // intentionally only re-run on mount/unmount
   }, []);
   const dedupMerge = (arrA: any[], arrB: any[]) => {
     const seen = new Set<string>();

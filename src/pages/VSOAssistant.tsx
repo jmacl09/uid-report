@@ -2031,11 +2031,27 @@ const VSOAssistant: React.FC = () => {
             })()}
 
             <div style={{ textAlign: "center", marginTop: 12 }}>
-              <PrimaryButton
-                text={`Continue (${selectedSpans.length} selected)`}
-                disabled={selectedSpans.length === 0}
-                onClick={() => setComposeOpen(true)}
-              />
+              <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+                <PrimaryButton
+                  text="Span Traffic"
+                  disabled={selectedSpans.length === 0}
+                  onClick={() => {
+                    try {
+                      const q = encodeURIComponent(selectedSpans.join(','));
+                      navigate(`/fiber-span-utilization?spans=${q}`);
+                    } catch (e) {
+                      // fallback: open without params
+                      navigate('/fiber-span-utilization');
+                    }
+                  }}
+                  styles={{ root: { backgroundColor: '#6a00ff', borderColor: '#5a00e6', height: 36, borderRadius: 6, color: '#fff' } }}
+                />
+                <PrimaryButton
+                  text={`Continue (${selectedSpans.length} selected)`}
+                  disabled={selectedSpans.length === 0}
+                  onClick={() => setComposeOpen(true)}
+                />
+              </div>
             </div>
           </div>
         )}

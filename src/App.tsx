@@ -1,13 +1,8 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { Nav } from "@fluentui/react";
-import Dashboard from "./pages/Dashboard";
-import UIDLookup from "./pages/UIDLookup";
-import VSOAssistant from "./pages/VSOAssistant";
-import VSOAssistantDev from "./pages/VSOAssistantDev";
-import DCATAssistant from "./pages/DCATAssistant";
-import WirecheckAutomation from "./pages/WirecheckAutomation";
-import SettingsPage from "./pages/Settings";
+import { FiberSpanUtilization, UIDLookup, VSOAssistant, VSOAssistantDev, DCATAssistant, WirecheckAutomation, SettingsPage, Dashboard } from "./pages";
+
 // Inline Suggestions page to avoid module resolution issues in some environments
 import { Stack, Text, TextField, PrimaryButton, Dropdown, Checkbox } from "@fluentui/react";
 import logo from "./assets/optical360-logo.png";
@@ -54,6 +49,7 @@ const navLinks = [
       { name: "Home", key: "home", icon: "Home", url: "/" },
       { name: "UID Assistant", key: "uidAssistant", icon: "Search", url: "/uid" },
       { name: "VSO Assistant", key: "vsoAssistant", icon: "Robot", url: "/vso" },
+          { name: "Fiber Span Utilization", key: "fiberSpanUtil", icon: "Chart", url: "/fiber-span-utilization" },
       { name: "DCAT Assistant", key: "dcatAssistant", icon: "CalculatorAddition", url: "/dcat" },
       { name: "Wirecheck Automation", key: "wirecheck", icon: "Plug", url: "/wirecheck" },
       { name: "Suggestions", key: "suggestions", icon: "Megaphone", url: "/suggestions" },
@@ -93,12 +89,14 @@ const SidebarNav: React.FC = () => {
           },
         }}
         selectedKey={
-          location.pathname === "/"
+            location.pathname === "/"
             ? "home"
             : location.pathname.startsWith("/uid")
             ? "uidAssistant"
             : location.pathname.startsWith("/vso")
             ? "vsoAssistant"
+            : location.pathname.startsWith("/fiber-span-utilization")
+            ? "fiberSpanUtil"
             : location.pathname.startsWith("/dcat")
             ? "dcatAssistant"
             : location.pathname.startsWith("/wirecheck")
@@ -405,6 +403,7 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/uid" element={<UIDLookup />} />
             <Route path="/vso" element={<VSOAssistant />} />
+            <Route path="/fiber-span-utilization" element={<FiberSpanUtilization />} />
             <Route path="/vso2" element={<VSOAssistantDev />} />
             <Route path="/dcat" element={<DCATAssistant />} />
             <Route path="/wirecheck" element={<WirecheckAutomation />} />

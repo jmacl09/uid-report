@@ -47,8 +47,9 @@ function getAlias(email?: string | null) {
 
 const SuggestionsPage: React.FC = () => {
   const [items, setItems] = useState<Suggestion[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
+  // loading/error are only used to set state; we don't read them in the UI so avoid unused-var by omitting the read-side
+  const [, setLoading] = useState<boolean>(false);
+  const [, setError] = useState<string | null>(null);
 
   const [type, setType] = useState<string>("Improvement");
   const [summary, setSummary] = useState<string>("");
@@ -144,17 +145,7 @@ const SuggestionsPage: React.FC = () => {
     const nowIso = new Date().toISOString();
     const rowKey = nowIso;
   const tableName = TABLES_TABLE_NAME_SUGGESTIONS || 'Sugestions';
-    const entity: Record<string, unknown> = {
-      PartitionKey: 'Suggestions',
-      RowKey: rowKey,
-      category: type,
-      title: s,
-      description: d,
-      anonymous: !!anonymous,
-      owner: anonymous ? undefined : (email || 'Unknown'),
-      authorAlias: anonymous ? undefined : (alias || undefined),
-      savedAt: nowIso,
-    };
+    // `entity` structure prepared for Table Storage (not used directly client-side); kept here as documentation of server shape
 
     // Optimistically update UI while we POST. If POST fails, we keep local copy
     const optimistic: Suggestion = {

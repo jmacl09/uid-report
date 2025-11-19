@@ -87,7 +87,6 @@ const VSOAssistant: React.FC = () => {
   const [country, setCountry] = useState<string>("");
   const [countrySearch, setCountrySearch] = useState<string>("");
   const countryComboRef = React.useRef<IComboBox | null>(null);
-  const [countryPanelOpen, setCountryPanelOpen] = useState<boolean>(false);
   const [isDecomMode, setIsDecomMode] = useState<boolean>(false);
   const dcComboRef = React.useRef<IComboBox | null>(null);
   const dcComboRefZ = React.useRef<IComboBox | null>(null);
@@ -106,6 +105,8 @@ const VSOAssistant: React.FC = () => {
   // Key to force remount of the search form controls so internal component state (e.g. ComboBox freeform text)
   // is fully reset when the user hits Reset.
   const [formKey, setFormKey] = useState<number>(0);
+  // UI tab state for the new tabbed search layout: A-Z, Facility (both), Z-A, Decommissioned
+  const [currentTab, setCurrentTab] = useState<'A-Z' | 'Facility' | 'Z-A' | 'Decom'>('A-Z');
 
   // Sorting state for results table
   const [sortBy, setSortBy] = useState<string>("");
@@ -453,6 +454,8 @@ const VSOAssistant: React.FC = () => {
     setComposeOpen(false);
     // Force remount of the search form so any uncontrolled/internal component state is cleared
     setFormKey((f) => f + 1);
+    // reset to default tab
+    setCurrentTab('A-Z');
   };
 
   // === Diversity options ===
@@ -540,11 +543,17 @@ const VSOAssistant: React.FC = () => {
 
   // === Submit ===
   const handleSubmit = async (alreadyAttemptedOpposite: boolean = false) => {
-    // Require exactly one facility code (A or Z). Selecting one disables the other in the UI.
+    // Require at least one facility code (A or Z). When both are present (Facility tab)
+    // that's allowed and maps to the facility-pair stages (12-15).
     const hasA = !!facilityCodeA;
     const hasZ = !!facilityCodeZ;
-    if ((hasA && hasZ) || (!hasA && !hasZ)) {
-      alert("Please select either Facility Code A or Facility Code Z (choose one).");
+    // If the user is on the Facility tab, Facility Code is mandatory
+    if (currentTab === 'Facility' && !hasA) {
+      alert("Please select a Facility Code for the Facility tab before submitting.");
+      return;
+    }
+    if (!hasA && !hasZ) {
+      alert("Please select at least one Facility Code (A or Z) before submitting.");
       return;
     }
 
@@ -578,21 +587,43 @@ const VSOAssistant: React.FC = () => {
         const normalized = raw.split(',').map((s) => s.trim()).filter(Boolean).join(', ');
         return normalized || "N";
       })();
-      const stage = computeScopeStage({
-        facilityA: facilityCodeA,
-        facilityZ: facilityCodeZ,
-        diversity: diversityValue === "N" ? "" : diversityValue,
-        spliceA: spliceRackA,
-        spliceZ: spliceRackZ,
-      });
-      const payload: any = {
-        Diversity: diversityValue,
-        Stage: stage,
-      };
-      if (facilityCodeA) payload.FacilityCodeA = facilityCodeA;
-      if (facilityCodeZ) payload.FacilityCodeZ = facilityCodeZ;
-      if (spliceRackA) payload.SpliceRackA = spliceRackA;
-      if (spliceRackZ) payload.SpliceRackZ = spliceRackZ;
+
+      // If the user is on the Facility tab, use the Facility-specific payload and stage mapping
+      let payload: any = { Diversity: diversityValue };
+      if (currentTab === 'Facility') {
+  const hasDiv = !!(diversityValue && diversityValue !== 'N');
+        const hasSp = !!(spliceRackA && String(spliceRackA).trim());
+        // Compute stage for Facility tab according to the specified rules
+        let stage = "12";
+        if (hasDiv && hasSp) stage = "14"; // Facility + Diversity + SpliceRack
+        else if (hasSp) stage = "15"; // Facility + SpliceRack
+        else if (hasDiv) stage = "13"; // Facility + Diversity
+        else stage = "12"; // Facility only
+
+        payload = {
+          Facility: facilityCodeA || "",
+          SpliceRack: spliceRackA || "",
+          Diversity: diversityValue,
+          Stage: stage,
+        };
+      } else {
+        // Default behaviour: keep existing A/Z style payload
+        const stage = computeScopeStage({
+          facilityA: facilityCodeA,
+          facilityZ: facilityCodeZ,
+          diversity: diversityValue === "N" ? "" : diversityValue,
+          spliceA: spliceRackA,
+          spliceZ: spliceRackZ,
+        });
+        payload = {
+          Diversity: diversityValue,
+          Stage: stage,
+        };
+        if (facilityCodeA) payload.FacilityCodeA = facilityCodeA;
+        if (facilityCodeZ) payload.FacilityCodeZ = facilityCodeZ;
+        if (spliceRackA) payload.SpliceRackA = spliceRackA;
+        if (spliceRackZ) payload.SpliceRackZ = spliceRackZ;
+      }
 
       const response = await fetch(logicAppUrl, {
         method: "POST",
@@ -1301,255 +1332,250 @@ const VSOAssistant: React.FC = () => {
 
         {!composeOpen && (
           <div key={formKey}>
-        {/* Facility Code A / Z - always visible. Selecting one disables the other. */}
-        <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-          {!facilityCodeZ && (
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500 } }}>
-                  Facility Code A <span style={{ color: "#ff4d4d" }}>*</span>
-                </Text>
-                <TooltipHost content="You can only select one Facility Code at a time. Choosing A hides Z options.">
-                  <IconButton iconProps={{ iconName: 'Info' }} title="Facility selection info" styles={{ root: { color: '#a6b7c6', height: 20, width: 20 } }} />
-                </TooltipHost>
-              </div>
-            <ComboBox
-              placeholder="Type or select Facility Code A"
-              options={filteredDcOptions}
-              selectedKey={facilityCodeA || undefined}
-              allowFreeform={true}
-              autoComplete="on"
-              useComboBoxAsMenuWidth
-              calloutProps={{ className: 'combo-dark-callout' }}
-              componentRef={dcComboRef}
-              onClick={() => dcComboRef.current?.focus(true)}
-              onFocus={() => dcComboRef.current?.focus(true)}
-              styles={comboBoxStyles}
-              disabled={!!facilityCodeZ}
-              onChange={(_, option, index, value) => {
-                const typed = (value || "").toString().toLowerCase();
-                const found = datacenterOptions.find((d) => {
-                  const keyStr = d.key?.toString().toLowerCase();
-                  const textStr = d.text?.toString().toLowerCase();
-                  return textStr === typed || keyStr === typed;
-                });
-
-                if (option) {
-                  const selectedKey = option.key?.toString() ?? "";
-                  // selecting the blank option ("") clears the selection
-                  if (selectedKey === "") {
-                    setFacilityCodeA("");
-                    return;
-                  }
-                  // Toggle off if the selected option is clicked again
-                  if (selectedKey === facilityCodeA) {
-                    setFacilityCodeA("");
-                  } else {
-                    setFacilityCodeA(selectedKey);
-                    // Enforce mutual exclusivity: clear Z selections when A chosen
-                    setFacilityCodeZ("");
-                    setSpliceRackZ(undefined);
-                  }
-                } else if (found) {
-                  setFacilityCodeA(found.key.toString());
-                  setFacilityCodeZ("");
-                  setSpliceRackZ(undefined);
-                } else {
-                  // reset if invalid typed text
-                  setFacilityCodeA("");
-                }
-              }}
-              onPendingValueChanged={(option, index, value) => {
-                setDcSearch(value || "");
-              }}
-              onMenuDismiss={() => setDcSearch("")}
-            />
-          </div>
-          )}
-
-          {!facilityCodeA && (
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500, marginTop: 0 } }}>
-                Facility Code Z
-              </Text>
-              <TooltipHost content="You can only select one Facility Code at a time. Choosing Z hides A options.">
-                <IconButton iconProps={{ iconName: 'Info' }} title="Facility selection info" styles={{ root: { color: '#a6b7c6', height: 20, width: 20 } }} />
-              </TooltipHost>
-            </div>
-            <ComboBox
-              placeholder="Type or select Facility Code Z"
-              options={filteredDcOptionsZ}
-              selectedKey={facilityCodeZ || undefined}
-              allowFreeform={true}
-              autoComplete="on"
-              useComboBoxAsMenuWidth
-              calloutProps={{ className: 'combo-dark-callout' }}
-              componentRef={dcComboRefZ}
-              onClick={() => dcComboRefZ.current?.focus(true)}
-              onFocus={() => dcComboRefZ.current?.focus(true)}
-              styles={comboBoxStyles}
-              disabled={!!facilityCodeA}
-              onChange={(_, option, index, value) => {
-                const typed = (value || "").toString().toLowerCase();
-                const found = datacenterOptions.find((d) => {
-                  const keyStr = d.key?.toString().toLowerCase();
-                  const textStr = d.text?.toString().toLowerCase();
-                  return textStr === typed || keyStr === typed;
-                });
-
-                if (option) {
-                  const selectedKey = option.key?.toString() ?? "";
-                  if (selectedKey === "") {
-                    setFacilityCodeZ("");
-                    return;
-                  }
-                  if (selectedKey === facilityCodeZ) {
-                    setFacilityCodeZ("");
-                  } else {
-                    setFacilityCodeZ(selectedKey);
-                    // Enforce mutual exclusivity: clear A selections when Z chosen
-                    setFacilityCodeA("");
-                    setSpliceRackA(undefined);
-                  }
-                } else if (found) {
-                  setFacilityCodeZ(found.key.toString());
-                  setFacilityCodeA("");
-                  setSpliceRackA(undefined);
-                } else {
-                  setFacilityCodeZ("");
-                }
-              }}
-              onPendingValueChanged={(option, index, value) => {
-                setDcSearchZ(value || "");
-              }}
-              onMenuDismiss={() => setDcSearchZ("")}
-            />
-            {(facilityCodeA && facilityCodeZ) && (
-              <MessageBar messageBarType={MessageBarType.warning} isMultiline={false}>
-                Only one Facility Code may be selected at a time.
-              </MessageBar>
-            )}
-          </div>
-          )}
-        </div>
-
-        {/* === Diversity Dropdown === */}
-        <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500, marginTop: 10 } }}>
-          Diversity Path (Optional)
-        </Text>
-        <Dropdown
-          placeholder=""
-          options={diversityOptions}
-          calloutProps={{ className: 'combo-dark-callout' }}
-          styles={diversityDropdownStyles}
-          selectedKey={diversity === undefined || diversity === "" ? undefined : diversity}
-          onChange={(_, option) => {
-            if (!option) return;
-            const nextKey = option.key?.toString() ?? "";
-            // Selecting the blank option always clears the selection
-            if (nextKey === "") {
-              setDiversity(undefined);
-              return;
-            }
-            // Toggle off if the same diversity option is clicked
-            if ((diversity || "") === nextKey) {
-              setDiversity(undefined);
-            } else {
-              setDiversity(nextKey);
-            }
-          }}
-        />
-
-        {/* Removed duplicate top-level Decommissioned-by-Country control; use the Decommissioned collapsed panel button instead. */}
-
-        {/* Splice Rack A/Z - conditionally shown; selecting one hides the other */}
-        <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
-          {!facilityCodeZ && (
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500 } }}>Splice Rack A (Optional)</Text>
-                <TooltipHost content="Only one Splice Rack may be selected at a time. Choosing A hides Z.">
-                  <IconButton iconProps={{ iconName: 'Info' }} title="Splice Rack selection info" styles={{ root: { color: '#a6b7c6', height: 18, width: 18 } }} />
-                </TooltipHost>
-              </div>
-              <TextField
-                placeholder="e.g. AM111"
-                onChange={(_, value) => {
-                  const v = value || undefined;
-                  setSpliceRackA(v);
-                  if (v) {
-                    // enforce exclusivity: clear Z-side selections when A splice entered
-                    setSpliceRackZ(undefined);
-                    setFacilityCodeZ("");
-                  }
+        {/* Tabbed layout: A-Z, Facility, Z-A. Each tab shows the corresponding inputs. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: 10, borderRadius: 12, background: 'linear-gradient(180deg, rgba(0,0,0,0.28), rgba(3,12,18,0.18))', boxShadow: '0 8px 30px rgba(0,96,140,0.06), inset 0 1px 0 rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.03)' }}>
+            {/* Tab buttons */}
+            {(['A-Z', 'Facility', 'Z-A', 'Decom'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setCurrentTab(t)}
+                aria-pressed={currentTab === t}
+                className={`tab-btn ${currentTab === t ? 'active' : ''}`}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 10,
+                  border: 'none',
+                  background: currentTab === t ? 'linear-gradient(180deg,#06435a,#003b6f)' : 'linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005))',
+                  color: currentTab === t ? '#e6fbff' : '#9fb3c6',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                  boxShadow: currentTab === t ? '0 6px 18px rgba(0,120,200,0.18), 0 1px 0 rgba(255,255,255,0.03) inset' : 'none',
                 }}
-                styles={textFieldStyles}
-                disabled={!!spliceRackZ}
-              />
-            </div>
-          )}
+              >
+                <span style={{ display: 'inline-block', minWidth: 130, textAlign: 'center' }}>
+                  {t === 'A-Z' ? 'A → Z' : t === 'Z-A' ? 'Z → A' : t === 'Decom' ? 'Decommissioned' : 'Facility'}
+                </span>
+              </button>
+            ))}
+          </div>
 
-          {!facilityCodeA && (
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500 } }}>Splice Rack Z (Optional)</Text>
-                <TooltipHost content="Only one Splice Rack may be selected at a time. Choosing Z hides A.">
-                  <IconButton iconProps={{ iconName: 'Info' }} title="Splice Rack selection info" styles={{ root: { color: '#a6b7c6', height: 18, width: 18 } }} />
-                </TooltipHost>
-              </div>
-              <TextField
-                placeholder="e.g. AJ1508"
-                onChange={(_, value) => {
-                  const v = value || undefined;
-                  setSpliceRackZ(v);
-                  if (v) {
-                    setSpliceRackA(undefined);
-                    setFacilityCodeA("");
-                  }
-                }}
-                styles={textFieldStyles}
-                disabled={!!spliceRackA}
-              />
-            </div>
-          )}
-        </div>
-        {(spliceRackA && spliceRackZ) && (
-          <MessageBar messageBarType={MessageBarType.warning} isMultiline={false}>
-            Only one Splice Rack may be selected at a time.
-          </MessageBar>
-        )}
-
-        <div className="form-buttons" style={{ marginTop: 16 }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button className="submit-btn" onClick={() => handleSubmit()}>
-                  Submit
-                </button>
-                {searchDone && (
-                  <button
-                    className="sleek-btn danger"
-                    onClick={() => { resetAll(); setCountryPanelOpen(false); setIsDecomMode(false); }}
-                    title="Reset search and form"
-                    aria-label="Reset"
-                    style={{ minWidth: 96 }}
-                  >
-                    Reset
-                  </button>
-                )}
-              </div>
-
-              {/* Right-aligned collapsed country panel toggle and content */}
-              <div style={{ marginLeft: 12, display: 'flex', alignItems: 'center' }}>
+          {/* Tab contents */}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            {/* A-Z tab: show Facility A input */}
+            {currentTab === 'A-Z' && (
+              <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <DefaultButton
-                    text={countryPanelOpen ? 'Hide' : 'Decommissioned Spans'}
-                    onClick={() => setCountryPanelOpen(o => !o)}
-                    styles={{ root: { height: 36, backgroundColor: '#f1c232', color: '#000', borderRadius: 6, border: '1px solid #b38f16' } }}
+                  <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500 } }}>
+                    Facility Code A <span style={{ color: "#ff4d4d" }}>*</span>
+                  </Text>
+                  <TooltipHost content={"This search will provide results from the FacilityCodeA side using the Datacenter code entered."}>
+                    <IconButton iconProps={{ iconName: 'Info' }} title="Facility selection info" styles={{ root: { color: '#a6b7c6', height: 20, width: 20 } }} />
+                  </TooltipHost>
+                </div>
+                <ComboBox
+                  placeholder="Type or select Facility Code A"
+                  options={filteredDcOptions}
+                  selectedKey={facilityCodeA || undefined}
+                  allowFreeform={true}
+                  autoComplete="on"
+                  useComboBoxAsMenuWidth
+                  calloutProps={{ className: 'combo-dark-callout' }}
+                  componentRef={dcComboRef}
+                  styles={comboBoxStyles}
+                  onChange={(_, option, index, value) => {
+                    const typed = (value || "").toString().toLowerCase();
+                    const found = datacenterOptions.find((d) => {
+                      const keyStr = d.key?.toString().toLowerCase();
+                      const textStr = d.text?.toString().toLowerCase();
+                      return textStr === typed || keyStr === typed;
+                    });
+                    if (option) {
+                      const selectedKey = option.key?.toString() ?? "";
+                      if (selectedKey === "") { setFacilityCodeA(""); return; }
+                      if (selectedKey === facilityCodeA) { setFacilityCodeA(""); }
+                      else { setFacilityCodeA(selectedKey); setFacilityCodeZ(""); setSpliceRackZ(undefined); }
+                    } else if (found) { setFacilityCodeA(found.key.toString()); setFacilityCodeZ(""); setSpliceRackZ(undefined); }
+                    else setFacilityCodeA("");
+                  }}
+                  onPendingValueChanged={(option, index, value) => setDcSearch(value || "")}
+                  onMenuDismiss={() => setDcSearch("")}
+                />
+
+                {/* Diversity for A tab */}
+                <div style={{ marginTop: 8 }}>
+                  <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500, marginBottom: 6 } }}>Diversity (Optional)</Text>
+                  <Dropdown
+                    placeholder=""
+                    options={diversityOptions}
+                    calloutProps={{ className: 'combo-dark-callout' }}
+                    styles={diversityDropdownStyles}
+                    selectedKey={diversity === undefined || diversity === "" ? undefined : diversity}
+                    onChange={(_, option) => {
+                      if (!option) return;
+                      const nextKey = option.key?.toString() ?? "";
+                      if (nextKey === "") { setDiversity(undefined); return; }
+                      if ((diversity || "") === nextKey) setDiversity(undefined); else setDiversity(nextKey);
+                    }}
                   />
                 </div>
-                {countryPanelOpen && (
-                  <div style={{ display: 'flex', gap: 8, marginLeft: 8, alignItems: 'center', width: 520 }}>
+
+                <div style={{ marginTop: 8 }}>
+                  <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500 } }}>Splice Rack A (Optional)</Text>
+                  <TextField
+                    placeholder="e.g. AM111"
+                    onChange={(_, value) => { const v = value || undefined; setSpliceRackA(v); if (v) { setSpliceRackZ(undefined); setFacilityCodeZ(""); } }}
+                    styles={textFieldStyles}
+                    disabled={!!spliceRackZ}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Facility tab: single Facility search (Facility Code, Diversity, Splice Rack) */}
+            {currentTab === 'Facility' && (
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 600 } }}>Facility Code <span style={{ color: "#ff4d4d" }}>*</span></Text>
+                  <TooltipHost content={"This search will provide results from both the FacilityCodeA and FacilityCodeZ side using the Datacenter code entered."}>
+                    <IconButton iconProps={{ iconName: 'Info' }} title="Facility selection info" styles={{ root: { color: '#a6b7c6', height: 18, width: 18 } }} />
+                  </TooltipHost>
+                </div>
+                <ComboBox
+                  placeholder="Type or select Facility Code"
+                  options={filteredDcOptions}
+                  selectedKey={facilityCodeA || undefined}
+                  allowFreeform={true}
+                  autoComplete="on"
+                  useComboBoxAsMenuWidth
+                  calloutProps={{ className: 'combo-dark-callout' }}
+                  componentRef={dcComboRef}
+                  styles={comboBoxStyles}
+                  onChange={(_, option, index, value) => {
+                    const typed = (value || "").toString().toLowerCase();
+                    const found = datacenterOptions.find((d) => {
+                      const keyStr = d.key?.toString().toLowerCase();
+                      const textStr = d.text?.toString().toLowerCase();
+                      return textStr === typed || keyStr === typed;
+                    });
+                    if (option) {
+                      const selectedKey = option.key?.toString() ?? "";
+                      if (selectedKey === "") { setFacilityCodeA(""); return; }
+                      if (selectedKey === facilityCodeA) { setFacilityCodeA(""); }
+                      else { setFacilityCodeA(selectedKey); setFacilityCodeZ(""); }
+                    } else if (found) { setFacilityCodeA(found.key.toString()); setFacilityCodeZ(""); }
+                    else setFacilityCodeA("");
+                  }}
+                  onPendingValueChanged={(option, index, value) => setDcSearch(value || "")}
+                  onMenuDismiss={() => setDcSearch("")}
+                />
+
+                <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <Text styles={{ root: { color: '#ccc', fontSize: 13, fontWeight: 500, marginBottom: 6 } }}>Diversity</Text>
+                    <Dropdown
+                      placeholder=""
+                      options={diversityOptions}
+                      calloutProps={{ className: 'combo-dark-callout' }}
+                      styles={diversityDropdownStyles}
+                      selectedKey={diversity === undefined || diversity === "" ? undefined : diversity}
+                      onChange={(_, option) => {
+                        if (!option) return;
+                        const nextKey = option.key?.toString() ?? "";
+                        if (nextKey === "") { setDiversity(undefined); return; }
+                        if ((diversity || "") === nextKey) setDiversity(undefined); else setDiversity(nextKey);
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ flex: 1 }}>
+                    <Text styles={{ root: { color: '#ccc', fontSize: 13, fontWeight: 500, marginBottom: 6 } }}>Splice Rack</Text>
+                    <TextField placeholder="e.g. AM111" value={spliceRackA || ''} onChange={(_, v) => { const val = v || undefined; setSpliceRackA(val); if (val) { setSpliceRackZ(undefined); setFacilityCodeZ(""); } }} styles={textFieldStyles} />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Z-A tab: show Facility Z input */}
+            {currentTab === 'Z-A' && (
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500 } }}>Facility Code Z <span style={{ color: "#ff4d4d" }}>*</span></Text>
+                  <TooltipHost content={"This search will provide results from the FacilityCodeZ side using the Datacenter code entered."}>
+                    <IconButton iconProps={{ iconName: 'Info' }} title="Facility selection info" styles={{ root: { color: '#a6b7c6', height: 20, width: 20 } }} />
+                  </TooltipHost>
+                </div>
+                <ComboBox
+                  placeholder="Type or select Facility Code Z"
+                  options={filteredDcOptionsZ}
+                  selectedKey={facilityCodeZ || undefined}
+                  allowFreeform={true}
+                  autoComplete="on"
+                  useComboBoxAsMenuWidth
+                  calloutProps={{ className: 'combo-dark-callout' }}
+                  componentRef={dcComboRefZ}
+                  styles={comboBoxStyles}
+                  onChange={(_, option, index, value) => {
+                    const typed = (value || "").toString().toLowerCase();
+                    const found = datacenterOptions.find((d) => {
+                      const keyStr = d.key?.toString().toLowerCase();
+                      const textStr = d.text?.toString().toLowerCase();
+                      return textStr === typed || keyStr === typed;
+                    });
+                    if (option) {
+                      const selectedKey = option.key?.toString() ?? "";
+                      if (selectedKey === "") { setFacilityCodeZ(""); return; }
+                      if (selectedKey === facilityCodeZ) { setFacilityCodeZ(""); }
+                      else { setFacilityCodeZ(selectedKey); setFacilityCodeA(""); setSpliceRackA(undefined); }
+                    } else if (found) { setFacilityCodeZ(found.key.toString()); setFacilityCodeA(""); setSpliceRackA(undefined); }
+                    else setFacilityCodeZ("");
+                  }}
+                  onPendingValueChanged={(option, index, value) => setDcSearchZ(value || "")}
+                  onMenuDismiss={() => setDcSearchZ("")}
+                />
+
+                {/* Diversity for Z tab */}
+                <div style={{ marginTop: 8 }}>
+                  <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500, marginBottom: 6 } }}>Diversity (Optional)</Text>
+                  <Dropdown
+                    placeholder=""
+                    options={diversityOptions}
+                    calloutProps={{ className: 'combo-dark-callout' }}
+                    styles={diversityDropdownStyles}
+                    selectedKey={diversity === undefined || diversity === "" ? undefined : diversity}
+                    onChange={(_, option) => {
+                      if (!option) return;
+                      const nextKey = option.key?.toString() ?? "";
+                      if (nextKey === "") { setDiversity(undefined); return; }
+                      if ((diversity || "") === nextKey) setDiversity(undefined); else setDiversity(nextKey);
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginTop: 8 }}>
+                  <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500 } }}>Splice Rack Z (Optional)</Text>
+                  <TextField placeholder="e.g. AJ1508" onChange={(_, value) => { const v = value || undefined; setSpliceRackZ(v); if (v) { setSpliceRackA(undefined); setFacilityCodeA(""); } }} styles={textFieldStyles} disabled={!!spliceRackA} />
+                </div>
+              </div>
+            )}
+
+            {/* Decommissioned tab: country lookup moved here (was a collapsed panel previously) */}
+            {currentTab === 'Decom' && (
+              <div style={{ flex: 1 }}>
+                <div style={{ background: '#081518', border: '1px solid #123238', padding: 16, borderRadius: 10, boxShadow: '0 6px 18px rgba(0,80,100,0.12)', maxWidth: 680 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                    <div>
+                        <div style={{ color: '#e6f6ff', fontSize: 16, fontWeight: 700 }}>Decommissioned Spans</div>
+                      </div>
+                    <IconButton iconProps={{ iconName: 'WarningSolid' }} title="Decommissioned search info" styles={{ root: { color: '#f1c232', height: 28, width: 28 } }} />
+                  </div>
+
+                  <div style={{ background: '#071821', border: '1px solid #20343f', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+                    <div style={{ color: '#dfefff', fontSize: 13, marginBottom: 6 }}>This search will pull all spans that are in a Decommission ready state by the country entered.</div>
+                    <div style={{ color: '#9fb3c6', fontSize: 12 }}>Select a country, then click Lookup to fetch spans marked ready for decommission in that country.</div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                     <div style={{ flex: 1 }}>
                       <ComboBox
                         placeholder="Type or select a country"
@@ -1562,7 +1588,7 @@ const VSOAssistant: React.FC = () => {
                         componentRef={countryComboRef}
                         onClick={() => countryComboRef.current?.focus(true)}
                         onFocus={() => countryComboRef.current?.focus(true)}
-                        styles={{ ...comboBoxStyles, root: { width: 340 } } as any}
+                        styles={{ ...comboBoxStyles, root: { width: '100%' } } as any}
                         onChange={(_, option, index, value) => {
                           const typed = (value || "").toString().toLowerCase();
                           const found = countryOptions.find((c) => {
@@ -1592,11 +1618,11 @@ const VSOAssistant: React.FC = () => {
                         onMenuDismiss={() => setCountrySearch("")}
                       />
                     </div>
-                    <div style={{ width: 100, display: 'flex', alignItems: 'center' }}>
+                    <div style={{ width: 120, display: 'flex', alignItems: 'center' }}>
                       <PrimaryButton
                         text="Lookup"
                         disabled={!country}
-                        styles={{ root: { height: 36 } }}
+                        styles={{ root: { height: 40 } }}
                         onClick={async () => {
                           setLoading(true);
                           setError(null);
@@ -1623,8 +1649,33 @@ const VSOAssistant: React.FC = () => {
                       />
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Facility-specific inputs moved into the Facility tab above. */}
+
+        <div className="form-buttons" style={{ marginTop: 16 }}>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="submit-btn" onClick={() => handleSubmit()}>
+                  Submit
+                </button>
+                {searchDone && (
+                  <button
+                    className="sleek-btn danger"
+                    onClick={() => { resetAll(); setIsDecomMode(false); }}
+                    title="Reset search and form"
+                    aria-label="Reset"
+                    style={{ minWidth: 96 }}
+                  >
+                    Reset
+                  </button>
                 )}
               </div>
+              {/* Decommissioned tab content moved into the tabs; removed collapsed toggle here. */}
             </div>
         </div>
 
@@ -2032,20 +2083,25 @@ const VSOAssistant: React.FC = () => {
 
             <div style={{ textAlign: "center", marginTop: 12 }}>
               <div style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
-                <PrimaryButton
-                  text="Span Traffic"
-                  disabled={selectedSpans.length === 0}
-                  onClick={() => {
-                    try {
-                      const q = encodeURIComponent(selectedSpans.join(','));
-                      navigate(`/fiber-span-utilization?spans=${q}`);
-                    } catch (e) {
-                      // fallback: open without params
-                      navigate('/fiber-span-utilization');
-                    }
-                  }}
-                  styles={{ root: { backgroundColor: '#6a00ff', borderColor: '#5a00e6', height: 36, borderRadius: 6, color: '#fff' } }}
-                />
+                {/* Disable when none selected or when selection exceeds 20 */}
+                <TooltipHost content={selectedSpans.length > 20 ? 'Max 20 spans at a time. Reduce selection to enable this action.' : undefined}>
+                  <div>
+                    <PrimaryButton
+                      text="Span Traffic"
+                      disabled={selectedSpans.length === 0 || selectedSpans.length > 20}
+                      onClick={() => {
+                        try {
+                          const q = encodeURIComponent(selectedSpans.join(','));
+                          navigate(`/fiber-span-utilization?spans=${q}`);
+                        } catch (e) {
+                          // fallback: open without params
+                          navigate('/fiber-span-utilization');
+                        }
+                      }}
+                      styles={{ root: { backgroundColor: selectedSpans.length > 20 ? undefined : '#6a00ff', borderColor: '#5a00e6', height: 36, borderRadius: 6, color: '#fff' } }}
+                    />
+                  </div>
+                </TooltipHost>
                 <PrimaryButton
                   text={`Continue (${selectedSpans.length} selected)`}
                   disabled={selectedSpans.length === 0}

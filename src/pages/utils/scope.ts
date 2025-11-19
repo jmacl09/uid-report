@@ -10,6 +10,18 @@ export const computeScopeStage = (vals: {
   const hasDiv = !!(vals.diversity && vals.diversity.toString().trim());
   const hasSpA = !!(vals.spliceA && vals.spliceA.toString().trim());
   const hasSpZ = !!(vals.spliceZ && vals.spliceZ.toString().trim());
+  // Both A and Z present -> use the new facility-pair stage mapping
+  if (hasA && hasZ) {
+    // Priority: both diversity + both splices -> 14
+    if (hasDiv && hasSpA && hasSpZ) return "14";
+    // Both splices -> 15
+    if (hasSpA && hasSpZ) return "15";
+    // Both present with diversity -> 13
+    if (hasDiv) return "13";
+    // Only both facility codes -> 12
+    return "12";
+  }
+
   if (hasA && !hasZ) {
     if (hasDiv && hasSpA) return "2";
     if (hasDiv) return "3";

@@ -24,6 +24,14 @@ const FiberSpanUtilization: React.FC = () => {
     setSpansData(null);
     setDataCenter(null);
     const target = (spanValue ?? span) || "";
+    // Validate number of spans (comma-separated)
+    const parts = target.split(',').map((s) => (s || '').trim()).filter(Boolean);
+    if (parts.length > 20) {
+      setError('Maximum 20 spans allowed per request. Please reduce your selection.');
+      setProgressComplete(true);
+      setLoading(false);
+      return;
+    }
     if (!target || !target.trim()) {
       setError("Span is required.");
       return;
@@ -173,9 +181,14 @@ const FiberSpanUtilization: React.FC = () => {
                   field: { color: "#fff" },
                 }}
               />
-            <div style={{ marginTop: 8, color: '#9fb3c6', fontSize: 12 }}>
-              Tip: You can search multiple spans by entering comma-separated Span IDs.
-            </div>
+              <div style={{ marginTop: 8, color: '#9fb3c6', fontSize: 12 }}>
+                {(() => {
+                  const parts = (span || "").split(',').map((s) => (s || '').trim()).filter(Boolean);
+                  if (parts.length === 0) return 'Tip: You can search multiple spans by entering comma-separated Span IDs.';
+                  if (parts.length <= 20) return `Spans entered: ${parts.length} (max 20)`;
+                  return `Spans entered: ${parts.length} — maximum is 20; remove ${parts.length - 20} to continue.`;
+                })()}
+              </div>
           </div>
           <div>
             <PrimaryButton text="Get Utilization" onClick={() => void handleSubmit()} className="search-btn" />

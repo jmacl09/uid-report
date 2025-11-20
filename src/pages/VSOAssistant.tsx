@@ -1794,10 +1794,16 @@ const VSOAssistant: React.FC = () => {
                   });
 
                   // Create options: put leadingUnique first (sorted ascending), then any availableDcOptions not already included (also sorted)
-                  const leadingUniqueSorted = [...leadingUnique].sort((a, b) => a.localeCompare(b));
+                  // Filter out any 'unknown' keys or labels
+                  const isKnown = (v: any) => {
+                    if (!v) return false;
+                    const s = String(v).toLowerCase();
+                    return s !== 'unknown';
+                  };
+                  const leadingUniqueSorted = [...leadingUnique].filter(isKnown).sort((a, b) => a.localeCompare(b));
                   const leadingOptions = leadingUniqueSorted.map((c) => ({ key: c, text: c }));
                   const remaining = availableDcOptions
-                    .filter((o) => !seen.has(String(o.key)))
+                    .filter((o) => !seen.has(String(o.key)) && isKnown(o.key) && isKnown(o.text))
                     .sort((a, b) => String(a.key).localeCompare(String(b.key)));
                   const options = leadingOptions.length ? [...leadingOptions, ...remaining] : remaining;
 
@@ -1915,19 +1921,30 @@ const VSOAssistant: React.FC = () => {
                 } },
               ];
               // Determine which columns to show depending on simplifiedView
-              // Prefer the unit-level splice column when the user searched by Facility Code A
-              // Logic app returns a SpliceRackA_Unit field; show that when Facility Code A is used.
-              const splicePreferredKey = facilityCodeA
-                ? 'SpliceRackA_Unit'
-                : spliceRackA
-                ? 'SpliceRackA'
-                : 'SpliceRackZ';
-
+              // For Facility tab, always show both Splice Rack (A) and Splice Rack Z columns
               const getCandidate = (k: string) => candidate.find(c => c.key === k);
 
               let dynamicCols: any[];
-              if (simplifiedView) {
-                // Include FacilityCodeA and FacilityCodeZ in simplified view per request
+              if (currentTab === 'Facility') {
+                // Always show both SpliceRackA_Unit and SpliceRackZ_Unit in Facility tab
+                const facilityKeys = ['Diversity', 'SpanID', 'FacilityCodeA', 'FacilityCodeZ', 'SpliceRackA_Unit', 'SpliceRackZ_Unit', 'WiringScope', 'Status'];
+                dynamicCols = facilityKeys.map((k) => {
+                  const found = getCandidate(k);
+                  if (found) return found;
+                  return { key: k, label: k, render: (row: SpanData) => ((row as any)[k] ?? '') };
+                });
+              } else if (simplifiedView) {
+                // For Z-A tab, show SpliceRackZ_Unit as the default splice column
+                let splicePreferredKey;
+                if (currentTab === 'Z-A') {
+                  splicePreferredKey = 'SpliceRackZ_Unit';
+                } else if (facilityCodeA) {
+                  splicePreferredKey = 'SpliceRackA_Unit';
+                } else if (spliceRackA) {
+                  splicePreferredKey = 'SpliceRackA';
+                } else {
+                  splicePreferredKey = 'SpliceRackZ';
+                }
                 const simplifiedKeys = ['Diversity', 'SpanID', 'FacilityCodeA', 'FacilityCodeZ', splicePreferredKey, 'WiringScope', 'Status'];
                 dynamicCols = simplifiedKeys.map((k) => {
                   const found = getCandidate(k);

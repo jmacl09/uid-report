@@ -104,80 +104,61 @@ app.http('HttpTrigger1', {
         if (request.method === 'GET') {
             try {
                 const url = new URL(request.url);
-                const uid = url.searchParams.get('uid');
                 const category = url.searchParams.get('category');
                 const qTable = url.searchParams.get('tableName');
+                const uid = url.searchParams.get('uid');
 
-                // If listing category without UID
-                if (!uid) {
-                    const catLower = (category || '').toLowerCase();
-                    if (catLower === 'projects' || catLower === 'suggestions') {
-                        const tableName = chooseTable({ tableName: qTable, category });
-                        const { client, ensureTable, auth } = getTableClient(tableName);
-
-                        context.log(`[Table] GET all (${category}) table=${tableName} auth=${auth}`);
-                        await ensureTable();
-
-                                const items = [];
-                                for await (const rawEntity of client.listEntities()) {
-                                    // Normalize entity shape for consistent JSON output
-                                    const entity = {};
-                                    try {
-                                        // copy known commonly-used fields with stable names
-                                        entity.partitionKey = rawEntity.partitionKey || rawEntity.PartitionKey || rawEntity.PK || rawEntity.Partition || '';
-                                        entity.rowKey = rawEntity.rowKey || rawEntity.RowKey || rawEntity.RK || rawEntity.row || '';
-                                        entity.category = rawEntity.category || rawEntity.Category || '';
-                                        entity.title = rawEntity.title || rawEntity.Title || rawEntity.projectName || rawEntity.ProjectName || '';
-                                        entity.description = rawEntity.description || rawEntity.Description || '';
-                                        entity.owner = rawEntity.owner || rawEntity.Owner || '';
-                                        entity.savedAt = rawEntity.savedAt || rawEntity.savedAt || rawEntity.Timestamp || rawEntity.timestamp || entity.rowKey || new Date().toISOString();
-                                        // Copy any other user props (avoid prototype keys)
-                                        for (const k of Object.keys(rawEntity || {})) {
-                                            if (!Object.prototype.hasOwnProperty.call(entity, k)) {
-                                                try { entity[k] = rawEntity[k]; } catch { }
-                                            }
-                                        }
-                                    } catch (e) {
-                                        // fallback to raw entity if normalization fails
-                                        try { Object.assign(entity, rawEntity); } catch { }
-                                    }
-                                    items.push(entity);
+                // Always use Suggestions table for suggestions (ignore UID)
+                if ((category || '').toLowerCase() === 'suggestions' || qTable === 'Suggestions') {
+                    const tableName = 'Suggestions';
+                    const { client, ensureTable, auth } = getTableClient(tableName);
+                    context.log(`[Table] GET all (Suggestions) table=${tableName} auth=${auth}`);
+                    await ensureTable();
+                    const items = [];
+                    for await (const rawEntity of client.listEntities()) {
+                        const entity = {};
+                        try {
+                            entity.partitionKey = rawEntity.partitionKey || rawEntity.PartitionKey || rawEntity.PK || rawEntity.Partition || '';
+                            entity.rowKey = rawEntity.rowKey || rawEntity.RowKey || rawEntity.RK || rawEntity.row || '';
+                            entity.title = rawEntity.title || rawEntity.Title || rawEntity.projectName || rawEntity.ProjectName || '';
+                            entity.description = rawEntity.description || rawEntity.Description || '';
+                            entity.owner = rawEntity.owner || rawEntity.Owner || '';
+                            entity.savedAt = rawEntity.savedAt || rawEntity.savedAt || rawEntity.Timestamp || rawEntity.timestamp || entity.rowKey || new Date().toISOString();
+                            for (const k of Object.keys(rawEntity || {})) {
+                                if (!Object.prototype.hasOwnProperty.call(entity, k)) {
+                                    try { entity[k] = rawEntity[k]; } catch { }
                                 }
-
-                        items.sort((a, b) => (a.rowKey < b.rowKey ? 1 : -1));
-
-                        return {
-                            status: 200,
-                            headers: corsHeaders,
-                            jsonBody: { ok: true, category, count: items.length, items }
-                        };
+                            }
+                        } catch (e) {
+                            try { Object.assign(entity, rawEntity); } catch { }
+                        }
+                        items.push(entity);
                     }
-
+                    items.sort((a, b) => (a.rowKey < b.rowKey ? 1 : -1));
                     return {
                         status: 200,
                         headers: corsHeaders,
-                        jsonBody: { ok: true, message: 'Supply ?uid=UID to filter entries.' }
+                        jsonBody: { ok: true, category: 'suggestions', count: items.length, items }
                     };
                 }
 
-                // Normal filtered GET
-                const tableName = chooseTable({ tableName: qTable, category });
-                const { client, ensureTable, auth } = getTableClient(tableName);
-
-                context.log(`[Table] GET -> table=${tableName} auth=${auth}`);
-                await ensureTable();
-
-                const filter = [`PartitionKey eq 'UID_${uid}'`];
-                if (category) filter.push(`(category eq '${category}' or Category eq '${category}')`);
-
-                const items = [];
-                        for await (const rawEntity of client.listEntities({ queryOptions: { filter: filter.join(' and ') } })) {
+                // ...existing code for other categories...
+                // If listing category without UID
+                if (!uid) {
+                    const catLower = (category || '').toLowerCase();
+                    if (catLower === 'projects') {
+                        const tableName = chooseTable({ tableName: qTable, category });
+                        const { client, ensureTable, auth } = getTableClient(tableName);
+                        context.log(`[Table] GET all (${category}) table=${tableName} auth=${auth}`);
+                        await ensureTable();
+                        const items = [];
+                        for await (const rawEntity of client.listEntities()) {
                             const entity = {};
                             try {
                                 entity.partitionKey = rawEntity.partitionKey || rawEntity.PartitionKey || rawEntity.PK || rawEntity.Partition || '';
                                 entity.rowKey = rawEntity.rowKey || rawEntity.RowKey || rawEntity.RK || rawEntity.row || '';
                                 entity.category = rawEntity.category || rawEntity.Category || '';
-                                entity.title = rawEntity.title || rawEntity.Title || '';
+                                entity.title = rawEntity.title || rawEntity.Title || rawEntity.projectName || rawEntity.ProjectName || '';
                                 entity.description = rawEntity.description || rawEntity.Description || '';
                                 entity.owner = rawEntity.owner || rawEntity.Owner || '';
                                 entity.savedAt = rawEntity.savedAt || rawEntity.savedAt || rawEntity.Timestamp || rawEntity.timestamp || entity.rowKey || new Date().toISOString();
@@ -191,15 +172,54 @@ app.http('HttpTrigger1', {
                             }
                             items.push(entity);
                         }
+                        items.sort((a, b) => (a.rowKey < b.rowKey ? 1 : -1));
+                        return {
+                            status: 200,
+                            headers: corsHeaders,
+                            jsonBody: { ok: true, category, count: items.length, items }
+                        };
+                    }
+                    return {
+                        status: 200,
+                        headers: corsHeaders,
+                        jsonBody: { ok: true, message: 'Supply ?uid=UID to filter entries.' }
+                    };
+                }
 
+                // Normal filtered GET
+                const tableName = chooseTable({ tableName: qTable, category });
+                const { client, ensureTable, auth } = getTableClient(tableName);
+                context.log(`[Table] GET -> table=${tableName} auth=${auth}`);
+                await ensureTable();
+                const filter = [`PartitionKey eq 'UID_${uid}'`];
+                if (category) filter.push(`(category eq '${category}' or Category eq '${category}')`);
+                const items = [];
+                for await (const rawEntity of client.listEntities({ queryOptions: { filter: filter.join(' and ') } })) {
+                    const entity = {};
+                    try {
+                        entity.partitionKey = rawEntity.partitionKey || rawEntity.PartitionKey || rawEntity.PK || rawEntity.Partition || '';
+                        entity.rowKey = rawEntity.rowKey || rawEntity.RowKey || rawEntity.RK || rawEntity.row || '';
+                        entity.category = rawEntity.category || rawEntity.Category || '';
+                        entity.title = rawEntity.title || rawEntity.Title || '';
+                        entity.description = rawEntity.description || rawEntity.Description || '';
+                        entity.owner = rawEntity.owner || rawEntity.Owner || '';
+                        entity.savedAt = rawEntity.savedAt || rawEntity.savedAt || rawEntity.Timestamp || rawEntity.timestamp || entity.rowKey || new Date().toISOString();
+                        for (const k of Object.keys(rawEntity || {})) {
+                            if (!Object.prototype.hasOwnProperty.call(entity, k)) {
+                                try { entity[k] = rawEntity[k]; } catch { }
+                            }
+                        }
+                    } catch (e) {
+                        try { Object.assign(entity, rawEntity); } catch { }
+                    }
+                    items.push(entity);
+                }
                 items.sort((a, b) => (a.rowKey < b.rowKey ? 1 : -1));
-
                 return {
                     status: 200,
                     headers: corsHeaders,
                     jsonBody: { ok: true, uid, category, count: items.length, items }
                 };
-
             } catch (err) {
                 context.log('GET ERROR:', err);
                 return { status: 500, headers: corsHeaders, jsonBody: { ok: false, error: String(err) } };
@@ -255,26 +275,54 @@ app.http('HttpTrigger1', {
         const { category, uid, title, description, owner, timestamp, rowKey } = payload;
         const catLower = (category || '').toLowerCase();
 
+        // Always use Suggestions table for suggestions, and do not require UID or category
+        if (catLower === 'suggestions' || !category) {
+            if (!title) {
+                return { status: 400, headers: corsHeaders, jsonBody: { ok: false, error: 'Missing title.' } };
+            }
+            try {
+                const tableName = 'Suggestions';
+                const { client, ensureTable, auth } = getTableClient(tableName);
+                context.log(`[Table] POST -> table=${tableName} auth=${auth}`);
+                await ensureTable();
+                const nowIso = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString();
+                const resolvedRowKey = (rowKey && rowKey.trim()) || nowIso;
+                const entity = {
+                    partitionKey: 'Suggestions',
+                    rowKey: resolvedRowKey,
+                    title,
+                    description: description || '',
+                    owner: owner || 'Unknown',
+                    savedAt: nowIso,
+                };
+                await client.upsertEntity(entity, 'Merge');
+                return {
+                    status: 200,
+                    headers: corsHeaders,
+                    jsonBody: { ok: true, message: `Saved suggestion`, entity }
+                };
+            } catch (err) {
+                context.log('POST ERROR:', err);
+                return { status: 500, headers: corsHeaders, jsonBody: { ok: false, error: String(err) } };
+            }
+        }
+
+        // ...existing code for other categories...
         if (!category || !title) {
             return { status: 400, headers: corsHeaders, jsonBody: { ok: false, error: 'Missing category or title.' } };
         }
-
-        if (catLower !== 'suggestions' && !uid) {
+        if (!uid) {
             return { status: 400, headers: corsHeaders, jsonBody: { ok: false, error: 'Missing UID.' } };
         }
-
         try {
             const tableName = chooseTable({ category });
             const { client, ensureTable, auth } = getTableClient(tableName);
-
             context.log(`[Table] POST -> table=${tableName} auth=${auth}`);
             await ensureTable();
-
             const nowIso = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString();
             const resolvedRowKey = (rowKey && rowKey.trim()) || nowIso;
-
             const entity = {
-                partitionKey: catLower === 'suggestions' ? 'Suggestions' : `UID_${uid}`,
+                partitionKey: `UID_${uid}`,
                 rowKey: resolvedRowKey,
                 category,
                 title,
@@ -282,9 +330,7 @@ app.http('HttpTrigger1', {
                 owner: owner || 'Unknown',
                 savedAt: nowIso,
             };
-
             await client.upsertEntity(entity, 'Merge');
-
             return {
                 status: 200,
                 headers: corsHeaders,

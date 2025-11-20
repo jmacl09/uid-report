@@ -72,7 +72,7 @@ const VSOAssistant: React.FC = () => {
   }, []);
   const [facilityCodeA, setFacilityCodeA] = useState<string>("");
   const [facilityCodeZ, setFacilityCodeZ] = useState<string>("");
-  const [diversity, setDiversity] = useState<string>();
+  const [diversity, setDiversity] = useState<string[]>([]);
   const [spliceRackA, setSpliceRackA] = useState<string>();
   const [spliceRackZ, setSpliceRackZ] = useState<string>();
   const [loading, setLoading] = useState<boolean>(false);
@@ -437,7 +437,7 @@ const VSOAssistant: React.FC = () => {
     // Clear search and results
     setFacilityCodeA("");
     setFacilityCodeZ("");
-    setDiversity(undefined);
+    setDiversity([]);
     setSpliceRackA(undefined);
     setSpliceRackZ(undefined);
     setLoading(false);
@@ -584,13 +584,10 @@ const VSOAssistant: React.FC = () => {
       const logicAppUrl =
         "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net:443/api/VSO/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=6ViXNM-TmW5F7Qd9_e4fz3IhRNqmNzKwovWvcmuNJto";
 
-      const diversityValue = (() => {
-        const raw = (diversity || "").toString();
-        if (!raw) return "N";
-        // Preserve comma-separated groups and normalize spacing: "A, B, C"
-        const normalized = raw.split(',').map((s) => s.trim()).filter(Boolean).join(', ');
-        return normalized || "N";
-      })();
+      // Format diversity as comma-separated string for payload
+      const diversityValue = (diversity && diversity.length > 0)
+        ? diversity.join(', ')
+        : "N";
 
       // If the user is on the Facility tab, use the Facility-specific payload and stage mapping
       let payload: any = { Diversity: diversityValue };
@@ -898,8 +895,34 @@ const VSOAssistant: React.FC = () => {
     },
     caretDownWrapper: { color: "#fff" },
     dropdownItemsWrapper: { background: "#181818" },
-    dropdownItem: { background: "transparent", color: "#fff" },
-    dropdownItemSelected: { background: "#003b6f", color: "#fff" },
+    dropdownItem: {
+      background: "transparent",
+      color: "#fff",
+      selectors: {
+        ':hover': {
+          background: '#225b8a',
+          color: '#fff',
+        },
+        ':active': {
+          background: '#003b6f',
+          color: '#fff',
+        },
+      },
+    },
+    dropdownItemSelected: {
+      background: "#003b6f",
+      color: "#fff",
+      selectors: {
+        ':hover': {
+          background: '#225b8a',
+          color: '#fff',
+        },
+        ':active': {
+          background: '#003b6f',
+          color: '#fff',
+        },
+      },
+    },
     callout: { background: "#181818" },
   };
 
@@ -1226,13 +1249,7 @@ const VSOAssistant: React.FC = () => {
 
       const payload = {
         FacilityCodeA: facilityCodeA || "",
-        Diversity:
-          (() => {
-            const raw = (diversity || "").toString();
-            if (!raw) return "";
-            // Preserve comma-separated groups and normalize spacing
-            return raw.split(',').map((s) => s.trim()).filter(Boolean).join(', ');
-          })(),
+        Diversity: (diversity && diversity.length > 0) ? diversity.join(', ') : "",
         SpliceRackA: spliceRackA || "",
         Stage: "9",
         CC: cc || "",
@@ -1244,7 +1261,7 @@ const VSOAssistant: React.FC = () => {
         NotificationType: notificationType || "",
         MaintenanceReason: maintenanceReason || "",
         Location: location || "",
-  Tags: tags && tags.length ? tags.join('; ') : "",
+        Tags: tags && tags.length ? tags.join('; ') : "",
         ImpactExpected: impactExpected ? "True" : "False",
       };
 
@@ -1458,12 +1475,16 @@ const VSOAssistant: React.FC = () => {
                     options={diversityOptions}
                     calloutProps={{ className: 'combo-dark-callout' }}
                     styles={diversityDropdownStyles}
-                    selectedKey={diversity === undefined || diversity === "" ? undefined : diversity}
+                    selectedKeys={diversity}
+                    multiSelect
                     onChange={(_, option) => {
                       if (!option) return;
-                      const nextKey = option.key?.toString() ?? "";
-                      if (nextKey === "") { setDiversity(undefined); return; }
-                      if ((diversity || "") === nextKey) setDiversity(undefined); else setDiversity(nextKey);
+                      const key = option.key?.toString() ?? "";
+                      if (key === "") { setDiversity([]); return; }
+                      setDiversity(prev => {
+                        if (option.selected) return [...prev, key];
+                        return prev.filter(k => k !== key);
+                      });
                     }}
                   />
                 </div>
@@ -1483,10 +1504,12 @@ const VSOAssistant: React.FC = () => {
             {/* Facility tab: single Facility search (Facility Code, Diversity, Splice Rack) */}
             {currentTab === 'Facility' && (
               <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 600 } }}>Facility Code <span style={{ color: "#ff4d4d" }}>*</span></Text>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500 } }}>
+                    Facility Code <span style={{ color: "#ff4d4d" }}>*</span>
+                  </Text>
                   <TooltipHost content={"This search will provide results from both the FacilityCodeA and FacilityCodeZ side using the Datacenter code entered."}>
-                    <IconButton iconProps={{ iconName: 'Info' }} title="Facility selection info" styles={{ root: { color: '#a6b7c6', height: 18, width: 18 } }} />
+                    <IconButton iconProps={{ iconName: 'Info' }} title="Facility selection info" styles={{ root: { color: '#a6b7c6', height: 20, width: 20 } }} />
                   </TooltipHost>
                 </div>
                 <ComboBox
@@ -1520,24 +1543,29 @@ const VSOAssistant: React.FC = () => {
 
                 <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
                   <div style={{ flex: 1 }}>
-                    <Text styles={{ root: { color: '#ccc', fontSize: 13, fontWeight: 500, marginBottom: 6 } }}>Diversity</Text>
+                    <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500, marginBottom: 6 } }}>Diversity <span style={{ color: "#e6f6ff", fontWeight: 400, fontStyle: "normal", fontSize: 13, marginLeft: 2 }}>(Optional)</span></Text>
                     <Dropdown
                       placeholder=""
                       options={diversityOptions}
                       calloutProps={{ className: 'combo-dark-callout' }}
                       styles={diversityDropdownStyles}
-                      selectedKey={diversity === undefined || diversity === "" ? undefined : diversity}
+                      selectedKeys={diversity}
+                      multiSelect
                       onChange={(_, option) => {
                         if (!option) return;
-                        const nextKey = option.key?.toString() ?? "";
-                        if (nextKey === "") { setDiversity(undefined); return; }
-                        if ((diversity || "") === nextKey) setDiversity(undefined); else setDiversity(nextKey);
+                        const key = option.key?.toString() ?? "";
+                        if (key === "") { setDiversity([]); return; }
+                        setDiversity(prev => {
+                          if (option.selected) return [...prev, key];
+                          return prev.filter(k => k !== key);
+                        });
                       }}
                     />
                   </div>
-
+                </div>
+                <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
                   <div style={{ flex: 1 }}>
-                    <Text styles={{ root: { color: '#ccc', fontSize: 13, fontWeight: 500, marginBottom: 6 } }}>Splice Rack</Text>
+                    <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500, marginBottom: 6 } }}>Splice Rack <span style={{ color: "#e6f6ff", fontWeight: 400, fontStyle: "normal", fontSize: 13, marginLeft: 2 }}>(Optional)</span></Text>
                     <TextField placeholder="e.g. AM111" value={spliceRackA || ''} onChange={(_, v) => { const val = v || undefined; setSpliceRackA(val); if (val) { setSpliceRackZ(undefined); setFacilityCodeZ(""); } }} styles={textFieldStyles} />
                   </div>
                 </div>
@@ -1590,12 +1618,16 @@ const VSOAssistant: React.FC = () => {
                     options={diversityOptions}
                     calloutProps={{ className: 'combo-dark-callout' }}
                     styles={diversityDropdownStyles}
-                    selectedKey={diversity === undefined || diversity === "" ? undefined : diversity}
+                    selectedKeys={diversity}
+                    multiSelect
                     onChange={(_, option) => {
                       if (!option) return;
-                      const nextKey = option.key?.toString() ?? "";
-                      if (nextKey === "") { setDiversity(undefined); return; }
-                      if ((diversity || "") === nextKey) setDiversity(undefined); else setDiversity(nextKey);
+                      const key = option.key?.toString() ?? "";
+                      if (key === "") { setDiversity([]); return; }
+                      setDiversity(prev => {
+                        if (option.selected) return [...prev, key];
+                        return prev.filter(k => k !== key);
+                      });
                     }}
                   />
                 </div>
@@ -2080,11 +2112,24 @@ const VSOAssistant: React.FC = () => {
                           onMouseUp={handleRowMouseUp}
                         >
                           <td style={{ padding: '2px 4px', width: 38, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-                            <Checkbox
-                              checked={isSelected}
-                              onChange={() => toggleSelectSpan(row.SpanID)}
-                              styles={{ root: { margin: 0, padding: 0, display: 'block' } } as any}
-                            />
+                            <div
+                              onMouseDown={(e: React.MouseEvent<HTMLDivElement>) => { e.stopPropagation(); e.preventDefault(); }}
+                              onClick={e => e.stopPropagation()}
+                              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}
+                            >
+                              <Checkbox
+                                checked={isSelected}
+                                onChange={(ev, checked) => {
+                                  if (ev) ev.stopPropagation();
+                                  if (checked) {
+                                    if (!selectedSpans.includes(row.SpanID)) toggleSelectSpan(row.SpanID);
+                                  } else {
+                                    if (selectedSpans.includes(row.SpanID)) toggleSelectSpan(row.SpanID);
+                                  }
+                                }}
+                                styles={{ root: { margin: 0, padding: 0, display: 'block' } } as any}
+                              />
+                            </div>
                           </td>
                           {dynamicCols.map(c => {
                             const rawValue = c.render ? c.render(row) : ((row as any)[c.key] ?? '');

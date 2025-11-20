@@ -790,7 +790,7 @@ export default function UIDLookup() {
             try {
               const key = `uidStatus:${u}`;
               const raw = localStorage.getItem(key);
-              const base = raw ? JSON.parse(raw) : { configPush: "Unknown", circuitsQc: "Unknown", expectedDeliveryDate: null };
+              const base = raw ? JSON.parse(raw) : { configPush: "Not Started", circuitsQc: "Not Started", expectedDeliveryDate: null };
               const merged = { ...base, expectedDeliveryDate: normalized };
               localStorage.setItem(key, JSON.stringify(merged));
             } catch {}
@@ -2345,7 +2345,8 @@ export default function UIDLookup() {
   // and attach a non-enumerable __hiddenLink when a ticket link is present so
   // the table can render the TicketId as a clickable link without adding
   // extra visible columns.
-  const getGdcoRows = (src: any): any[] => {
+  // Accept explicit UID override for GDCO rows
+  const getGdcoRows = (src: any, forceUid?: string): any[] => {
     if (!src) return [];
   // Prefer new Logic App shape: ReleatedTickets (note: source may have this exact spelled key).
   // Fallbacks: GDCOTickets, AssociatedTickets. Some Logic Apps put tickets inside AssociatedUIDs
@@ -2367,34 +2368,25 @@ export default function UIDLookup() {
       // eslint-disable-next-line no-console
       console.debug('[getGdcoRows] sourcePicked=', sourcePicked, 'rowsCount=', (rows || []).length, 'sample=', (rows || []).slice(0,3));
     } catch {}
+    // Get the searched UID from global state if available
+    // Always use the searched UID (from lastSearched or uid) for every row
+    let searchedUid = '';
+    try {
+      searchedUid = (window && (window as any).lastSearched) || (window && (window as any).uid) || '';
+    } catch {}
+    if (!searchedUid && src && typeof src === 'object') {
+      searchedUid = src.lastSearched || src.uid || (Array.isArray(src.sourceUids) && src.sourceUids[0]) || '';
+    }
     const mapped = (rows || []).map((r: any) => {
       const ticketId = String(r?.TicketId ?? r?.TicketID ?? r?.['Ticket Id'] ?? r?.['Ticket Id'] ?? r?.Ticket ?? '').trim();
       const dc = String(r?.DatacenterCode ?? r?.DCCode ?? r?.['DC Code'] ?? r?.Datacenter ?? r?.DC ?? '').trim();
       const title = String(r?.CleanTitle ?? r?.Title ?? r?.cleanTitle ?? '').trim();
       const state = String(r?.State ?? r?.Status ?? '').trim();
       const assigned = String(r?.CleanAssignedTo ?? r?.AssignedTo ?? r?.Owner ?? r?.Assigned ?? '').trim();
-      let ticketUid = String(r?.UID ?? r?.Uid ?? r?.uid ?? r?.AssociatedUID ?? r?.SourceUID ?? '').trim();
       const link = String(r?.TicketLink ?? r?.TicketLinkUrl ?? r?.TicketURL ?? r?.TicketUrl ?? r?.Ticket_Link ?? r?.TicketLink ?? r?.Link ?? r?.link ?? r?.URL ?? r?.Url ?? '').trim() || null;
-      // Try to infer the owning UID when it's not present on the ticket row
-      try {
-        if (!ticketUid) {
-          // 1) Look through AssociatedUIDs (if present) to find a matching ticket by id/link/title
-          if (Array.isArray(src.AssociatedUIDs)) {
-            for (const ar of src.AssociatedUIDs) {
-              const candTicket = String(ar?.TicketId ?? ar?.TicketID ?? ar?.Ticket ?? ar?.CleanTitle ?? '').trim();
-              const candLink = String(ar?.TicketLink ?? ar?.TicketLinkUrl ?? ar?.TicketURL ?? ar?.Link ?? ar?.link ?? '').trim();
-              if (candTicket && ticketId && candTicket === ticketId) { ticketUid = String(ar?.UID ?? ar?.Uid ?? ar?.uid ?? ''); break; }
-              if (candLink && link && candLink === link) { ticketUid = String(ar?.UID ?? ar?.Uid ?? ar?.uid ?? ''); break; }
-              if (String(ar?.CleanTitle ?? '').trim() && title && String(ar?.CleanTitle ?? '').trim() === title) { ticketUid = String(ar?.UID ?? ar?.Uid ?? ar?.uid ?? ''); break; }
-            }
-          }
-          // 2) If still missing and the snapshot/project contains a single sourceUid, attribute to that
-          if (!ticketUid && Array.isArray(src.sourceUids) && src.sourceUids.length === 1) ticketUid = String(src.sourceUids[0] ?? '').trim();
-        }
-      } catch (e) { /* ignore inference errors */ }
+      // Always use forceUid if provided, else blank
       const obj: any = {
-        // Include UID where present so project view can surface ticket ownership
-        "UID": ticketUid,
+        UID: forceUid || '',
         "Ticket Id": ticketId,
         "DC Code": dc,
         "Title": title,
@@ -2406,9 +2398,15 @@ export default function UIDLookup() {
       }
       return obj;
     });
-    // Filter out rows that have no visible content (all fields empty)
+    // Filter out rows that have no visible content except UID (all other fields empty)
     return mapped.filter((m: any) => {
-      return (String(m['Ticket Id'] || '').trim() || String(m['Title'] || '').trim() || String(m['DC Code'] || '').trim() || String(m['State'] || '').trim() || String(m['Assigned To'] || '').trim() || String(m['UID'] || '').trim());
+      return (
+        String(m['Ticket Id'] || '').trim() ||
+        String(m['Title'] || '').trim() ||
+        String(m['DC Code'] || '').trim() ||
+        String(m['State'] || '').trim() ||
+        String(m['Assigned To'] || '').trim()
+      );
     });
   };
 
@@ -2760,7 +2758,8 @@ export default function UIDLookup() {
   "Associated UIDs": associatedRows,
       "GDCO Tickets": ((): any[] => {
         try {
-          const gd = getGdcoRows(dataNow || {});
+          const searchedUid = lastSearched || uid;
+          const gd = getGdcoRows(dataNow || {}, lastSearched || uid);
           return (gd || []).map((r: any) => ({ ...r, Link: (r as any).__hiddenLink || '' }));
         } catch { return []; }
       })(),
@@ -2775,7 +2774,7 @@ export default function UIDLookup() {
         'A Device','A Port','Z Device','Z Port','A Optical Device','A Optical Port','Z Optical Device','Z Optical Port','Wirecheck'
       ],
       'Associated UIDs': ['UID','SrlgId','Action','Type','Device A','Device Z','Site A','Site Z','WF Status'],
-      'GDCO Tickets': ['Ticket Id','DC Code','Title','State','Assigned To','Link'],
+      'GDCO Tickets': ['UID','Ticket Id','DC Code','Title','State','Assigned To','Link'],
       'MGFX A-Side': ['XOMT','C0 Device','C0 Port','Line','M0 Device','M0 Port','C0 DIFF','M0 DIFF'],
       'MGFX Z-Side': ['XOMT','C0 Device','C0 Port','Line','M0 Device','M0 Port','C0 DIFF','M0 DIFF'],
       'Tools': ['Tool','URL'],
@@ -3016,7 +3015,7 @@ export default function UIDLookup() {
       }
       loadTroubleshooting();
       return () => { cancelled = true; };
-    }, [isLinkSummary, contextUid, lastSearched, storageKey]);
+    }, [isLinkSummary, contextUid, storageKey]);
     useEffect(() => {
       try {
         if (!isLinkSummary) { setComments({}); return; }
@@ -4658,14 +4657,17 @@ export default function UIDLookup() {
             />
             <Table
               title="GDCO Tickets"
-              headers={(activeProjectId ? ["UID", "Ticket Id", "DC Code", "Title", "State", "Assigned To"] : ["Ticket Id", "DC Code", "Title", "State", "Assigned To"]) }
+              headers={["UID", "Ticket Id", "DC Code", "Title", "State", "Assigned To"]}
               rows={(() => {
-                const rows = getGdcoRows(viewData || {}) || [];
+                const searchedUid = lastSearched || uid;
+                const rows = getGdcoRows(viewData || {}, lastSearched || uid) || [];
+                // Always add UID column for each row
+                const withUid = rows.map((r: any) => ({ UID: searchedUid, ...r }));
                 if (activeProjectId) {
                   // sort ascending by UID when viewing a project
-                  return rows.slice().sort((a: any, b: any) => String(a?.UID || '').localeCompare(String(b?.UID || ''), undefined, { numeric: true }));
+                  return withUid.slice().sort((a: any, b: any) => String(a?.UID || '').localeCompare(String(b?.UID || ''), undefined, { numeric: true }));
                 }
-                return rows;
+                return withUid;
               })()}
             />
           </Stack>

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { saveToStorage } from "../api/saveToStorage";
 
-type Status = "Unknown" | "In progress" | "Completed";
+type Status = "Not Started" | "In progress" | "Completed";
 
 interface Props {
   uid: string | null;
@@ -17,12 +17,12 @@ type PersistShape = {
 };
 
 const defaultState: PersistShape = {
-  configPush: "Unknown",
-  circuitsQc: "Unknown",
+  configPush: "Not Started",
+  circuitsQc: "Not Started",
   expectedDeliveryDate: null,
 };
 
-const STATUS_OPTS: Status[] = ["Unknown", "In progress", "Completed"];
+const STATUS_OPTS: Status[] = ["Not Started", "In progress", "Completed"];
 
 const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
   const storageKey = uid ? `uidStatus:${uid}` : null;

@@ -2758,7 +2758,6 @@ export default function UIDLookup() {
   "Associated UIDs": associatedRows,
       "GDCO Tickets": ((): any[] => {
         try {
-          const searchedUid = lastSearched || uid;
           const gd = getGdcoRows(dataNow || {}, lastSearched || uid);
           return (gd || []).map((r: any) => ({ ...r, Link: (r as any).__hiddenLink || '' }));
         } catch { return []; }

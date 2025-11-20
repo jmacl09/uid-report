@@ -78,6 +78,10 @@ const VSOAssistant: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [result, setResult] = useState<SpanData[]>([]);
   const [selectedSpans, setSelectedSpans] = useState<string[]>([]);
+  // For drag selection
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const [dragStartIndex, setDragStartIndex] = useState<number | null>(null);
+  const [dragSelecting, setDragSelecting] = useState<boolean | null>(null); // true: selecting, false: deselecting
   const [error, setError] = useState<string | null>(null);
   const [showAll, setShowAll] = useState<boolean>(false);
   const [, setRackUrl] = useState<string>();
@@ -713,6 +717,50 @@ const VSOAssistant: React.FC = () => {
     setSelectedSpans((prev) =>
       prev.includes(spanId) ? prev.filter((id) => id !== spanId) : [...prev, spanId]
     );
+  };
+
+  // Drag selection handlers
+  const handleRowMouseDown = (rowIdx: number, spanId: string) => (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    setDragStartIndex(rowIdx);
+    // Determine if we're selecting or deselecting based on initial state
+    setDragSelecting(!selectedSpans.includes(spanId));
+    // Immediately update selection for the first row
+    setSelectedSpans((prev) => {
+      if (!selectedSpans.includes(spanId)) return [...prev, spanId];
+      else return prev.filter((id) => id !== spanId);
+    });
+  };
+
+  const handleRowMouseEnter = (rowIdx: number, spanId: string) => (e: React.MouseEvent) => {
+    if (!isDragging || dragStartIndex === null || dragSelecting === null) return;
+    // Select all between dragStartIndex and rowIdx
+    const min = Math.min(dragStartIndex, rowIdx);
+    const max = Math.max(dragStartIndex, rowIdx);
+    const spanIdsInRange = sortedResults.slice(min, max + 1).map(r => r.SpanID);
+    setSelectedSpans((prev) => {
+      if (dragSelecting) {
+        // Add all in range
+        return Array.from(new Set([...prev, ...spanIdsInRange]));
+      } else {
+        // Remove all in range
+        return prev.filter(id => !spanIdsInRange.includes(id));
+      }
+    });
+  };
+
+  const handleRowMouseUp = () => {
+    setIsDragging(false);
+    setDragStartIndex(null);
+    setDragSelecting(null);
+  };
+
+  // End drag if mouse leaves table
+  const handleTableMouseLeave = () => {
+    setIsDragging(false);
+    setDragStartIndex(null);
+    setDragSelecting(null);
   };
 
   const filteredResultsBase = showAll
@@ -1736,8 +1784,8 @@ const VSOAssistant: React.FC = () => {
           // Prevent horizontal scrollbar by hiding overflow and forcing tighter column widths
           <div className="table-container" style={{ marginTop: 14, overflowX: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
-              {/* Left: spans summary */}
-              <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start' }}>
+              {/* Left: spans summary and info icon */}
+              <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-start', alignItems: 'center', gap: 10 }}>
                 {(() => {
                   const totalSpans = result.length;
                   const productionCount = result.filter(r => {
@@ -1746,18 +1794,21 @@ const VSOAssistant: React.FC = () => {
                     return ((r.Status || '') as string).toString().toLowerCase() === 'inproduction';
                   }).length;
                   return (
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <div style={{ background: '#071821', border: '1px solid #20343f', padding: '6px 10px', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: 18, fontWeight: 700, color: '#dfefff' }}>{totalSpans}</div>
-                                <div style={{ fontSize: 11, color: '#9fb3c6' }}>Total Spans</div>
-                              </div>
-                              {/* divider removed to tighten layout */}
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: 18, fontWeight: 700, color: '#8fe3a3' }}>{productionCount}</div>
-                                <div style={{ fontSize: 11, color: '#9fb3c6' }}>In Production</div>
-                              </div>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <div style={{ background: '#071821', border: '1px solid #20343f', padding: '6px 10px', borderRadius: 8, display: 'flex', gap: 8, alignItems: 'center', boxShadow: '0 4px 14px rgba(0,0,0,0.4)' }}>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: '#dfefff' }}>{totalSpans}</div>
+                          <div style={{ fontSize: 11, color: '#9fb3c6' }}>Total Spans</div>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: '#8fe3a3' }}>{productionCount}</div>
+                          <div style={{ fontSize: 11, color: '#9fb3c6' }}>In Production</div>
+                        </div>
                       </div>
+                      {/* Info icon for drag selection */}
+                      <TooltipHost content="Tip: You can select multiple spans at once by clicking and dragging your mouse over the rows.">
+                        <IconButton iconProps={{ iconName: 'Info' }} title="Multi-select info" styles={{ root: { color: '#a6b7c6', height: 22, width: 22, marginLeft: 2 } }} />
+                      </TooltipHost>
                     </div>
                   );
                 })()}
@@ -1967,7 +2018,12 @@ const VSOAssistant: React.FC = () => {
               const colWidthPercent = dynamicCols && dynamicCols.length ? Math.max(3, Math.floor(100 / dynamicCols.length)) : 12;
 
               return (
-                <table ref={tableRef} className="data-table compact" style={{ fontSize: 11, tableLayout: 'fixed', width: '100%', borderCollapse: 'collapse', marginLeft: -6 }}>
+                <table
+                  ref={tableRef}
+                  className="data-table compact"
+                  style={{ fontSize: 11, tableLayout: 'fixed', width: '100%', borderCollapse: 'collapse', marginLeft: -6 }}
+                  onMouseLeave={handleTableMouseLeave}
+                >
                   <thead>
                     <tr>
                       <th style={{ width: 30, padding: '2px 4px' }}></th>
@@ -2018,8 +2074,10 @@ const VSOAssistant: React.FC = () => {
                         <tr
                           key={i}
                           className={isSelected ? 'highlight-row' : ''}
-                          onClick={() => toggleSelectSpan(row.SpanID)}
                           style={{ cursor: 'pointer', background: bg }}
+                          onMouseDown={handleRowMouseDown(i, row.SpanID)}
+                          onMouseEnter={handleRowMouseEnter(i, row.SpanID)}
+                          onMouseUp={handleRowMouseUp}
                         >
                           <td style={{ padding: '2px 4px', width: 38, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
                             <Checkbox

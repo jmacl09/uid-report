@@ -2974,7 +2974,7 @@ export default function UIDLookup() {
       return hidden || null;
     };
 
-  // Per-table persisted troubleshooting comments (keyed by current UID + row content)
+    // Per-table persisted troubleshooting comments (keyed by current UID + row content)
     const storageKey = `troubleshootComments:${(contextUid || lastSearched) || 'global'}`;
     const [comments, setComments] = useState<Record<string, any>>(() => {
       try {
@@ -2982,6 +2982,41 @@ export default function UIDLookup() {
         return JSON.parse(localStorage.getItem(storageKey) || '{}');
       } catch { return {}; }
     });
+    // Fetch troubleshooting notes from backend when Link Summary table loads for a UID
+    useEffect(() => {
+      let cancelled = false;
+      async function loadTroubleshooting() {
+        if (!isLinkSummary) return;
+        const uidToFetch = contextUid || lastSearched;
+        if (!uidToFetch) return;
+        try {
+          const notes = await import('../api/items').then(m => m.getTroubleshootingForUid(uidToFetch));
+          if (cancelled) return;
+          // notes: array of NoteEntity, each with description (JSON string of {aDevice, aOpt, zDevice, zOpt}), rowKey, etc.
+          const loaded: Record<string, any> = {};
+          for (const n of notes) {
+            let desc = {};
+            try { desc = n.description ? JSON.parse(n.description) : {}; } catch {}
+            // Use LinkKey if present, else fallback to rowKey
+            const linkKey = n.LinkKey || n.linkKey || n.rowKey || n.RowKey;
+            if (linkKey) {
+              loaded[linkKey] = { ...desc, rowKey: n.rowKey || n.RowKey, savedAt: n.savedAt || n.Timestamp };
+            }
+          }
+          // Merge loaded notes with any local comments (local wins if edited after fetch)
+          setComments(prev => {
+            const merged = { ...loaded, ...prev };
+            try { localStorage.setItem(storageKey, JSON.stringify(merged)); } catch {}
+            return merged;
+          });
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.warn('[Troubleshooting] Failed to load notes', e);
+        }
+      }
+      loadTroubleshooting();
+      return () => { cancelled = true; };
+    }, [isLinkSummary, contextUid, lastSearched, storageKey]);
     useEffect(() => {
       try {
         if (!isLinkSummary) { setComments({}); return; }

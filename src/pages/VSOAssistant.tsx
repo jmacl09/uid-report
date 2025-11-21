@@ -466,8 +466,8 @@ const VSOAssistant: React.FC = () => {
   const diversityOptions: IDropdownOption[] = [
     // Blank option to allow clearing selection
     { key: "", text: "" },
-    { key: "West", text: "West, West 1, West 2" },
-    { key: "East", text: "East, East 1, East 2" },
+    { key: "West,West1,West 1,West2,West 2", text: "West, West 1, West 2" },
+    { key: "East,East1,East 1,East2,East 2", text: "East, East 1, East 2" },
     { key: "North", text: "North" },
     { key: "South", text: "South" },
     { key: "Y", text: "Y" },
@@ -1110,28 +1110,43 @@ const VSOAssistant: React.FC = () => {
       if (e) endList.push(e);
     });
 
+    // Diversity can be set from the dropdown, but may be undefined or empty
+    // Collect unique Diversity values from selected spans in the result table
+    let diversityStr = '';
+    if (selectedSpans && selectedSpans.length > 0 && result && result.length > 0) {
+      const selectedRows = result.filter((r) => selectedSpans.includes(r.SpanID));
+      const diversitySet = new Set<string>();
+      selectedRows.forEach((row) => {
+        if (row.Diversity && typeof row.Diversity === 'string' && row.Diversity.trim()) {
+          row.Diversity.split(',').forEach((d) => {
+            const val = d.trim();
+            if (val) diversitySet.add(val);
+          });
+        }
+      });
+      diversityStr = Array.from(diversitySet).join(', ');
+    }
+
     const parts: string[] = [
       `To: ${EMAIL_TO}`,
-  `From: Fibervsoassistant@microsoft.com`,
+      `From: Fibervsoassistant@microsoft.com`,
       `CC: ${cc || ""}`,
       `Subject: ${subject}`,
       ``,
       `----------------------------------------`,
       `CircuitIds: ${spansComma}`,
+      `Diversity: ${diversityStr}`,
       `StartDatetime: ${startList.join(', ')}`,
       `EndDatetime: ${endList.join(', ')}`,
-    ];
-
-    parts.push(
       `NotificationType: ${notificationType}`,
       `MaintenanceReason: ${maintenanceReason}`,
       `Location: ${location}`,
-    `Tags: ${tags && tags.length ? tags.join('; ') : ''}`,
+      `Tags: ${tags && tags.length ? tags.join('; ') : ''}`,
       `ImpactExpected: ${impactStr}`,
-    );
+    ];
 
     return parts.map((p) => p || "").join("\n");
-  }, [EMAIL_TO, subject, spansComma, startUtc, endUtc, notificationType, location, maintenanceReason, tags, impactExpected, additionalWindows, cc]);
+  }, [EMAIL_TO, subject, spansComma, startUtc, endUtc, notificationType, location, maintenanceReason, tags, impactExpected, additionalWindows, cc, selectedSpans, result]);
 
   const canSend = useMemo(() => {
     return (

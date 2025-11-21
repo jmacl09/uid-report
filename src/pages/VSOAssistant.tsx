@@ -2024,13 +2024,18 @@ const VSOAssistant: React.FC = () => {
 
               let dynamicCols: any[];
               if (currentTab === 'Facility') {
-                // Always show both SpliceRackA_Unit and SpliceRackZ_Unit in Facility tab
-                const facilityKeys = ['Diversity', 'SpanID', 'FacilityCodeA', 'FacilityCodeZ', 'SpliceRackA_Unit', 'SpliceRackZ_Unit', 'WiringScope', 'Status'];
-                dynamicCols = facilityKeys.map((k) => {
-                  const found = getCandidate(k);
-                  if (found) return found;
-                  return { key: k, label: k, render: (row: SpanData) => ((row as any)[k] ?? '') };
-                });
+                if (simplifiedView) {
+                  // Facility tab simplified view: fixed subset
+                  const facilityKeys = ['Diversity', 'SpanID', 'FacilityCodeA', 'FacilityCodeZ', 'SpliceRackA_Unit', 'SpliceRackZ_Unit', 'WiringScope', 'Status'];
+                  dynamicCols = facilityKeys.map((k) => {
+                    const found = getCandidate(k);
+                    if (found) return found;
+                    return { key: k, label: k, render: (row: SpanData) => ((row as any)[k] ?? '') };
+                  });
+                } else {
+                  // Facility tab detailed view: show all columns with data, like other tabs
+                  dynamicCols = candidate.filter(c => c.key === 'SpanID' || hasValue(c.key));
+                }
               } else if (simplifiedView) {
                 // For Z-A tab, show SpliceRackZ_Unit as the default splice column
                 let splicePreferredKey;

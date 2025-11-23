@@ -66,12 +66,13 @@ export default function CapacityCircle({ main, sub, size = 140, className }: Cap
     width: inner,
     height: inner,
     borderRadius: '50%',
-    background: 'linear-gradient(180deg, rgba(7,20,36,0.98), rgba(0,16,22,0.95))',
+    // Use CSS variable so theme (light/dark) can control the inner face color
+    background: 'var(--capacity-inner-bg, linear-gradient(180deg, rgba(7,20,36,0.98), rgba(0,16,22,0.95)))',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 3,
-    boxShadow: 'inset 0 -6px 18px rgba(0,0,0,0.6)',
+    boxShadow: 'var(--capacity-inner-shadow, inset 0 -6px 18px rgba(0,0,0,0.6))',
   };
   // compute a dynamic font size for the main metric so longer numbers shrink to fit
   const sanitizedMainChars = main ? main.replace(/[^A-Za-z0-9]/g, '') : '';
@@ -85,7 +86,7 @@ export default function CapacityCircle({ main, sub, size = 140, className }: Cap
     fontSize: computedMainFont,
     lineHeight: 1,
     fontWeight: 900,
-    color: green,
+    color: 'var(--capacity-main-color, ' + green + ')',
     // stronger glow so the metric is the clear focus
     textShadow: `0 4px 14px ${green}55, 0 2px 6px rgba(0,0,0,0.6)`,
     letterSpacing: -0.5,
@@ -97,7 +98,7 @@ export default function CapacityCircle({ main, sub, size = 140, className }: Cap
   };
   const labelStyle: React.CSSProperties = {
     fontSize: Math.round(inner * 0.12),
-    color: '#dfefff',
+    color: 'var(--capacity-label-color, #dfefff)',
     marginTop: 8,
     fontWeight: 700,
     opacity: 0.95,
@@ -106,7 +107,7 @@ export default function CapacityCircle({ main, sub, size = 140, className }: Cap
   };
   const subStyle: React.CSSProperties = {
     fontSize: Math.round(inner * 0.095),
-    color: '#cfe8ff',
+    color: 'var(--capacity-sub-color, #cfe8ff)',
     marginTop: 6,
     fontWeight: 700,
     opacity: 0.9,

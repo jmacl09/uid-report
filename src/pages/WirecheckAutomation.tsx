@@ -141,6 +141,7 @@ const WirecheckAutomation: React.FC = () => {
       <Dialog
         hidden={!installOpen}
         onDismiss={() => setInstallOpen(false)}
+        className="wirecheck-dialog"
         dialogContentProps={{
           type: DialogType.normal,
           title: 'How to install — QC Auto Retry',
@@ -157,7 +158,7 @@ const WirecheckAutomation: React.FC = () => {
           </ol>
 
           <div style={{ marginTop: 12 }}>
-            <div style={{ background: '#0b0b0b', color: '#e6eef6', padding: 12, borderRadius: 6, fontFamily: 'Consolas, Menlo, monospace', fontSize: 12, overflowX: 'auto', whiteSpace: 'pre' }}>
+            <div className="code-block" style={{ background: '#0b0b0b', color: '#e6eef6', padding: 12, borderRadius: 6, fontFamily: 'Consolas, Menlo, monospace', fontSize: 12, overflowX: 'auto', whiteSpace: 'pre' }}>
               {code}
             </div>
           </div>

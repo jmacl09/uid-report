@@ -191,11 +191,15 @@ const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
   const setField = (k: keyof PersistShape, v: any) => setState((s) => ({ ...s, [k]: v }));
 
   const colorFor = (s: Status) => {
+    // If the app is running in light-theme, prefer a yellow accent for In progress
+    const isLight = typeof document !== 'undefined' && (
+      document.documentElement.classList.contains('light-theme') || document.body.classList.contains('light-theme')
+    );
     switch (s) {
       case "Completed":
         return { accent: "#00cc55" };
       case "In progress":
-        return { accent: "#50b3ff" };
+        return isLight ? { accent: "#f59e0b" } : { accent: "#50b3ff" };
       default:
         return { accent: "#9aa0a6" };
     }
@@ -203,7 +207,7 @@ const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
 
   const row = (label: string, value: Status, onChange: (s: Status) => void, extra?: React.ReactNode) => (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6 }}>
-      <div style={{ fontSize: 11, color: "#d2f2ff", whiteSpace: "nowrap", marginRight: 6 }}>{label}</div>
+      <div className="ai-summary-label">{label}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span
           title={value}
@@ -219,23 +223,31 @@ const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
           className="sleek-select"
           value={value}
           onChange={(e) => onChange(e.target.value as Status)}
-          style={{
-            height: 22,
-            padding: "2px 6px",
-            fontSize: 11,
-            minWidth: 100,
-            maxWidth: 140,
-            background: "#222222",
-            borderColor: colorFor(value).accent,
-            borderWidth: 1,
-            borderStyle: 'solid',
-            color: "#ffffff",
-            fontWeight: 600,
-            borderRadius: 6,
-            WebkitAppearance: 'none',
-            MozAppearance: 'none',
-            appearance: 'none',
-          }}
+          style={(() => {
+            const accent = colorFor(value).accent;
+            const isLight = typeof document !== 'undefined' && (
+              document.documentElement.classList.contains('light-theme') || document.body.classList.contains('light-theme')
+            );
+            const bg = isLight ? accent : undefined;
+            const txt = isLight && value === 'In progress' ? '#0b1220' : (isLight ? '#ffffff' : undefined);
+            return {
+              height: 22,
+              padding: "2px 6px",
+              fontSize: 11,
+              minWidth: 100,
+              maxWidth: 140,
+              borderColor: accent,
+              borderWidth: 1,
+              borderStyle: 'solid',
+              fontWeight: 600,
+              borderRadius: 6,
+              WebkitAppearance: 'none',
+              MozAppearance: 'none',
+              appearance: 'none',
+              background: bg,
+              color: txt,
+            } as React.CSSProperties;
+          })()}
         >
           {STATUS_OPTS.map((o) => (
             <option key={o} value={o}>{o}</option>
@@ -258,23 +270,21 @@ const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
         )}
         {/* Expected Delivery: date only (no status) */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-          <div style={{ fontSize: 11, color: "#d2f2ff", whiteSpace: "nowrap" }}>Expected Delivery</div>
+          <div className="ai-summary-label">Expected Delivery</div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <input
               type="date"
+              className="ai-summary-date sleek-select"
               value={(state.expectedDeliveryDate || "") as string}
               onChange={(e) => setField("expectedDeliveryDate", e.target.value)}
               title="Target delivery date"
               style={{
-                background: "#222222",
-                color: "#ffffff",
-                border: "1px solid rgba(255,255,255,0.06)",
-                borderRadius: 6,
                 height: 22,
                 padding: "0 6px",
                 fontSize: 11,
                 minWidth: 100,
                 maxWidth: 140,
+                borderRadius: 6,
               }}
             />
           </div>

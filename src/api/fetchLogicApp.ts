@@ -22,9 +22,10 @@ async function postToLogicApp(payload: object): Promise<LogicAppResponse> {
   return data as LogicAppResponse;
 }
 
-export async function getSpanUtilization(span: string) {
+export async function getSpanUtilization(span: string, days?: number) {
   if (!span) throw new Error("Span is required");
-  const payload = { Stage: "11", Span: span };
+  const payload: any = { Stage: "11", Span: span };
+  if (typeof days === 'number') payload.Days = days;
   return postToLogicApp(payload);
 }
 

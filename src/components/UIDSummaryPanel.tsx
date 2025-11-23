@@ -169,11 +169,11 @@ const UIDSummaryPanel: React.FC<Props> = ({ data, currentUid, style, bare }) => 
                 }}
               >
                 <div style={{ whiteSpace: 'pre-wrap' }}>{leftSummary}</div>
-                <div style={{ width: 1, background: 'rgba(255,255,255,0.12)', height: '100%' }} />
+                <div className="ai-summary-divider" />
                 <div style={{ minWidth: 180, fontSize: 13 }}>
-                  <div><span style={{ opacity: 0.85 }}>Router A Optic:</span> <b style={{ marginLeft: 6 }}>{opticA}</b></div>
-                  <div><span style={{ opacity: 0.85 }}>Router Z Optic:</span> <b style={{ marginLeft: 6 }}>{opticZ}</b></div>
-                  <div><span style={{ opacity: 0.85 }}>Speed:</span> <b style={{ marginLeft: 6 }}>{speed}</b></div>
+                  <div><span className="ai-summary-key">Router A Optic:</span> <b style={{ marginLeft: 6 }}>{opticA}</b></div>
+                  <div><span className="ai-summary-key">Router Z Optic:</span> <b style={{ marginLeft: 6 }}>{opticZ}</b></div>
+                  <div><span className="ai-summary-key">Speed:</span> <b style={{ marginLeft: 6 }}>{speed}</b></div>
                 </div>
               </div>
             </div>
@@ -198,11 +198,11 @@ const UIDSummaryPanel: React.FC<Props> = ({ data, currentUid, style, bare }) => 
               }}
             >
               <div style={{ whiteSpace: 'pre-wrap' }}>{leftSummary}</div>
-              <div style={{ width: 1, background: 'rgba(255,255,255,0.12)', height: '100%' }} />
+              <div className="ai-summary-divider" />
               <div style={{ minWidth: 180 }}>
-                <div><span style={{ opacity: 0.85 }}>Router A Optic:</span> <b style={{ marginLeft: 6 }}>{opticA}</b></div>
-                <div><span style={{ opacity: 0.85 }}>Router Z Optic:</span> <b style={{ marginLeft: 6 }}>{opticZ}</b></div>
-                <div><span style={{ opacity: 0.85 }}>Speed:</span> <b style={{ marginLeft: 6 }}>{speed}</b></div>
+                <div><span className="ai-summary-key">Router A Optic:</span> <b style={{ marginLeft: 6 }}>{opticA}</b></div>
+                <div><span className="ai-summary-key">Router Z Optic:</span> <b style={{ marginLeft: 6 }}>{opticZ}</b></div>
+                <div><span className="ai-summary-key">Speed:</span> <b style={{ marginLeft: 6 }}>{speed}</b></div>
               </div>
             </div>
           </div>

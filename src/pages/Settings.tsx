@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Toggle, Dropdown, IDropdownOption, PrimaryButton, TextField, MessageBar, MessageBarType } from '@fluentui/react';
-import { saveToStorage, SaveError } from '../api/saveToStorage';
+import { Dropdown, IDropdownOption } from '@fluentui/react';
 import '../Theme.css';
 
 const themeOptions: IDropdownOption[] = [
@@ -10,133 +9,49 @@ const themeOptions: IDropdownOption[] = [
 
 const SettingsPage: React.FC = () => {
   const [theme, setTheme] = useState<string>(localStorage.getItem('appTheme') || 'dark');
-  const [animations, setAnimations] = useState<boolean>(localStorage.getItem('appAnimations') !== 'false');
-  const [compact, setCompact] = useState<boolean>(localStorage.getItem('appCompact') === 'true');
-  // Simple storage test state
-  const [testUid, setTestUid] = useState<string>('99999999999');
-  const [testLoading, setTestLoading] = useState<boolean>(false);
-  const [testOk, setTestOk] = useState<string | null>(null);
-  const [testErr, setTestErr] = useState<string | null>(null);
-  // Ping Projects API (GET) to prove endpoint is reachable
-  const [pingLoading, setPingLoading] = useState<boolean>(false);
-  const [pingOk, setPingOk] = useState<string | null>(null);
-  const [pingErr, setPingErr] = useState<string | null>(null);
 
   useEffect(() => {
-    applyTheme(theme, animations, compact);
-  }, [theme, animations, compact]);
-
-  const applyTheme = (t: string, anim: boolean, comp: boolean) => {
     try {
       const root = document.documentElement;
-      if (t === 'light') root.classList.add('light-theme'); else root.classList.remove('light-theme');
-      if (!anim) root.classList.add('no-animations'); else root.classList.remove('no-animations');
-      if (comp) root.classList.add('compact-mode'); else root.classList.remove('compact-mode');
+      if (theme === 'light') root.classList.add('light-theme'); else root.classList.remove('light-theme');
+    } catch (e) {}
+  }, [theme]);
+
+  const handleThemeChange = (t: string) => {
+    try {
+      setTheme(t);
+      localStorage.setItem('appTheme', t);
     } catch (e) {}
   };
 
-  const handleSave = () => {
-    localStorage.setItem('appTheme', theme);
-    localStorage.setItem('appAnimations', animations ? 'true' : 'false');
-    localStorage.setItem('appCompact', compact ? 'true' : 'false');
-    applyTheme(theme, animations, compact);
-    alert('Settings saved.');
-  };
-
-  const handleStorageTest = async () => {
-    setTestOk(null); setTestErr(null); setTestLoading(true);
-    try {
-      const uid = (testUid || '').trim() || '99999999999';
-      if (!/^\d{11}$/.test(uid)) {
-        throw new Error('Please enter a valid 11-digit UID.');
-      }
-      const email = (() => { try { return localStorage.getItem('loggedInEmail') || ''; } catch { return ''; } })();
-      const resp = await saveToStorage({
-        category: 'Notes',
-        uid,
-        title: 'Test Save',
-        description: `SWA storage test at ${new Date().toISOString()}`,
-        owner: email || 'tester',
-      });
-      setTestOk(resp || 'OK');
-    } catch (e: any) {
-      const msg = e instanceof SaveError ? (e.body || e.message) : (e?.body || e?.message || 'Failed to save');
-      setTestErr(String(msg));
-    } finally { setTestLoading(false); }
-  };
-
-  const handlePingProjects = async () => {
-    setPingOk(null); setPingErr(null); setPingLoading(true);
-    try {
-      const url = (process.env.REACT_APP_API_BASE as string || '/api') + '/Projects';
-      const res = await fetch(url, { method: 'GET', credentials: 'include' });
-      const text = await res.text();
-      if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
-      setPingOk(text.slice(0, 200));
-    } catch (err: any) {
-      setPingErr(String(err?.message || err));
-    } finally {
-      setPingLoading(false);
-    }
+  const dropdownStyles = {
+    title: {
+      backgroundColor: theme === 'light' ? '#ffffff' : '#141414',
+      color: theme === 'light' ? 'var(--vso-dropdown-text, #0f172a)' : '#ffffff',
+      border: theme === 'light' ? '1px solid rgba(195, 218, 244, 0.6)' : '1px solid #333',
+    },
+    caretDownWrapper: {
+      color: theme === 'light' ? 'var(--vso-dropdown-text, #0f172a)' : '#ffffff',
+    },
   };
 
   return (
     <div className="main-content fade-in">
-      <div className="vso-form-container glow" style={{ width: '80%', maxWidth: 900 }}>
+      <div className="vso-form-container glow" style={{ width: '60%', maxWidth: 700 }}>
         <div className="banner-title">
           <span className="title-text">Settings</span>
           <span className="title-sub">Site preferences</span>
         </div>
-
-        <div style={{ padding: 20 }}>
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ marginBottom: 6, color: '#ccc', fontWeight: 600 }}>Theme</div>
+        <div style={{ padding: 8 }}>
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ marginBottom: 4, color: '#ccc', fontWeight: 600 }}>Theme</div>
             <Dropdown
+              className={theme === 'light' ? 'dropdown-light' : 'dropdown-dark'}
               options={themeOptions}
               selectedKey={theme}
-              onChange={(_, opt) => opt && setTheme(opt.key as string)}
+              onChange={(_, opt) => opt && handleThemeChange(opt.key as string)}
+              styles={dropdownStyles as any}
             />
-          </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <Toggle
-              label="Enable Animations"
-              checked={animations}
-              onChange={(_, v) => setAnimations(!!v)}
-            />
-          </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <Toggle
-              label="Compact Mode (reduce paddings)"
-              checked={compact}
-              onChange={(_, v) => setCompact(!!v)}
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <PrimaryButton text="Save" onClick={handleSave} />
-          </div>
-
-          {/* Storage save test */}
-          <div style={{ marginTop: 28 }}>
-            <div className="section-title" style={{ margin: '8px 0' }}>Storage save test</div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', maxWidth: 540 }}>
-              <TextField label="UID (for test)" value={testUid} onChange={(_, v) => setTestUid((v||'').replace(/\D/g, '').slice(0, 11))} placeholder="11-digit UID" />
-              <PrimaryButton text={testLoading ? 'Testing…' : 'Run test'} disabled={testLoading} onClick={handleStorageTest} />
-            </div>
-            {testOk && (<div style={{ marginTop: 8 }}><MessageBar messageBarType={MessageBarType.success} isMultiline={false}>Saved successfully: {testOk.slice(0, 200)}</MessageBar></div>)}
-            {testErr && (<div style={{ marginTop: 8 }}><MessageBar messageBarType={MessageBarType.error} isMultiline={false}>{testErr}</MessageBar></div>)}
-          </div>
-
-          {/* API ping (GET /api/Projects) */}
-          <div style={{ marginTop: 20 }}>
-            <div className="section-title" style={{ margin: '8px 0' }}>API connectivity</div>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'center', maxWidth: 540 }}>
-              <PrimaryButton text={pingLoading ? 'Pinging…' : 'Ping /api/Projects'} disabled={pingLoading} onClick={handlePingProjects} />
-            </div>
-            {pingOk && (<div style={{ marginTop: 8 }}><MessageBar messageBarType={MessageBarType.success} isMultiline={false}>Ping OK: {pingOk}</MessageBar></div>)}
-            {pingErr && (<div style={{ marginTop: 8 }}><MessageBar messageBarType={MessageBarType.error} isMultiline={false}>{pingErr}</MessageBar></div>)}
           </div>
         </div>
       </div>

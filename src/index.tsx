@@ -11,6 +11,29 @@ const root = ReactDOM.createRoot(
   document.getElementById("root") as HTMLElement
 );
 
+// Apply persisted theme classes before rendering to avoid flash
+const applyInitialTheme = () => {
+  try {
+    const rootEl = document.documentElement;
+    const storedTheme = localStorage.getItem('appTheme') || 'dark';
+    const animations = localStorage.getItem('appAnimations');
+    const compact = localStorage.getItem('appCompact');
+
+    if (storedTheme === 'light') rootEl.classList.add('light-theme');
+    else rootEl.classList.remove('light-theme');
+
+    if (animations === 'false') rootEl.classList.add('no-animations');
+    else rootEl.classList.remove('no-animations');
+
+    if (compact === 'true') rootEl.classList.add('compact-mode');
+    else rootEl.classList.remove('compact-mode');
+  } catch {
+    // ignore
+  }
+};
+
+applyInitialTheme();
+
 root.render(
   <React.StrictMode>
     <App />

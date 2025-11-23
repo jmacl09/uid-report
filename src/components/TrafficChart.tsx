@@ -20,6 +20,7 @@ type RawPoint = {
 type Props = {
   data: RawPoint[];
   height?: number;
+  colorMap?: Record<string, string>;
 };
 
 // Small color palette for up to ~8 lines; it will cycle if more are present.
@@ -35,7 +36,7 @@ function formatTimestampLabel(val: string | number) {
   }
 }
 
-const TrafficChart: React.FC<Props> = ({ data, height = 340 }) => {
+const TrafficChart: React.FC<Props> = ({ data, height = 340, colorMap }) => {
   if (!data || data.length === 0) return null;
 
   // Normalize: ensure each point has a timestamp string and numeric value
@@ -145,7 +146,7 @@ const TrafficChart: React.FC<Props> = ({ data, height = 340 }) => {
               type="monotone"
               dataKey={sid}
               name={sid}
-              stroke={COLORS[idx % COLORS.length]}
+              stroke={colorMap && colorMap[sid] ? colorMap[sid] : COLORS[idx % COLORS.length]}
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 6 }}

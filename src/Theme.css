@@ -55,13 +55,25 @@ body {
   --sb-size: 10px;
   --sb-track: #0c1118;
   --sb-track-glow: rgba(80, 179, 255, 0.06);
-  --sb-thumb: #285a8d;
-  --sb-thumb-2: #11314a;
-  --sb-thumb-border: rgba(80, 179, 255, 0.35);
-  --sb-thumb-hover: #3a74b8;
-  --sb-thumb-hover-2: #1a4160;
-  --sb-thumb-active: #4b8fd8;
-  --sb-thumb-active-2: #23537a;
+    --sb-thumb: #4b8fd8;
+    --sb-thumb-2: #23537a;
+    --sb-thumb-border: rgba(80, 179, 255, 0.35);
+    --sb-thumb-hover: #3a74b8;
+    --sb-thumb-hover-2: #1a4160;
+    --vso-input-bg: #141414;
+    --vso-input-border: #333333;
+    --vso-input-text: #e6f6ff;
+    --vso-dropdown-bg: #141414;
+    --vso-dropdown-item-hover-bg: #225b8a;
+    --vso-dropdown-item-selected-bg: #003b6f;
+    --vso-dropdown-text: #ffffff;
+    --vso-label-color: #cccccc;
+    --vso-label-subtle: #9fb3c6;
+    --capacity-inner-bg: linear-gradient(180deg, rgba(7,20,36,0.98), rgba(0,16,22,0.95));
+    --capacity-inner-shadow: inset 0 -6px 18px rgba(0,0,0,0.6);
+    --fiber-tooltip-bg: #071821;
+    --fiber-tooltip-color: #ffffff;
+    --fiber-tooltip-subtle: #e6f1ff;
 }
 
 /* Firefox */
@@ -458,7 +470,8 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
   align-items: center;
   justify-content: center;
   padding: 6px; /* give room for SVG */
-  box-shadow: 0 4px 14px rgba(0,120,212,0.08);
+  box-shadow: 0 4px 14px rgba(0,120,212,0.08), 0 0 0 4px rgba(0,120,212,0.03), 0 0 18px rgba(0,120,212,0.14);
+  transition: box-shadow 220ms ease, transform 180ms ease;
 }
 .user-email {
   color: #dfefff;
@@ -704,7 +717,7 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
 }
 
 /* === TABLES === */
-.table-container {
+ .table-container {
   background: #181818;
   border-radius: 10px;
   padding: 10px 12px;
@@ -792,6 +805,256 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
 }
 .data-table tr:nth-child(even) {
   background: #151515;
+}
+/* Theme-aware data row backgrounds: prefer CSS variables so light theme can override
+   Use the `.data-row` class so component logic can avoid inline background styles. */
+.data-table tbody tr.data-row {
+  background: var(--vso-row-bg, #0f0f0f);
+}
+.data-table tbody tr.data-row:nth-child(even) {
+  background: var(--vso-row-bg-even, #121212);
+}
+.data-table tbody tr.data-row:nth-child(odd) {
+  background: var(--vso-row-bg-odd, #0f0f0f);
+}
+
+/* Light-theme overrides for data rows */
+.light-theme .data-table tbody tr.data-row:nth-child(even) {
+  background: #f3f4f6;
+}
+.light-theme .data-table tbody tr.data-row:nth-child(odd) {
+  background: #ffffff;
+}
+
+/* Highlighted (selected) row in light theme */
+.light-theme .highlight-row {
+  background: #e6f4ff !important;
+  box-shadow: none !important;
+  border-bottom: 1px solid #e6f4ff !important;
+}
+
+/* Spans summary box used in VSO assistant */
+.spans-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: linear-gradient(180deg, rgba(3,18,22,0.95), rgba(6,26,32,0.9));
+  border: 1px solid rgba(80,140,180,0.06);
+  box-shadow: 0 6px 16px rgba(2,12,16,0.55), inset 0 1px 0 rgba(255,255,255,0.01);
+  border-radius: 10px;
+  color: #d9f3fb;
+  transition: transform 120ms ease, background 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  position: relative;
+}
+
+.spans-summary .spans-count {
+  font-weight: 700;
+  font-size: 16px;
+  color: #e6fbff;
+  letter-spacing: -0.2px;
+}
+
+.spans-summary .spans-sub {
+  font-size: 11px;
+  color: #98b4bd;
+}
+
+/* Smaller compact production badge that shares the same base background as Total */
+.spans-summary .spans-count.production {
+  /* use same dark base as total but with a subtle green tint and brighter green text */
+  background: linear-gradient(180deg, rgba(6,40,56,0.85), rgba(6,34,46,0.85));
+  color: #00e676; /* brighter green */
+  border: 1px solid rgba(0,230,118,0.12);
+  box-shadow: 0 6px 12px rgba(0,230,118,0.06) inset;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+/* Add a subtle accent stripe on the left using a pseudo-element */
+.spans-summary::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 6px;
+  border-top-left-radius: 12px;
+  border-bottom-left-radius: 12px;
+  background: linear-gradient(180deg, #00a8ff, #0066cc);
+  box-shadow: 0 4px 12px rgba(0,110,200,0.18);
+}
+
+/* Production badge: green pill to denote in-production count */
+.spans-summary .spans-count.production {
+  /* override duplicate rules: keep compact, bright, and consistent */
+  background: linear-gradient(180deg, rgba(6,40,56,0.85), rgba(6,34,46,0.85));
+  color: #00e676;
+  border: 1px solid rgba(0,230,118,0.12);
+  box-shadow: 0 6px 12px rgba(0,230,118,0.06) inset;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+/* Total count accent style */
+.spans-summary .spans-count:first-child {
+  font-size: 18px;
+  color: #e6fbff;
+  text-shadow: none;
+}
+
+/* Divider between total and production blocks */
+.spans-summary > div + div {
+  padding-left: 14px;
+  border-left: 1px solid rgba(255,255,255,0.04);
+}
+
+/* Responsive: stack vertically on narrow widths */
+@media (max-width: 520px) {
+  .spans-summary {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 10px 12px 12px 12px;
+  }
+  .spans-summary::before { left: 8px; top: 8px; bottom: auto; height: 6px; width: calc(100% - 16px); border-radius: 6px; }
+  .spans-summary > div + div { border-left: none; padding-left: 0; }
+}
+
+/* Make each count block the same size and style them with subtle colored backgrounds */
+.spans-summary > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 84px; /* smaller fixed width so both blocks match and appear compact */
+  min-width: 72px;
+  gap: 6px;
+}
+
+.spans-summary .spans-count,
+.spans-summary .spans-count.production {
+  width: 100%;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 4px 6px;
+}
+
+/* Slight bluish background for the total spans box (non-production) */
+.spans-summary .spans-count:not(.production) {
+  background: linear-gradient(180deg, rgba(6,40,56,0.85), rgba(6,34,46,0.85));
+  border: 1px solid rgba(0,120,180,0.06);
+  color: #e6fbff;
+  box-shadow: inset 0 -2px 6px rgba(0,0,0,0.35);
+}
+
+/* Ensure production badge remains green and matches size/style */
+.spans-summary .spans-count.production {
+  background: linear-gradient(180deg, #e6fff0, #d3ffea);
+  color: #064e2a;
+  border: 1px solid rgba(34,197,94,0.18);
+  box-shadow: 0 4px 10px rgba(6,80,36,0.06) inset;
+}
+
+@media (max-width: 520px) {
+  .spans-summary > div { width: 100%; }
+  .spans-summary .spans-count,
+  .spans-summary .spans-count.production { height: 56px; }
+}
+
+/* Light theme overrides for spans summary */
+.light-theme .spans-summary {
+  background: #ffffff;
+  border: 1px solid #e6eef2;
+  box-shadow: 0 1px 6px rgba(15,23,42,0.06);
+  color: #0b1220;
+}
+.light-theme .spans-summary .spans-count {
+  color: #0b1220;
+}
+.light-theme .spans-summary .spans-sub {
+  color: #475569;
+}
+.light-theme .spans-summary .spans-count.production {
+  background: #f1f5f9;
+  border: 1px solid #e6eef2;
+}
+
+/* Light-theme: make Fluent UI Toggle (Detailed view) match light visuals */
+.light-theme .ms-Toggle {
+  color: var(--text-1);
+}
+.light-theme .ms-Toggle .ms-Toggle-label {
+  color: var(--text-1);
+}
+.light-theme .ms-Toggle .ms-Toggle-background {
+  background: #e9f1fb; /* light neutral track */
+  border: 1px solid #d6e7f8;
+}
+.light-theme .ms-Toggle .ms-Toggle-thumb {
+  background: #ffffff;
+  border: 1px solid #cbdff4;
+  box-shadow: none;
+}
+.light-theme .ms-Toggle.is-checked .ms-Toggle-background {
+  background: var(--accent) !important; /* accent color when on */
+  border-color: var(--accent) !important;
+}
+.light-theme .ms-Toggle.is-checked .ms-Toggle-thumb {
+  background: #ffffff !important;
+  border-color: rgba(255,255,255,0.5) !important;
+}
+.light-theme .ms-Toggle .ms-Toggle-stateText {
+  color: #0b1220 !important;
+}
+
+/* Make the two count tiles light and readable in light theme */
+.light-theme .spans-summary .spans-count:not(.production) {
+  background: #ffffff !important;
+  border: 1px solid #e6eef2 !important;
+  color: var(--text-1) !important;
+  box-shadow: none !important;
+}
+.light-theme .spans-summary .spans-count {
+  background-clip: padding-box !important;
+}
+
+/* Stronger light-theme color enforcement for spans count to ensure readability */
+.light-theme .spans-summary .spans-count {
+  color: var(--text-1) !important; /* primary dark text for light theme */
+}
+.light-theme .spans-summary .spans-count:first-child {
+  color: var(--text-1) !important;
+}
+.light-theme .spans-summary .spans-count.production {
+  color: #064e2a !important; /* dark green for production badge on light bg */
+}
+
+/* Light theme for the red/danger status pill (Diversity) */
+.light-theme .status-label.danger {
+  background: #fff1f2;
+  color: #7f1d1d;
+  border-color: #fecaca;
+  box-shadow: none;
+}
+
+/* Optional small divider between the total and in-production blocks */
+.spans-summary > div + div {
+  padding-left: 12px;
+  border-left: 1px solid rgba(255,255,255,0.04);
+}
+
+.light-theme .spans-summary > div + div {
+  border-left: 1px solid rgba(15,23,42,0.04);
+  padding-left: 12px;
 }
 /* Paint the hover background on the entire row element to avoid visual seams
    between adjacent cells (e.g., between the checkbox column and the first data
@@ -1235,6 +1498,46 @@ button.accent-cta:hover {
   box-shadow: 0 0 16px rgba(0, 120, 212, 0.3) !important;
 }
 
+/* Light-theme overrides for Dropdown callouts and items so the dropdown
+   appears light when the document root has the `light-theme` class. */
+.light-theme .ms-Dropdown-callout {
+  background-color: #ffffff !important;
+  border: 1px solid rgba(195, 218, 244, 0.6) !important;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.06) !important;
+}
+.light-theme .ms-Dropdown-items {
+  background-color: #ffffff !important;
+  color: var(--vso-dropdown-text, #0f172a) !important;
+}
+.light-theme .ms-Dropdown-option {
+  background: transparent !important;
+  color: var(--vso-dropdown-text, #0f172a) !important;
+}
+.light-theme .ms-Dropdown-option:hover {
+  background: var(--vso-dropdown-item-hover-bg, rgba(210,233,255,0.9)) !important;
+  color: var(--vso-dropdown-text, #0f172a) !important;
+}
+.light-theme .ms-Dropdown-option.is-selected {
+  background: var(--vso-dropdown-item-selected-bg, #e1f0ff) !important;
+  color: var(--vso-dropdown-text, #0f172a) !important;
+}
+
+/* Explicit per-dropdown theme classes to ensure the closed Dropdown title
+   (the visible control) matches theme even if Fluent or other rules apply. */
+.dropdown-dark .ms-Dropdown-title {
+  background-color: #141414 !important;
+  color: #fff !important;
+  border: 1px solid #333 !important;
+}
+.dropdown-dark .ms-Dropdown-caretDownWrapper { color: #fff !important; }
+
+.dropdown-light .ms-Dropdown-title {
+  background-color: #ffffff !important;
+  color: var(--vso-dropdown-text, #0f172a) !important;
+  border: 1px solid rgba(195, 218, 244, 0.6) !important;
+}
+.dropdown-light .ms-Dropdown-caretDownWrapper { color: var(--vso-dropdown-text, #0f172a) !important; }
+
 /* make sure only internal content scrolls */
 .vso-form-container.glow .ms-Dropdown-container {
   overflow: visible !important;
@@ -1517,6 +1820,115 @@ button.accent-cta:hover {
   box-shadow: 0 3px 8px rgba(0,0,0,0.5) !important;
 }
 
+/* Light theme fixes for remaining dark areas */
+.light-theme .table-container {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  box-shadow: 0 0 0 1px rgba(15,23,42,0.03);
+}
+
+.light-theme .fiber-util-stats {
+  background: transparent;
+  color: var(--text-1);
+}
+
+.light-theme .fiber-util-stats .ms-TextField-fieldGroup {
+  background: #ffffff !important;
+  border-color: #c3daf4 !important;
+}
+
+.light-theme .fiber-util-stats .ms-TextField-field {
+  color: #111827 !important;
+}
+
+.light-theme .fiber-util-stats button.search-btn {
+  background: linear-gradient(90deg,#0078d4,#106ebe) !important;
+  color: #ffffff !important;
+}
+
+.light-theme .compose-container {
+  background: #ffffff !important;
+  border-color: #d0d7e2 !important;
+}
+
+.light-theme .compose-container .ms-MessageBar {
+  background: #f3f6fb !important;
+  border-color: #d0d7e2 !important;
+  color: #253858 !important;
+}
+
+.light-theme .compose-container textarea,
+.light-theme .compose-container .ms-TextField-fieldGroup,
+.light-theme .compose-container .ms-TextField-field {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border-color: #c3daf4 !important;
+}
+
+/* Email body preview container + text (VSO Assistant) */
+.light-theme .compose-container .email-preview,
+.light-theme .compose-container .email-preview pre,
+.light-theme .compose-container .email-preview code {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border-color: #e5e7eb !important;
+}
+
+.light-theme .compose-container .email-preview-header {
+  color: var(--vso-label-color) !important;
+  font-weight: 700 !important;
+}
+
+/* Make form field labels and dropdown/combobox titles in the compose area more vivid */
+.light-theme .compose-container .ms-Label,
+.light-theme .compose-container label,
+.light-theme .compose-container .ms-Dropdown-title,
+.light-theme .compose-container .ms-ComboBox .ms-ComboBox-title,
+.light-theme .compose-container .ms-TextField-label,
+.light-theme .compose-container .compose-field-label {
+  color: var(--vso-label-color) !important;
+  font-weight: 600 !important;
+}
+
+.light-theme .compose-container .ms-Dropdown-title.is-placeholder {
+  color: var(--vso-label-subtle) !important;
+  font-weight: 400 !important;
+}
+
+/* Standardize all input headings in the light theme: color, size, weight */
+.light-theme .vso-form-container .ms-Label,
+.light-theme .vso-form-container label,
+.light-theme .vso-form-container .ms-TextField-label,
+.light-theme .vso-form-container .ms-Dropdown-title,
+.light-theme .vso-form-container .ms-ComboBox .ms-ComboBox-title,
+.light-theme .compose-container .ms-Label,
+.light-theme .compose-container label,
+.light-theme .compose-container .ms-TextField-label,
+.light-theme .compose-container .ms-Dropdown-title,
+.light-theme .compose-container .ms-ComboBox .ms-ComboBox-title {
+  color: var(--vso-label-color) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1.2 !important;
+}
+
+.light-theme .vso-form-container .ms-Dropdown-title.is-placeholder,
+.light-theme .compose-container .ms-Dropdown-title.is-placeholder {
+  color: var(--vso-label-subtle) !important;
+  font-weight: 400 !important;
+}
+
+.light-theme .back-button {
+  background: #ffffff !important;
+  border-color: #c3daf4 !important;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.18) !important;
+}
+
+.light-theme .back-button .ms-Button-icon,
+.light-theme .back-button .ms-Icon {
+  color: #0078d4 !important;
+}
+
 /* Light theme overrides */
 :root.light-theme, .light-theme {
   --bg-1: #f5f7fa;
@@ -1524,16 +1936,79 @@ button.accent-cta:hover {
   --text-1: #111111;
   --muted: #444444;
   --accent: #0078d4;
+  --vso-input-bg: #ffffff;
+  --vso-input-border: rgba(0, 80, 160, 0.35);
+  --vso-input-text: #0f172a;
+  --vso-dropdown-bg: #ffffff;
+  --vso-dropdown-item-hover-bg: rgba(210, 233, 255, 0.9);
+  --vso-dropdown-item-selected-bg: #e1f0ff;
+  --vso-dropdown-text: #0f172a;
+  /* Updated to a vivid accessible Fluent accent blue for light theme labels */
+  --accent-blue: #0F6CBD;
+  --vso-label-color: var(--accent-blue);
+  --vso-label-subtle: #52647a;
+  --capacity-inner-bg: radial-gradient(circle at 30% 25%, #ffffff 0%, #f1f6ff 45%, #e5eefc 100%);
+  --capacity-inner-shadow: inset 0 -4px 10px rgba(175, 195, 225, 0.35);
+  --fiber-tooltip-bg: #f3f7ff;
+  --fiber-tooltip-color: #102a43;
+  --fiber-tooltip-subtle: #2c5282;
+  /* Light-theme scrollbar overrides for table tracks and thumbs */
+  --sb-track: #f3f6fb;
+  --sb-track-glow: rgba(14,56,120,0.04);
+  --sb-thumb: #9bbce8;
+  --sb-thumb-2: #7aa4d9;
+  --sb-thumb-border: rgba(11,37,74,0.08);
+  --sb-thumb-hover: #6b98d6;
+  --sb-thumb-hover-2: #4f7ec0;
 }
 
-.light-theme body, .light-theme .main {
+/* Capacity text colors for light theme: make label/sub/main darker for readability */
+:root.light-theme {
+  --capacity-main-color: #007a33; /* darker green for the main metric */
+  --capacity-label-color: #0b1220; /* dark label text */
+  --capacity-sub-color: #475569;   /* muted dark for sub text */
+}
+
+.light-theme body {
   background-color: var(--bg-1) !important;
   color: var(--text-1) !important;
+}
+.light-theme .data-table td .uid-click,
+.light-theme .data-table td span {
+  color: var(--text-1) !important;
+}
+.light-theme .main {
+  background-color: var(--bg-1) !important;
+  color: var(--text-1) !important;
+}
+.light-theme .sidebar {
+  background: #f6f8fa !important;
+  box-shadow: 2px 0 10px rgba(0,0,0,0.06);
+}
+.light-theme .sidebar .ms-Nav-linkText {
+  color: var(--text-1) !important;
+}
+.light-theme .dark-nav .ms-Nav-link {
+  color: var(--muted) !important;
+}
+.light-theme .dark-nav .ms-Nav-link:hover,
+.light-theme .dark-nav .ms-Nav-compositeLink.is-selected .ms-Nav-link {
+  background: #0078d4 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 10px rgba(0,120,212,0.35);
+}
+.light-theme .logo-img {
+  filter: drop-shadow(0 0 6px rgba(0,0,0,0.18));
 }
 .light-theme .vso-form-container {
   background: linear-gradient(180deg,#ffffff,#f7f9fb) !important;
   color: var(--text-1) !important;
   border: 1px solid rgba(0,0,0,0.06) !important;
+  box-shadow: 0 0 20px rgba(15,23,42,0.06);
+}
+.light-theme .banner-title {
+  background: linear-gradient(180deg,#e8f1fb,#d7e3f5);
+  border-color: rgba(148,163,184,0.45);
 }
 .light-theme .banner-title .title-text {
   -webkit-text-fill-color: unset !important;
@@ -1541,13 +2016,1254 @@ button.accent-cta:hover {
   color: var(--accent) !important;
   text-shadow: none !important;
 }
-.light-theme .sidebar { background: #f6f8fa !important; }
-.light-theme .sidebar .ms-Nav-linkText { color: var(--text-1) !important; }
+.light-theme .banner-title .title-sub {
+  color: #4b5563;
+}
+.light-theme .table-container {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  box-shadow: 0 0 0 1px rgba(15,23,42,0.03);
+}
+
+/* Light-theme: lighter scrollbar tracks for table containers and project rail */
+.light-theme .table-container::-webkit-scrollbar-track,
+.light-theme .projects-rail-list::-webkit-scrollbar-track,
+.light-theme .notes-list::-webkit-scrollbar-track,
+.light-theme .ms-Callout-main::-webkit-scrollbar-track,
+.light-theme .ms-ComboBox-optionsContainer::-webkit-scrollbar-track,
+.light-theme .ms-Dropdown-items::-webkit-scrollbar-track {
+  background: linear-gradient(180deg, #f3f6fb, #eef6ff);
+}
+
+/* === Suggestions Page (strong light-theme overrides) === */
+/* Ensure vivid blue labels for Description and Post anonymously regardless of component inline styles */
+.light-theme .suggestions-form label,
+.light-theme .suggestions-form .ms-Label,
+.light-theme .suggestions-form .ms-TextField-label,
+.light-theme .suggestions-form .ms-Checkbox-text {
+  color: var(--vso-label-color) !important;
+  font-weight: 600 !important;
+}
+
+/* Checkbox box (unchecked) styling */
+.light-theme .suggestions-form .ms-Checkbox .ms-Checkbox-checkbox {
+  border-color: var(--vso-label-color) !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 0 1px rgba(15,23,42,0.08) !important;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+/* Hover focus for better affordance */
+.light-theme .suggestions-form .ms-Checkbox:hover .ms-Checkbox-checkbox,
+.light-theme .suggestions-form .ms-Checkbox:focus .ms-Checkbox-checkbox {
+  border-color: var(--vso-label-color) !important;
+  background: #f0f8ff !important; /* subtle blue tint */
+}
+
+/* Checked state: solid blue fill, white checkmark */
+.light-theme .suggestions-form .ms-Checkbox.is-checked .ms-Checkbox-checkbox {
+  background: var(--vso-label-color) !important;
+  border-color: var(--vso-label-color) !important;
+}
+.light-theme .suggestions-form .ms-Checkbox.is-checked .ms-Checkbox-checkmark {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+/* Ensure the text beside the checkbox also uses vivid blue */
+.light-theme .suggestions-form .ms-Checkbox.is-checked .ms-Checkbox-text,
+.light-theme .suggestions-form .ms-Checkbox .ms-Checkbox-text {
+  color: var(--accent) !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  text-shadow: 0 0 4px rgba(0,120,212,0.18);
+}
+
+/* Strengthen textarea/input labels for Description field container */
+.light-theme .suggestions-form .ms-TextField label,
+.light-theme .suggestions-form .ms-TextField-label {
+  color: var(--vso-label-color) !important;
+  font-weight: 600 !important;
+}
+
+/* Optional: reinforce placeholder readability inside Description field */
+.light-theme .suggestions-form .ms-TextField-field::placeholder {
+  color: #6484a3 !important;
+  opacity: 1 !important;
+}
+.light-theme html,
+.light-theme body,
+.light-theme .main,
+.light-theme .table-container,
+.light-theme .projects-rail-list {
+  scrollbar-color: var(--sb-thumb) var(--sb-track);
+}
+.light-theme .data-table thead tr {
+  background: linear-gradient(90deg,#0078d4,#0b5fad);
+}
+.light-theme .data-table tr:nth-child(even) {
+  background: #f3f4f6;
+}
+.light-theme .data-table tbody tr:hover {
+  background: #e5f1fb !important;
+}
+.light-theme .data-table td {
+  color: #111827;
+}
+.light-theme .status-label.good {
+  background: #dcfce7;
+  color: #166534;
+  border-color: #4ade80;
+  box-shadow: none;
+}
+.light-theme .status-label.warning {
+  background: #fef3c7;
+  color: #92400e;
+  border-color: #facc15;
+  box-shadow: none;
+}
+.light-theme .status-label.accent {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #60a5fa;
+  box-shadow: none;
+}
+.light-theme .notes-card {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.06);
+}
+.light-theme .notes-textarea {
+  background: #f9fafb;
+  color: #111827;
+  border-color: #d1d5db;
+}
+.light-theme .note-item {
+  background: #f9fafb;
+  border-color: #e5e7eb;
+}
+.light-theme .note-text {
+  color: #111827;
+}
+.light-theme .projects-rail {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  box-shadow: 0 10px 25px rgba(15,23,42,0.1);
+}
+.light-theme .projects-rail-header {
+  background: linear-gradient(180deg,#edf2ff,#e0edff);
+  border-color: rgba(129,140,248,0.6);
+}
+.light-theme .projects-rail-name {
+  color: #111827;
+}
+.light-theme .projects-rail-sub {
+  color: #4b5563;
+}
+
+/* Make the Projects header and title stand out in light theme */
+.light-theme .projects-rail-header {
+  background: linear-gradient(180deg,#f3f6fb,#ffffff);
+  border-left: 4px solid var(--accent);
+  box-shadow: none;
+}
+.light-theme .projects-rail-title {
+  color: var(--accent);
+  font-weight: 900;
+  letter-spacing: 0.8px;
+  text-shadow: none;
+}
+
+/* Section action buttons (rename, delete, collapse) — bright, bordered, and higher contrast */
+.light-theme .projects-rail-section-title .section-action,
+.light-theme .projects-rail-section-title .section-toggle {
+  background: #ffffff;
+  color: #0b1220;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 4px rgba(15,23,42,0.06);
+}
+.light-theme .projects-rail-section-title .section-action.del:hover {
+  background: #fff1f2;
+  color: #7f1d1d;
+  border-color: #fecaca;
+}
+
+/* Strong forceful overrides to ensure any remaining dark row backgrounds are light
+   when the app is using the Light theme. These use !important to override
+   inline styles set in components (safe because this only applies under
+   `.light-theme`). */
+.light-theme .data-table tbody tr {
+  background: #ffffff !important;
+}
+.light-theme .data-table tbody tr:nth-child(even) {
+  background: #f3f4f6 !important;
+}
+.light-theme .data-table tbody tr:hover {
+  background: #e5f1fb !important;
+}
+.light-theme .data-table tbody tr td,
+.light-theme .data-table tbody tr th {
+  background: transparent !important; /* let the row show through */
+  color: #0b1220 !important;
+}
+
+/* Ensure compact/alternate table variants also become light */
+.light-theme .data-table.compact tbody tr,
+.light-theme .data-table.compact-link-summary tbody tr,
+.light-theme .data-table.compact-link-summary tbody tr td {
+  background: #ffffff !important;
+  color: #0b1220 !important;
+}
+
+/* Cards and panels that previously used hard-coded dark backgrounds in JSX */
+.light-theme .decom-card,
+.light-theme .decom-card-inner,
+.light-theme .compose-container,
+.light-theme .uid-compact-bar .compact-card,
+.light-theme .spans-summary,
+.light-theme .project-uids-box {
+  background: #ffffff !important;
+  border-color: #e6eef2 !important;
+  box-shadow: 0 1px 6px rgba(15,23,42,0.04) !important;
+  color: #0b1220 !important;
+}
+
+/* Tooltip and small dark helper panels used in the VSO assistant */
+.light-theme .fiber-tooltip,
+.light-theme .combo-dark-callout .ms-Callout-main,
+.light-theme .combo-dark-callout .ms-ComboBox-optionsContainer,
+.light-theme .ms-Dropdown-callout {
+  background: #ffffff !important;
+  color: #0b1220 !important;
+  border-color: #e6eef2 !important;
+}
+
+/* Keep highlighted/selected rows visible but still light themed */
+.light-theme .highlight-row {
+  background: #e6f4ff !important;
+  box-shadow: none !important;
+  border-bottom: 1px solid #e6f4ff !important;
+}
+
+/* Make sure any small inline dark badges are readable in light theme */
+.light-theme .wf-inprogress-badge,
+.light-theme .wf-finished-badge {
+  background: transparent !important;
+  color: inherit !important;
+  box-shadow: none !important;
+}
+
+/* Rail toggle (collapse) button */
+.light-theme .projects-rail .rail-toggle-btn {
+  background: #ffffff;
+  color: #0b1220;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 6px rgba(15,23,42,0.06);
+}
+
+/* Small navigation / back buttons inside the projects rail */
+.light-theme .proj-navigate-btn,
+.light-theme .proj-navigate-btn.tiny-icon-btn,
+.light-theme .tiny-icon-btn {
+  background: #ffffff;
+  color: #0b1220;
+  border: 1px solid #e6eef8;
+  box-shadow: 0 1px 4px rgba(15,23,42,0.06);
+}
+.light-theme .proj-navigate-btn:hover,
+.light-theme .tiny-icon-btn:hover { transform: translateY(-1px); }
+
+/* Override the inline-colored 'Viewing:' span text to be prominent in light theme */
+.light-theme .projects-rail-filter span {
+  color: #0b1220 !important;
+  font-weight: 700 !important;
+}
+.light-theme .uid-compact-bar .compact-card {
+  background: #ffffff;
+  border-color: #e5e7eb;
+}
+.light-theme .input-field .ms-TextField-fieldGroup {
+  background: #ffffff;
+  border-color: #60a5fa;
+}
+.light-theme .input-field input {
+  color: #111827;
+}
+.light-theme .user-avatar {
+  background: linear-gradient(180deg,#e5e7eb,#d1d5db);
+  border-color: rgba(148,163,184,0.8);
+}
+.light-theme .user-email {
+  color: #111827;
+}
+
+/* Additional light-theme polish for VSO/UID/Fiber inputs and panels */
+.light-theme .vso-form-container.glow,
+.light-theme .compose-container {
+  background: #ffffff !important;
+  border-color: #d0d7e2 !important;
+  box-shadow: 0 10px 24px rgba(15,23,42,0.08) !important;
+}
+
+.light-theme .notice-banner {
+  background: linear-gradient(180deg, #f9fafb, #edf2ff);
+  border-color: rgba(148, 163, 184, 0.5);
+  color: #111827;
+}
+
+.light-theme .banner-icon {
+  color: #111827;
+}
+
+.light-theme .notes-card {
+  background: #ffffff;
+}
+
+.light-theme .calendar-panel {
+  background: #ffffff !important;
+}
+
+.light-theme .calendar-panel .rbc-toolbar {
+  background: #f3f6fb;
+  border-color: #d0d7e2;
+}
+
+.light-theme .calendar-panel .rbc-month-view,
+.light-theme .calendar-panel .rbc-time-view {
+  border-color: #d0d7e2;
+}
+
+/* Fix: make projects rail internals light in Light theme (filter area, items, controls)
+   so the region under the header does not remain dark. */
+.light-theme .projects-rail-filter {
+  background: transparent; /* let the rail background show (which is white in light-theme) */
+  z-index: 2;
+}
+.light-theme .projects-filter-input {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #0f172a;
+}
+.light-theme .projects-rail-section-title {
+  color: #0b1220;
+  text-shadow: none;
+}
+.light-theme .projects-rail-section-title .section-name {
+  background: linear-gradient(180deg, #f3f6fb, #ffffff);
+  border: 1px solid #e5e7eb;
+  color: #0b1220;
+  box-shadow: none;
+}
+.light-theme .projects-rail-item {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  color: #0b1220;
+  box-shadow: none;
+}
+.light-theme .projects-rail-name { color: #0b1220; }
+.light-theme .projects-rail-sub { color: #6b7280; }
+.light-theme .projects-rail-divider { background: linear-gradient(90deg, rgba(11,37,74,0.04), rgba(11,37,74,0.02)); }
+
+.light-theme .calendar-panel .rbc-off-range-bg {
+  background: #f2f2f2;
+}
+
+.light-theme .calendar-panel .rbc-date-cell {
+  color: #20262e;
+}
+
+.light-theme .ai-summary-panel,
+.light-theme .combined-horizontal {
+  background: #ffffff;
+  border-color: #d0d7e2;
+  box-shadow: 0 10px 24px rgba(15,23,42,0.08);
+  color: #111827;
+}
+
+.light-theme .ai-summary-header {
+  color: #12355a;
+  border-bottom-color: #c3daf4;
+  text-shadow: none;
+}
+
+.light-theme .ai-chat-bubble {
+  background: #f5f7fb;
+  border-color: #d6e1f2;
+  color: #253858;
+}
+
+/* Light-theme: make AI Summary details and Status tracker detail text darker and stronger */
+.light-theme .ai-summary-body,
+.light-theme .ai-summary-body div,
+.light-theme .ai-summary-body span,
+.light-theme .ai-summary-body b {
+  color: var(--text-1) !important; /* dark text */
+  font-weight: 700 !important;    /* stronger/bold */
+}
+.light-theme .ai-summary-label {
+  color: var(--text-1) !important;
+  font-weight: 700 !important;
+}
+
+/* Keep small controls (selects, dates) readable but slightly less heavy */
+.light-theme .ai-summary-body .sleek-select,
+.light-theme .ai-summary-body .ai-summary-date {
+  font-weight: 600 !important;
+  color: var(--text-1) !important;
+}
+
+/* Ensure AI Summary detail text matches Status Tracker detail size/style in light theme */
+.light-theme .ai-summary-body {
+  font-size: 11px !important; /* match Status Tracker */
+}
+.light-theme .ai-summary-body .ai-summary-key,
+.light-theme .ai-summary-body b,
+.light-theme .ai-summary-body span {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  color: var(--text-1) !important;
+}
+.light-theme .ai-summary-body .sleek-select,
+.light-theme .ai-summary-body .ai-summary-date {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+}
+
+.light-theme .ms-TextField-fieldGroup,
+.light-theme .vso-form-container .ms-ComboBox,
+.light-theme .vso-form-container .ms-Dropdown-title,
+.light-theme .vso-form-container .ms-DatePicker .ms-TextField-fieldGroup {
+  background-color: #ffffff !important;
+  border-color: #c3daf4 !important;
+}
+
+.light-theme .vso-form-container input,
+.light-theme .vso-form-container .ms-ComboBox input.ms-ComboBox-Input,
+.light-theme .vso-form-container .ms-TextField-field {
+  color: #111827 !important;
+}
+
+.light-theme .vso-form-container input::placeholder,
+.light-theme .vso-form-container .ms-TextField-field::placeholder {
+  color: #6b778c !important;
+}
+
+/* Small helper class for inline optional text so it always matches the
+   surrounding label's font and color. Use this in JSX as
+   `<span className="optional-text">(Optional)</span>` to ensure consistent
+   appearance in both themes. */
+.optional-text {
+  color: inherit !important;
+  font-weight: 400 !important;
+  font-style: normal !important;
+  font-size: 13px !important;
+  margin-left: 6px !important;
+  vertical-align: baseline !important;
+  opacity: 1 !important;
+}
+
+.light-theme .optional-text {
+  /* in light theme if an outer element uses CSS variables, inherit will pick up
+     the right value; keep this fallback to ensure subtle muted tone when used
+     outside of a colored label */
+  color: inherit !important;
+}
+
+/* Ensure short, inline bracketed labels (e.g. "(Optional)", "(Optical)") that were
+   rendered with inline light colors inherit the surrounding text color in light
+   theme. We match the common inline hex colors used in JSX and force them to
+   inherit so they remain readable against white backgrounds. */
+.light-theme .vso-form-container span[style*="#e6f6ff"],
+.light-theme .vso-form-container span[style*="#a6b7c6"],
+.light-theme .vso-form-container b[style*="#d0e7ff"],
+.light-theme .vso-form-container span[style*="#cfe7ff"],
+.light-theme .data-table span[style*="#e6f6ff"],
+.light-theme .data-table span[style*="#a6b7c6"],
+.light-theme .main-content span[style*="#e6f6ff"],
+.light-theme .main-content span[style*="#a6b7c6"] {
+  color: inherit !important;
+  opacity: 1 !important;
+}
+
+.light-theme .vso-form-container .ms-ComboBox-Callout .ms-Callout-main,
+.light-theme .vso-form-container .ms-ComboBox-optionsContainerWrapper,
+.light-theme .combo-dark-callout .ms-Callout-main,
+.light-theme .combo-dark-callout .ms-ComboBox-optionsContainerWrapper,
+.light-theme .ms-Dropdown-callout,
+.light-theme .ms-Dropdown-items,
+.light-theme .ms-Dropdown-option {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+.light-theme .ms-Dropdown-option:hover,
+.light-theme .combo-dark-callout .ms-ComboBox-option:hover {
+  background: #e9f2ff !important;
+}
+
+.light-theme .rack-btn,
+.light-theme .submit-btn,
+.light-theme .search-btn,
+.light-theme .sleek-btn {
+  background: linear-gradient(90deg, #0078d4, #106ebe);
+  color: #ffffff;
+}
+
+.light-theme .sleek-btn.danger {
+  background: linear-gradient(90deg, #d13438, #a4262c);
+}
+
+/* UID Assistant: Add-to-project / action buttons inside notes/projects rail */
+.light-theme .note-btn,
+.light-theme .proj-action,
+.light-theme .projects-rail-del {
+  background: #f3f6fb;
+  border-color: #c3daf4;
+  color: #12355a;
+}
+
+.light-theme .note-btn:hover,
+.light-theme .proj-action:hover,
+.light-theme .projects-rail-del:hover {
+  background: #e1edff;
+  box-shadow: 0 0 8px rgba(15, 23, 42, 0.15);
+}
+
+/* Make native/select-based "Add to project" dropdown light in light-theme */
+.light-theme .sleek-select {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border: 1px solid #c3daf4 !important;
+  box-shadow: inset 0 -1px 0 rgba(0,0,0,0.02) !important;
+}
+.light-theme .sleek-select option,
+.light-theme .sleek-select optgroup {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+/* Ensure the select in the projects toolbar matches the rail spacing */
+.light-theme .projects-toolbar .sleek-select {
+  min-width: 160px;
+}
+
+/* Config push / Circuits QC status inputs (inside UID status panel) */
+.light-theme .status-input,
+.light-theme .status-input input,
+.light-theme .status-input .ms-TextField-fieldGroup {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+.light-theme .status-input-label {
+  color: #12355a !important;
+}
+
+/* UID Status Tracker pills + dropdown/selects in light mode */
+.light-theme .ai-summary-body {
+  background: #f9fbff;
+}
+
+.light-theme .ai-summary-body .sleek-select,
+.light-theme .ai-summary-body select {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border-color: #c3daf4 !important;
+}
+
+.light-theme .ai-summary-body option {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+.light-theme .ai-summary-body input[type="date"] {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border-color: #c3daf4 !important;
+}
+
+/* VSO tabs (A→Z, Facility, Z→A, Decom) */
+.light-theme .tab-btn {
+  background: linear-gradient(180deg, #ffffff, #edf5ff) !important;
+  color: #12355a !important;
+  border: 1px solid #c3daf4 !important;
+}
+
+.light-theme .tab-btn.active {
+  background: linear-gradient(180deg, #0078d4, #106ebe) !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 18px rgba(0, 120, 212, 0.28) !important;
+}
+
+/* Ensure any inline elements inside ComboBox/Dropdown options inherit the
+   light-theme text color. Some option labels include small spans with inline
+   styles which remained dark on white backgrounds; force them to inherit so
+   decommissioned span entries are visible in the dropdown. */
+.light-theme .combo-dark-callout .ms-ComboBox-option span,
+.light-theme .combo-dark-callout .ms-ComboBox-option div,
+.light-theme .ms-ComboBox-option span,
+.light-theme .ms-Dropdown-option span,
+.light-theme .ms-Dropdown-item span {
+  color: inherit !important;
+  opacity: 1 !important;
+}
+
+/* Lookup button: make the PrimaryButton with class `lookup-btn` appear light
+   and high-contrast when `.light-theme` is active. */
+.light-theme .lookup-btn,
+.light-theme .lookup-btn.ms-Button--primary {
+  background: #ffffff !important;
+  color: #12355a !important;
+  border: 1px solid #c3daf4 !important;
+  box-shadow: 0 2px 6px rgba(15,23,42,0.06) !important;
+}
+
+/* Dialog-specific overrides for the Event Details dialog to ensure dropdowns
+   and callouts inside the dialog use light-theme backgrounds and readable text. */
+.light-theme .dialog-event-details .ms-Callout-main,
+.light-theme .dialog-event-details .ms-Dropdown-callout,
+.light-theme .dialog-event-details .ms-Dropdown-items,
+.light-theme .dialog-event-details .ms-Dropdown-item,
+.light-theme .dialog-event-details .ms-Dropdown-option {
+  background: var(--vso-dropdown-bg) !important;
+  color: var(--vso-dropdown-text) !important;
+  border-color: var(--vso-input-border) !important;
+}
+
+.light-theme .dialog-event-details .ms-Dropdown-title,
+.light-theme .dialog-event-details .ms-ComboBox .ms-ComboBox-title {
+  color: var(--vso-input-text) !important;
+  background: var(--vso-input-bg) !important;
+  border: 1px solid var(--vso-input-border) !important;
+}
+
+/* Ensure any inline spans inside dialog callouts inherit the readable color */
+.light-theme .dialog-event-details .ms-Dropdown-item span,
+.light-theme .dialog-event-details .ms-Callout .ms-ComboBox-option span {
+  color: inherit !important;
+}
+.light-theme .lookup-btn:hover,
+.light-theme .lookup-btn.ms-Button--primary:hover {
+  background: #e8f6ff !important;
+  color: #12355a !important;
+}
+
+/* VSO calendar header buttons (Today / Back / Next) use light theme */
+.light-theme .calendar-panel .rbc-toolbar button {
+  background: #ffffff;
+  border-color: #c3daf4;
+  color: #12355a;
+}
+
+.light-theme .calendar-panel .rbc-toolbar button:hover {
+  background: #e1edff;
+}
+
+/* Fiber Span Utilization: chart + stats + disclaimer */
+.light-theme .fiber-util-container {
+  background: #ffffff;
+  border: 1px solid #d0d7e2;
+}
+
+.light-theme .fiber-util-stats {
+  color: #111827;
+}
+
+.light-theme .fiber-util-disclaimer .ms-MessageBar,
+.light-theme .fiber-util-disclaimer {
+  background: #f5f7fb !important;
+  border-color: #d0d7e2 !important;
+  color: #253858 !important;
+}
+
+/* DCAT Assistant coming soon headline */
+.light-theme .dcat-coming-title {
+
+/* Ensure Decommissioned Spans country ComboBox options are readable in light theme */
+.light-theme .vso-form-container .combo-dark-callout .ms-ComboBox-optionsContainer,
+.light-theme .vso-form-container .combo-dark-callout .ms-ComboBox-option {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+
+.light-theme .vso-form-container .combo-dark-callout .ms-ComboBox-option:hover,
+.light-theme .vso-form-container .combo-dark-callout .ms-ComboBox-option.is-selected,
+.light-theme .vso-form-container .combo-dark-callout .ms-ComboBox-option.is-checked {
+  background-color: #e5f1fb !important;
+  color: #0b1220 !important;
+}
+
+/* === Global light-theme overrides for ANY Fluent UI ComboBox options (ensure dark readable text) === */
+.light-theme .ms-ComboBox-optionsContainer,
+.light-theme .combo-dark-callout .ms-ComboBox-optionsContainer {
+  background: #ffffff !important;
+}
+.light-theme .ms-ComboBox-option,
+.light-theme .combo-dark-callout .ms-ComboBox-option {
+  background: #ffffff !important;
+  color: #0f172a !important;
+}
+.light-theme .ms-ComboBox-option:hover,
+.light-theme .combo-dark-callout .ms-ComboBox-option:hover,
+.light-theme .ms-ComboBox-option.is-selected,
+.light-theme .combo-dark-callout .ms-ComboBox-option.is-selected,
+.light-theme .ms-ComboBox-option.is-checked,
+.light-theme .combo-dark-callout .ms-ComboBox-option.is-checked {
+  background: #e5f1fb !important;
+  color: #0b1220 !important;
+}
+  color: #0078d4 !important;
+}
+
+/* UID Assistant: loading bar (ThemedProgressBar) in light mode */
+.light-theme .themed-progress {
+  background: transparent;
+}
+
+.light-theme .themed-progress-track {
+  background: linear-gradient(90deg, #e3f2ff, #f5fbff);
+  border-radius: 999px;
+  border: 1px solid #c3daf4;
+  box-shadow: inset 0 0 4px rgba(15,23,42,0.06);
+}
+
+.light-theme .themed-progress-bar {
+  background: linear-gradient(90deg, #0078d4, #00a4ff);
+  box-shadow: 0 0 10px rgba(0,120,212,0.4);
+}
+
+.light-theme .themed-progress-label {
+  color: #12355a;
+}
+
+/* Light-theme: make Fluent UI Dropdown/ComboBox callouts and options readable */
+.light-theme .ms-Callout,
+.light-theme .ms-Callout .ms-List,
+.light-theme .ms-Callout .ms-List-cell,
+.light-theme .ms-Callout .ms-ContextualMenu,
+.light-theme .ms-ContextualMenu,
+.light-theme .ms-ContextualMenu .ms-ContextualMenu-item,
+.light-theme .ms-ComboBox-callout,
+.light-theme .ms-Dropdown-itemsWrapper,
+.light-theme .ms-Dropdown-itemsWrapper .ms-List-cell {
+  background: #ffffff !important;
+  color: #0b1220 !important;
+  border: 1px solid rgba(16,24,32,0.06) !important;
+  box-shadow: 0 6px 18px rgba(14,56,120,0.04) !important;
+}
+
+/* Ensure individual dropdown items are readable and hover/select states keep dark text */
+.light-theme .ms-List-cell,
+.light-theme .ms-List-cell .ms-ContextualMenu-item,
+.light-theme .ms-Dropdown-item,
+.light-theme .ms-Dropdown-item:hover,
+.light-theme .ms-Dropdown-item.is-selected,
+.light-theme .ms-ComboBox-option {
+  color: #0b1220 !important;
+  background: #ffffff !important;
+}
+
+/* Make native selects and our sleek-select readable in light theme */
+.light-theme select,
+.light-theme .sleek-select,
+.light-theme .sleek-select option,
+.light-theme .sleek-select optgroup {
+  color: #0b1220 !important;
+  background: #ffffff !important;
+}
+
+/* Lookup button: light-themed appearance when .light-theme is active */
+.light-theme .lookup-btn.ms-Button--primary,
+.light-theme .lookup-btn {
+  background: linear-gradient(90deg, #ffffff, #f6f8fb) !important;
+  color: #0b1220 !important;
+  border: 1px solid #c3daf4 !important;
+  box-shadow: 0 6px 14px rgba(14,56,120,0.06) !important;
+}
+.light-theme .lookup-btn.ms-Button--primary:hover,
+.light-theme .lookup-btn:hover {
+  background: #f3f6fb !important;
+  filter: none !important;
+}
+
+
+/* Fiber span utilization – light theme tweaks */
+.light-theme .fiber-util-container {
+  background: radial-gradient(circle at top left, #f6fbff 0, #eef5ff 38%, #e6f0ff 76%, #dde7ff 100%);
+  border-color: rgba(0, 82, 155, 0.22);
+  box-shadow: 0 18px 40px rgba(15, 61, 120, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.4) inset;
+}
+
+.light-theme .fiber-util-stats {
+  background: linear-gradient(180deg, rgba(0, 78, 146, 0.05), rgba(0, 78, 146, 0.02));
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.light-theme .fiber-util-chart {
+  background: #ffffff;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 80, 160, 0.18);
+  box-shadow: 0 10px 30px rgba(0, 40, 90, 0.16);
+}
+
+/* Small MAX/MIN stat card used in Fiber Span Utilization */
+.fiber-util-stat-card {
+  background: #071821;
+  border: 1px solid #28474f;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: #dfefff;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 88px;
+}
+.fiber-util-stat-label { font-size: 11px; color: #9fb3c6; }
+.fiber-util-stat-value { font-size: 14px; font-weight: 700; color: #dfefff; }
+
+.light-theme .fiber-util-stat-card {
+  background: #ffffff !important;
+  border: 1px solid #e6eef2 !important;
+  color: #0b1220 !important;
+  box-shadow: 0 4px 10px rgba(15,23,42,0.04) !important;
+}
+.light-theme .fiber-util-stat-label { color: #52647a !important; }
+.light-theme .fiber-util-stat-value { color: #0b1220 !important; }
+
+.light-theme .fiber-util-disclaimer {
+  margin-top: 12px;
+}
+
+/* Dark theme: make the Fiber Utilization disclaimer match app theme instead of bright yellow */
+.fiber-util-disclaimer {
+  margin-top: 12px;
+}
+.fiber-util-disclaimer .ms-MessageBar {
+  background: #071821 !important;
+  border: 1px solid #20343f !important;
+  color: #dfefff !important;
+  box-shadow: none !important;
+}
+.fiber-util-disclaimer .ms-MessageBar .ms-MessageBar-content,
+.fiber-util-disclaimer .ms-MessageBar .ms-MessageBar-text {
+  color: #cfe3ff !important;
+}
+.fiber-util-disclaimer .ms-MessageBar .ms-MessageBar-icon {
+  color: #50b3ff !important;
+}
+
+/* Suggestions page (form + list) in light mode */
+.light-theme .vso-form-container .ms-Dropdown,
+.light-theme .vso-form-container .ms-Dropdown-title,
+.light-theme .vso-form-container .ms-Dropdown-root {
+  background-color: #ffffff;
+  color: #1a1a1a;
+  border-color: rgba(0, 80, 160, 0.35);
+}
+
+.light-theme .vso-form-container .ms-Dropdown-title {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.7) inset;
+}
+
+/* Ensure light-theme dropdown controls and native selects use dark text
+   even when a global dark rule uses !important; enforce with !important. */
+.light-theme .vso-form-container select,
+.light-theme .vso-form-container .ms-Dropdown-title,
+.light-theme .vso-form-container .ms-Dropdown-root {
+  background-color: var(--vso-input-bg) !important;
+  color: var(--vso-input-text) !important;
+  border-color: var(--vso-input-border) !important;
+}
+
+/* Ensure Fluent UI ComboBox inputs (typeable dropdowns) show dark text in light theme */
+.light-theme .vso-form-container .ms-ComboBox input.ms-ComboBox-Input,
+.light-theme .vso-form-container .ms-ComboBox .ms-ComboBox-Input {
+  color: var(--vso-input-text) !important;
+  background: var(--vso-input-bg) !important;
+}
+
+.light-theme .vso-form-container .ms-ComboBox input.ms-ComboBox-Input::placeholder {
+  color: var(--vso-input-placeholder) !important;
+  opacity: 0.9 !important;
+}
+.light-theme .vso-form-container .ms-TextField-fieldGroup {
+  background-color: #ffffff;
+  border-color: rgba(0, 80, 160, 0.35);
+}
+
+.light-theme .vso-form-container .ms-TextField-field {
+  color: #111827;
+}
+
+/* Strong, scoped overrides for SuggestionsPage form controls to ensure light-theme
+   appearance even if other rules try to force dark styles. Scoped to vso-form-container
+   so it doesn't affect other dark-intent widgets. */
+.light-theme .vso-form-container .suggestions-form .ms-TextField-fieldGroup,
+.light-theme .vso-form-container .ms-TextField-fieldGroup,
+.light-theme .vso-form-container textarea,
+.light-theme .vso-form-container .ms-TextField-field,
+.light-theme .vso-form-container .ms-TextField-field::placeholder {
+  background: var(--vso-input-bg) !important;
+  color: var(--vso-input-text) !important;
+  border: 1px solid var(--vso-input-border) !important;
+}
+
+/* Suggestions page specific: ensure labels, checkbox and controls are vivid */
+.light-theme .vso-form-container .suggestions-form .ms-Label,
+.light-theme .vso-form-container .suggestions-form label,
+.light-theme .vso-form-container .suggestions-form .ms-TextField-label {
+  color: var(--vso-label-color) !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+}
+
+/* Checkbox visuals: make the box and check readable on light backgrounds */
+.light-theme .vso-form-container .suggestions-form .ms-Checkbox {
+  color: var(--vso-input-text) !important;
+}
+.light-theme .vso-form-container .suggestions-form .ms-Checkbox .ms-Checkbox-label,
+.light-theme .vso-form-container .suggestions-form .ms-Checkbox .ms-Checkbox-text {
+  color: var(--accent) !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  text-shadow: 0 0 4px rgba(0,120,212,0.18);
+}
+.light-theme .vso-form-container .suggestions-form .ms-Checkbox .ms-Checkbox-checkbox {
+  background: var(--vso-input-bg) !important;
+  border: 1px solid var(--vso-input-border) !important;
+  box-shadow: none !important;
+}
+.light-theme .vso-form-container .suggestions-form .ms-Checkbox input:checked ~ .ms-Checkbox-checkbox {
+  background: linear-gradient(90deg, #0078d4, #106ebe) !important;
+  border-color: var(--vso-input-border) !important;
+}
+
+/* Stronger, broader overrides to catch Fluent UI variations and inline styles */
+.light-theme .vso-form-container .suggestions-form .ms-Checkbox,
+.light-theme .vso-form-container .suggestions-form .ms-Checkbox * {
+  color: var(--vso-input-text) !important;
+}
+.light-theme .vso-form-container .suggestions-form .ms-Checkbox .ms-Checkbox-checkbox .ms-Icon,
+.light-theme .vso-form-container .suggestions-form .ms-Checkbox .ms-Checkbox-checkbox svg {
+  fill: #ffffff !important; /* icon (check) color when checked - on blue background */
+}
+.light-theme .vso-form-container .suggestions-form .ms-Checkbox .ms-Checkbox-checkbox {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+/* Make the Submit button prominent and ensure label/placeholder text are dark */
+.light-theme .vso-form-container .suggestions-form .search-btn,
+.light-theme .vso-form-container .suggestions-form .submit-btn,
+.light-theme .vso-form-container .suggestions-form .ms-Button {
+  background: linear-gradient(90deg, #0078d4, #106ebe) !important;
+  color: #ffffff !important;
+}
+
+/* Ensure the checkbox label and control text are readable */
+.light-theme .vso-form-container .ms-Checkbox,
+.light-theme .vso-form-container .ms-Checkbox .ms-Checkbox-label {
+  color: var(--vso-input-text) !important;
+}
+
+/* Make the submit button prominent and consistent inside suggestion forms */
+.light-theme .vso-form-container .search-btn,
+.light-theme .vso-form-container .submit-btn {
+  background: linear-gradient(90deg, #0078d4, #106ebe) !important;
+  color: #ffffff !important;
+  border: 1px solid var(--vso-input-border) !important;
+}
+
+/* Community suggestions dropdowns / list actions should be light */
+.light-theme .notes-card .ms-Dropdown,
+.light-theme .notes-card .ms-Dropdown-title,
+.light-theme .notes-card .ms-Dropdown-items,
+.light-theme .notes-card .ms-Dropdown-item,
+.light-theme .notes-card .ms-Dropdown-option {
+  background: var(--vso-dropdown-bg) !important;
+  color: var(--vso-dropdown-text) !important;
+  border-color: var(--vso-input-border) !important;
+}
+
+/* Force any inline spans inside notes list to inherit readable color */
+.light-theme .notes-list span[style],
+.light-theme .note-item span[style] {
+  color: inherit !important;
+}
+
+.light-theme .notes-card {
+  background: #ffffff;
+  border-color: rgba(0, 80, 160, 0.22);
+}
+
+.light-theme .note-item {
+  background: linear-gradient(180deg, #f9fbff, #f3f7ff);
+  border-color: rgba(0, 80, 160, 0.18);
+}
+
+.light-theme .note-alias {
+  color: #0b2b4a;
+}
+
+.light-theme .wf-inprogress-badge {
+  background: #e6f3ff;
+  color: #005a9e !important;
+  border-color: rgba(0, 90, 158, 0.35) !important;
+}
+
+.light-theme .note-text {
+  color: #111827;
+}
+
+/* Ensure the danger/delete note button is readable on light backgrounds */
+.light-theme .note-btn.danger {
+  background: linear-gradient(90deg, #d13438, #a4262c) !important;
+  border-color: rgba(160,40,48,0.12) !important;
+  color: #ffffff !important;
+}
+.light-theme .note-btn.danger:hover {
+  box-shadow: 0 0 8px rgba(209, 52, 56, 0.14) !important;
+}
+
+/* VSO Assistant – Decommissioned spans card */
+.light-theme .decom-card {
+  background: linear-gradient(180deg, #f8fbff, #edf4ff);
+  border-color: rgba(0, 80, 160, 0.26);
+  box-shadow: 0 14px 32px rgba(11, 59, 120, 0.18);
+}
+
+.light-theme .decom-card-header {
+  color: #052c4f;
+}
+
+.light-theme .decom-card-inner {
+  background: #ffffff;
+  border-color: rgba(0, 80, 160, 0.22);
+}
+
+.light-theme .decom-card-inner div {
+  color: #1f2933;
+}
+
+/* Wirecheck Automation dialog tweaks for light mode */
+.light-theme .wirecheck-dialog .ms-Dialog-main {
+  background: #ffffff !important;
+  border-color: rgba(0, 80, 160, 0.25) !important;
+  box-shadow: 0 18px 40px rgba(15, 61, 120, 0.18) !important;
+}
+
+.light-theme .wirecheck-dialog .ms-Dialog-title,
+.light-theme .wirecheck-dialog .ms-Dialog-subText {
+  color: #111827 !important;
+}
+
+.light-theme .wirecheck-dialog .code-block {
+  background: var(--vso-input-bg) !important;
+  color: var(--text-1) !important;
+  border-radius: 8px;
+  border: 1px solid var(--vso-input-border) !important;
+  padding: 12px !important;
+  box-shadow: none !important;
+}
 
 /* Disable animations helper */
 .no-animations * {
   animation: none !important;
   transition: none !important;
+}
+
+/* Light-theme styling for Create-from-Associated-UIDs overlay */
+.light-theme .create-from-assoc-overlay {
+  /* slightly brighter page backdrop for light theme */
+  background: rgba(11,18,32,0.35) !important;
+}
+.light-theme .create-from-assoc-panel {
+  background: linear-gradient(180deg, #ffffff, #fbfcff) !important;
+  border: 1px solid rgba(16,24,32,0.06) !important;
+  color: #0b1220 !important;
+  box-shadow: 0 18px 40px rgba(15,61,120,0.06) !important;
+}
+.light-theme .create-from-assoc-panel .ms-Spinner-label {
+  color: #0b1220 !important;
+}
+.light-theme .create-from-assoc-panel .ms-Spinner {
+  color: #0b1220 !important;
+}
+.light-theme .create-from-assoc-panel .ms-Dialog-actions,
+.light-theme .create-from-assoc-panel .ms-Dialog-footer {
+  background: transparent !important;
+}
+
+/* Admin/Oper status arrows: ensure clear colors in light theme */
+.status-arrow { transition: color 160ms ease; }
+.light-theme .status-arrow.up { color: #107c10 !important; /* green */ }
+.light-theme .status-arrow.down { color: #d13438 !important; /* red */ }
+
+/* Messages inside the create-from-assoc panel */
+.create-from-assoc-panel .create-from-assoc-message {
+  color: #bfe6ff; /* readable on dark panel */
+}
+.create-from-assoc-panel .create-from-assoc-success {
+  color: #c8ffd6; /* success color on dark panel */
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+.light-theme .create-from-assoc-panel .create-from-assoc-message {
+  color: #0b1220 !important; /* stronger dark text for light theme */
+  font-size: 13px;
+}
+.light-theme .create-from-assoc-panel .create-from-assoc-success {
+  color: #0b662a !important; /* stronger green for success on light bg */
+  font-size: 18px !important;
+  font-weight: 900 !important;
+  text-shadow: none !important;
+}
+
+/* Default (dark theme) styling for the project-assembled success box */
+.create-from-assoc-panel .create-from-assoc-success {
+  display: inline-block;
+  background: rgba(14, 88, 47, 0.12);
+  color: #9ff3c4;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 800;
+  margin-bottom: 8px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+}
+
+/* Make the success box subtle on light theme (dark green text on pale background) */
+.light-theme .create-from-assoc-panel .create-from-assoc-success {
+  background: #eef9ef !important;
+  color: #0b662a !important;
+  box-shadow: 0 8px 20px rgba(12,42,20,0.06) !important;
+}
+
+/* Modal text paragraph inside dialog content: default dark theme */
+.ms-Dialog[class*="dialog-"] .modal-text {
+  color: #e6f6ff;
+  line-height: 1.5;
+}
+
+/* In light theme, ensure confirmation/modal text is dark and readable */
+.light-theme .ms-Dialog[class*="dialog-"] .modal-text {
+  color: #0b1220 !important;
+}
+
+/* Stronger, more generic override in case the dialog class is applied to a
+   wrapper element instead of the `.ms-Dialog` node. This ensures the
+   delete-project confirmation text always appears dark in light-theme. */
+.light-theme .dialog-delete-project .modal-text,
+.light-theme [class*="dialog-delete-project"] .modal-text,
+.light-theme .dialog-delete-project .ms-Dialog-subText,
+.light-theme [class*="dialog-delete-project"] .ms-Dialog-subText {
+  color: #0b1220 !important;
+}
+
+/* Generic: make any modal that has a dialog-<type> class use light dialog styles in light theme */
+.light-theme .ms-Dialog[class*="dialog-"] .ms-Dialog-main,
+.light-theme .ms-Dialog[class*="dialog-"] .ms-Dialog-inner,
+.light-theme .ms-Dialog[class*="dialog-"] .ms-Dialog-content {
+  background: linear-gradient(180deg, #ffffff, #fbfcff) !important;
+  color: #0b1220 !important;
+  border: 1px solid rgba(16,24,32,0.06) !important;
+  box-shadow: 0 18px 40px rgba(15,61,120,0.06) !important;
+}
+.light-theme .ms-Dialog[class*="dialog-"] .ms-Dialog-subText {
+  color: #0b1220 !important;
+}
+.light-theme .ms-Dialog[class*="dialog-"] .ms-TextField .ms-TextField-fieldGroup {
+  background: #ffffff !important;
+  border: 1px solid rgba(16,24,32,0.08) !important;
+}
+.light-theme .ms-Dialog[class*="dialog-"] .ms-Dialog-actions {
+  border-top: 1px solid rgba(16,24,32,0.06) !important;
+  background: transparent !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Generic light-theme overrides for Fluent UI dialogs / callouts
+   Ensure any modal, dialog or callout uses a light background and readable
+   dark text when the app root has the `.light-theme` class.
+   This covers Create Project, Delete Project, confirmation dialogs, callouts
+   and other popup panels that inherit `.ms-Dialog` / `.ms-Callout` styles.
+   ------------------------------------------------------------------------ */
+.light-theme .ms-Dialog .ms-Dialog-main,
+.light-theme .ms-Dialog .ms-Dialog-inner,
+.light-theme .ms-Dialog .ms-Dialog-content,
+.light-theme .ms-Callout-main,
+.light-theme .ms-Callout {
+  background: linear-gradient(180deg, #ffffff, #fbfcff) !important;
+  color: #0b1220 !important;
+  border: 1px solid rgba(16,24,32,0.06) !important;
+  box-shadow: 0 18px 40px rgba(15,61,120,0.06) !important;
+}
+
+.light-theme .ms-Dialog .ms-Dialog-title,
+.light-theme .ms-Callout .ms-Callout-title {
+  color: #0b1220 !important;
+}
+
+.light-theme .ms-Dialog .ms-Dialog-subText,
+.light-theme .ms-Callout .ms-Callout-subText {
+  color: #34414a !important;
+}
+
+/* Text fields, selects, and other form elements inside dialogs */
+.light-theme .ms-Dialog .ms-TextField .ms-TextField-fieldGroup,
+.light-theme .ms-Callout .ms-TextField .ms-TextField-fieldGroup {
+  background: #ffffff !important;
+  border: 1px solid rgba(16,24,32,0.08) !important;
+  color: #0b1220 !important;
+}
+.light-theme .ms-Dialog .ms-TextField .ms-TextField-field,
+.light-theme .ms-Callout .ms-TextField .ms-TextField-field {
+  color: #0b1220 !important;
+  background: transparent !important;
+}
+
+.light-theme .ms-Dialog select.sleek-select,
+.light-theme .ms-Callout select.sleek-select,
+.light-theme .ms-Dialog .sleek-select,
+.light-theme .ms-Callout .sleek-select {
+  background: #ffffff !important;
+  color: #0b1220 !important;
+  border: 1px solid rgba(16,24,32,0.08) !important;
+  box-shadow: none !important;
+}
+.light-theme .ms-Dialog .sleek-select option,
+.light-theme .ms-Callout .sleek-select option {
+  background: #ffffff !important;
+  color: #0b1220 !important;
+}
+
+/* Buttons inside dialogs: default buttons should be readable on light bg */
+.light-theme .ms-Dialog .ms-Button--default,
+.light-theme .ms-Callout .ms-Button--default {
+  background: #f6f8fa !important;
+  border: 1px solid rgba(16,24,32,0.08) !important;
+  color: #0b1220 !important;
+}
+.light-theme .ms-Dialog .ms-Button--primary,
+.light-theme .ms-Callout .ms-Button--primary {
+  /* keep accent but ensure contrast on light bg */
+  box-shadow: 0 6px 16px rgba(26,120,200,0.12) !important;
+}
+
+/* Ensure dialog action rows don't appear as dark bars */
+.light-theme .ms-Dialog .ms-Dialog-actions,
+.light-theme .ms-Callout .ms-Callout-actions {
+  background: transparent !important;
+  border-top: 1px solid rgba(16,24,32,0.04) !important;
+}
+
+/* Small inputs / code blocks that purposely remain dark can keep contrast
+   but ensure their labels are visible */
+.light-theme .ms-Dialog .emergency-name,
+.light-theme .ms-Dialog .emergency-subtext {
+  color: #0b1220 !important;
 }
 
 /* Compact mode */
@@ -1626,7 +3342,7 @@ button.accent-cta:hover {
 .vso-form-container .ms-ComboBox-option,
 .combo-dark-callout .ms-ComboBox-option {
   background: transparent !important;
-  color: #fff !important;
+  color: var(--vso-dropdown-text) !important; /* theme-aware: dark text in light theme */
   padding: 8px 12px !important;
   cursor: pointer;
 }
@@ -1636,8 +3352,8 @@ button.accent-cta:hover {
 .combo-dark-callout .ms-ComboBox-option:hover,
 .combo-dark-callout .ms-ComboBox-option.is-selected,
 .combo-dark-callout .ms-ComboBox-option.is-checked {
-  background: #003b6f !important;
-  color: #fff !important;
+  background: var(--vso-dropdown-item-selected-bg) !important;
+  color: var(--vso-dropdown-text) !important; /* keep readable in light theme */
 }
 
 /* Callout beak color to match dark theme */
@@ -1728,7 +3444,7 @@ button.accent-cta:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-weight: 800;
+  color: #ffdd57 !important; /* yellow text */
   font-size: 14px;
   flex: 0 0 24px;
   color: #0a0a0a;
@@ -1738,6 +3454,60 @@ button.accent-cta:hover {
 .notice-banner .banner-text {
   line-height: 1.5;
   color: #dfefff;
+.light-theme .wf-inprogress-badge {
+  /* In light theme, keep the badge readable and make the text use the warning color */
+  color: #92400e !important; /* amber/darker yellow */
+  background: linear-gradient(180deg, #fef3c7, #fde68a) !important; /* pale yellow background */
+  border-color: #fcd34d !important;
+  box-shadow: 0 6px 18px rgba(252, 211, 77, 0.08) !important;
+}
+
+.light-theme .wf-finished-badge {
+  color: #166534 !important; /* green text for completed */
+  background: linear-gradient(180deg, #dcfce7, #bbf7d0) !important; /* pale green bg */
+  border-color: #86efac !important;
+  box-shadow: 0 6px 18px rgba(34,197,94,0.06) !important;
+}
+}
+
+/* Projects-rail specific notice styling: improve typography and appearance for the
+   short export warning shown in the projects rail filter. Keeps a subtle, modern
+   card look in dark theme and a clean, readable look in light theme. */
+.projects-rail .notice-banner {
+  padding: 10px 12px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(180deg, rgba(6,22,34,0.06), rgba(6,22,34,0.02));
+  border: 1px solid rgba(11,37,74,0.06);
+  color: #cfe7ff;
+  box-shadow: none;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.25;
+}
+.projects-rail .notice-banner .banner-icon {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  font-size: 12px;
+  color: #07324a;
+  background: radial-gradient(circle at 30% 30%, #ffdca0, #f1b85a);
+  box-shadow: 0 0 6px rgba(0,0,0,0.08);
+}
+
+/* Light-theme override for the projects rail notice to match the white rail */
+.light-theme .projects-rail .notice-banner {
+  background: linear-gradient(180deg,#f8fbff,#f3f9ff);
+  border: 1px solid #e6f2ff;
+  color: #0b1220;
+  box-shadow: 0 2px 6px rgba(14,56,120,0.04);
+}
+.light-theme .projects-rail .notice-banner .banner-icon {
+  background: radial-gradient(circle at 30% 30%, #fff2d9, #ffdca8);
+  color: #19324a;
 }
 
 /* === RACK ELEVATION BUTTON === */
@@ -1812,9 +3582,23 @@ button.accent-cta:hover {
 .note-text { color: #e6f6ff; white-space: pre-wrap; word-wrap: break-word; }
 .notes-textarea.inline-edit { margin-top: 4px; }
 .note-controls { display: inline-flex; gap: 6px; }
-.note-btn { background: #2b2b2b; color: #e6f6ff; border: 1px solid #3a3a3a; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+.note-btn {
+  background: #2b2b2b;
+  color: #e6f6ff;
+  border: 1px solid #3a3a3a;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-block;
+}
 .note-btn:hover { background: #334; box-shadow: 0 0 8px rgba(80,160,255,0.15); }
-.note-btn.danger { background: #3a1313; border-color: #4a1a1a; }
+.note-btn.danger {
+  background: #3a1313;
+  border-color: #4a1a1a;
+  color: #ffffff !important;
+  display: inline-block;
+}
 .note-btn.danger:hover { background: #4a1717; box-shadow: 0 0 8px rgba(255,77,77,0.18); }
 .note-empty { color: #9aa; font-size: 12px; text-align: center; padding: 10px 0; }
 
@@ -2044,6 +3828,81 @@ button.accent-cta:hover {
 .projects-rail-empty-mini { color: #667; font-size: 11px; margin: 0 6px 6px; }
 .projects-rail-section.dropping { outline: 1px dashed rgba(80,179,255,0.35); background: rgba(10,22,34,0.25); border-radius: 6px; }
 
+/* Light theme for projects rail cards */
+.light-theme .projects-rail-item {
+  background: linear-gradient(180deg, #eef7ff, #e6f0ff); /* light blue shaded card */
+  border-color: #d0e7ff;
+  box-shadow: 0 4px 10px rgba(14, 56, 120, 0.06);
+  transition: transform 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+.light-theme .projects-rail-item:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 26px rgba(14, 56, 120, 0.10);
+  background: linear-gradient(180deg, #f6fbff, #eaf4ff);
+}
+
+.light-theme .projects-rail-badges .proj-urgent-badge {
+  background: linear-gradient(180deg, #fdecec, #fbd5d5);
+  border-color: #f97373;
+  color: #7f1d1d;
+}
+
+.light-theme .projects-rail-main,
+.light-theme .projects-rail-name,
+.light-theme .projects-rail-subrow,
+.light-theme .proj-metric-line,
+.light-theme .proj-date-line,
+.light-theme .projects-rail-owners {
+  color: #111827;
+}
+
+/* Light-theme: make the small action buttons match the light palette and improve contrast */
+.light-theme .proj-action,
+.light-theme .projects-rail-del {
+  background: #ffffff;
+  color: #0b1220;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 6px rgba(15,23,42,0.06);
+}
+.light-theme .proj-action:hover,
+.light-theme .projects-rail-del:hover {
+  background: #f3f6fb;
+  transform: translateY(-1px);
+}
+.light-theme .proj-action.del,
+.light-theme .projects-rail-del.del {
+  background: #fff1f2;
+  color: #7f1d1d;
+  border-color: #fecaca;
+  box-shadow: none;
+}
+.light-theme .proj-action.pin.on {
+  color: #8a4b00;
+  background: linear-gradient(180deg,#fff7e6,#fff1d6);
+  border-color: #f0c36a;
+  box-shadow: 0 4px 12px rgba(250,200,100,0.12);
+}
+
+/* Make small helper text and notices more prominent in light theme */
+.light-theme .projects-rail-empty-mini {
+  color: #475569;
+  font-weight: 600;
+}
+.light-theme .notice-banner .banner-text {
+  color: #0b1220;
+  font-weight: 700;
+}
+
+/* Ensure section actions and tiny icon buttons read well */
+.light-theme .projects-rail-actions .proj-action,
+.light-theme .projects-rail-actions-inline .proj-action,
+.light-theme .tiny-icon-btn {
+  background: #ffffff;
+  color: #0b1220;
+  border: 1px solid #e6eef8;
+}
+.light-theme .tiny-icon-btn { box-shadow: 0 1px 4px rgba(15,23,42,0.06); }
+
 /* Hide the fixed projects rail on smaller screens to prevent overlap/overflow */
 @media (max-width: 1200px) {
   .projects-rail { display: none; }
@@ -2110,6 +3969,16 @@ button.accent-cta:hover {
 }
 .ms-Dialog .ms-Dialog-subText {
   color: #a6b7c6 !important;
+}
+
+/* Create Project instruction text: default (dark theme) and light-theme override */
+.ms-Dialog.dialog-create-project .create-project-instruction {
+  color: #cfe7ff; /* original soft blue for dark theme */
+  font-size: 13px;
+}
+.light-theme .ms-Dialog.dialog-create-project .create-project-instruction {
+  color: #0b1220 !important; /* stronger dark text for light theme */
+  font-weight: 600;
 }
 .ms-Dialog .ms-Dialog-actions {
   border-top: 1px solid #1f1f1f !important;
@@ -2253,6 +4122,68 @@ button.accent-cta:hover {
   word-wrap: break-word !important;
   line-height: 1.35 !important;
   margin-top: 20px !important; /* larger gap between title and subtext (requested) */
+}
+
+/* Light-theme overrides for the Create Project dialog */
+.light-theme .ms-Dialog.dialog-create-project {
+  color: #0b1220; /* dark text */
+}
+.light-theme .ms-Dialog.dialog-create-project .ms-Dialog-main,
+.light-theme .ms-Dialog.dialog-create-project .ms-Dialog-inner,
+.light-theme .ms-Dialog.dialog-create-project .ms-Dialog-content {
+  background: linear-gradient(180deg, #ffffff, #fbfcff) !important;
+  border: 1px solid rgba(16,24,32,0.06) !important;
+  color: #0b1220 !important;
+}
+.light-theme .ms-Dialog.dialog-create-project .ms-Dialog-title {
+  color: #0b1220 !important;
+}
+.light-theme .ms-Dialog.dialog-create-project .ms-Dialog-subText {
+  color: #34414a !important;
+}
+.light-theme .ms-Dialog.dialog-create-project label {
+  color: #0b1220 !important;
+}
+.light-theme .ms-Dialog.dialog-create-project .sleek-select,
+.light-theme .ms-Dialog.dialog-create-project select.sleek-select,
+.light-theme .ms-Dialog.dialog-create-project .projects-rail-subrow .sleek-select {
+  background: #ffffff !important;
+  color: #0b1220 !important;
+  border: 1px solid rgba(16,24,32,0.08) !important;
+  box-shadow: none !important;
+}
+.light-theme .ms-Dialog.dialog-create-project .sleek-select option,
+.light-theme .ms-Dialog.dialog-create-project .sleek-select optgroup {
+  background: #ffffff !important;
+  color: #0b1220 !important;
+}
+.light-theme .ms-Dialog.dialog-create-project .ms-Dialog-actions {
+  border-top: 1px solid rgba(16,24,32,0.06) !important;
+  background: transparent !important;
+}
+.light-theme .ms-Dialog.dialog-create-project .ms-TextField .ms-TextField-fieldGroup {
+  background: #ffffff !important;
+  border: 1px solid rgba(16,24,32,0.08) !important;
+}
+.light-theme .ms-Dialog.dialog-create-project .ms-TextField .ms-TextField-field {
+  color: #0b1220 !important;
+  background: transparent !important;
+}
+.light-theme .ms-Dialog.dialog-create-project .ms-TextField .ms-Label {
+  color: #0b1220 !important;
+}
+.light-theme .ms-Dialog.dialog-create-project .ms-Dialog-actions .ms-Button--default {
+  border: 1px solid rgba(16,24,32,0.08) !important;
+  color: #0b1220 !important;
+  background: #f6f8fa !important;
+}
+.light-theme .ms-Dialog.dialog-create-project .ms-Button--primary,
+.light-theme .ms-Dialog.dialog-create-project .ms-Button.accent-cta.ms-Button--primary,
+.light-theme .ms-Dialog.dialog-create-project .ms-Dialog .ms-Button--primary {
+  /* keep the green accent but ensure contrast on light backgrounds */
+  background: linear-gradient(90deg, #39b54a, #1e7f3a) !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 16px rgba(30,120,60,0.12) !important;
 }
 
 /* ========================= EMERGENCY DIALOG HIGHLIGHT ========================= */
@@ -2535,4 +4466,19 @@ button.accent-cta:hover {
   font-size: 12px;
   color: #a6b7c6;
   text-align: center;
+}
+
+/* Light theme variant for UID fetching bar */
+.light-theme .themed-progress-track {
+  background: linear-gradient(180deg, #e5edf7, #dde7f5);
+  border-color: #c3daf4;
+}
+
+.light-theme .themed-progress-bar {
+  background: linear-gradient(90deg, #0078d4, #00aaff);
+  box-shadow: 0 0 10px rgba(0,120,212,0.35), 0 0 20px rgba(0,120,212,0.25);
+}
+
+.light-theme .themed-progress-label {
+  color: #12355a;
 }

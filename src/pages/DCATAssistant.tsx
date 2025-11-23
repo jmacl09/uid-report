@@ -10,7 +10,7 @@ const DCATAssistant: React.FC = () => {
           <span className="title-sub">Coming Soon</span>
         </div>
         <div style={{ padding: 24, textAlign: 'center' }}>
-          <h1 style={{ color: '#dfefff', fontSize: 36 }}>COMING SOON...</h1>
+          <h1 className="dcat-coming-title" style={{ fontSize: 36 }}>COMING SOON...</h1>
           <p style={{ color: '#a6b7c6', fontSize: 16, maxWidth: 820, margin: '12px auto' }}>
             The DCAT Assistant will give an overview of DCATs per project to ensure accuracy and efficiency.
           </p>

@@ -2,6 +2,7 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { Nav } from "@fluentui/react";
 import { FiberSpanUtilization, UIDLookup, VSOAssistant, VSOAssistantDev, DCATAssistant, WirecheckAutomation, Dashboard } from "./pages";
+import SettingsPage from "./pages/Settings";
 
 // Inline Suggestions page to avoid module resolution issues in some environments
 import { Stack, Text, TextField, PrimaryButton, Dropdown, Checkbox } from "@fluentui/react";
@@ -53,6 +54,7 @@ const navLinks = [
       { name: "DCAT Assistant", key: "dcatAssistant", icon: "CalculatorAddition", url: "/dcat" },
       { name: "Wirecheck Automation", key: "wirecheck", icon: "Plug", url: "/wirecheck" },
       { name: "Suggestions", key: "suggestions", icon: "Megaphone", url: "/suggestions" },
+        { name: "Settings", key: "settings", icon: "Settings", url: "/settings" },
 
     ],
   },
@@ -103,8 +105,8 @@ const SidebarNav: React.FC = () => {
             ? "wirecheck"
             : location.pathname.startsWith("/suggestions")
             ? "suggestions"
-            // : location.pathname.startsWith("/settings")
-            // ? "settings"
+            : location.pathname.startsWith("/settings")
+            ? "settings"
             : undefined
         }
       />
@@ -408,7 +410,7 @@ function App() {
             <Route path="/dcat" element={<DCATAssistant />} />
             <Route path="/wirecheck" element={<WirecheckAutomation />} />
             <Route path="/suggestions" element={<SuggestionsPageInline />} />
-            {/* <Route path="/settings" element={<SettingsPage />} /> */}
+            <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </div>
       </div>

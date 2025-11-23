@@ -21,9 +21,45 @@ import ThemedProgressBar from "../components/ThemedProgressBar";
 import UIDSummaryPanel from "../components/UIDSummaryPanel";
 import UIDStatusPanel from "../components/UIDStatusPanel";
 import CapacityCircle from "../components/CapacityCircle";
-import deriveLineForC0 from "../data/mappedlines";
+
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import deriveLineForC0 from "../data/mappedlines";
+
+// MGFX A/Z with derived Line column (and without SKU column)
+const mgfxHeaders = [
+  "XOMT",
+  "C0 Device",
+  "C0 Port",
+  "Line",
+  "M0 Device",
+  "M0 Port",
+  "C0 DIFF",
+  "M0 DIFF",
+];
+const mapMgfx = (rows: any[]) =>
+  (rows || []).map((r: any) => {
+    const row: any = { ...(r || {}) };
+    const xomt = row["XOMT"] ?? row["xomt"] ?? "";
+    const c0Dev = row["C0 Device"] ?? row["C0Device"] ?? row["C0_Device"] ?? "";
+    const c0Port = row["C0 Port"] ?? row["C0Port"] ?? row["C0_Port"] ?? "";
+    const sku = row["StartHardwareSku"] ?? row["HardwareSku"] ?? row["SKU"] ?? "";
+    const line = deriveLineForC0(String(sku || ""), String(c0Port || ""));
+    const m0Dev = row["M0 Device"] ?? row["M0Device"] ?? row["M0_Device"] ?? "";
+    const m0Port = row["M0 Port"] ?? row["M0Port"] ?? row["M0_Port"] ?? "";
+    const c0Diff = row["C0 DIFF"] ?? row["C0_DIFF"] ?? row["C0Diff"] ?? "";
+    const m0Diff = row["M0 DIFF"] ?? row["M0_DIFF"] ?? row["M0Diff"] ?? "";
+    return {
+      "XOMT": xomt,
+      "C0 Device": c0Dev,
+      "C0 Port": c0Port,
+      "Line": line ?? "",
+      "M0 Device": m0Dev,
+      "M0 Port": m0Port,
+      "C0 DIFF": c0Diff,
+      "M0 DIFF": m0Diff,
+    };
+  });
 
 // Note type used across the component for UID notes
 type Note = { id: string; uid: string; authorEmail?: string; authorAlias?: string; text: string; ts: number; _pk?: string; _rk?: string };
@@ -1046,6 +1082,7 @@ export default function UIDLookup() {
       });
     } catch {}
   };
+  // removeProjectNote function removed (unused)
 
   const naturalSort = (a: string, b: string) =>
     a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
@@ -2573,40 +2610,10 @@ export default function UIDLookup() {
       text += formatTableText("GDCO Tickets", [], ["Ticket Id", "DC Code", "Title", "State", "Assigned To", "Link"]);
     }
 
-    // MGFX A/Z with derived Line column (and without SKU column)
-    const mgfxHeaders = [
-      "XOMT",
-      "C0 Device",
-      "C0 Port",
-      "Line",
-      "M0 Device",
-      "M0 Port",
-      "C0 DIFF",
-      "M0 DIFF",
-    ];
-    const mapMgfx = (rows: any[]) =>
-      (rows || []).map((r: any) => {
-        const row: any = { ...(r || {}) };
-        const xomt = row["XOMT"] ?? row["xomt"] ?? "";
-        const c0Dev = row["C0 Device"] ?? row["C0Device"] ?? row["C0_Device"] ?? "";
-        const c0Port = row["C0 Port"] ?? row["C0Port"] ?? row["C0_Port"] ?? "";
-        const sku = row["StartHardwareSku"] ?? row["HardwareSku"] ?? row["SKU"] ?? "";
-        const line = deriveLineForC0(String(sku || ""), String(c0Port || ""));
-        const m0Dev = row["M0 Device"] ?? row["M0Device"] ?? row["M0_Device"] ?? "";
-        const m0Port = row["M0 Port"] ?? row["M0Port"] ?? row["M0_Port"] ?? "";
-        const c0Diff = row["C0 DIFF"] ?? row["C0_DIFF"] ?? row["C0Diff"] ?? "";
-        const m0Diff = row["M0 DIFF"] ?? row["M0_DIFF"] ?? row["M0Diff"] ?? "";
-        return {
-          "XOMT": xomt,
-          "C0 Device": c0Dev,
-          "C0 Port": c0Port,
-          "Line": line ?? "",
-          "M0 Device": m0Dev,
-          "M0 Port": m0Port,
-          "C0 DIFF": c0Diff,
-          "M0 DIFF": m0Diff,
-        };
-      });
+
+
+
+
     const mgfxA = mapMgfx(dataNow.MGFXA || []);
     const mgfxZ = mapMgfx(dataNow.MGFXZ || []);
     text += formatTableText("MGFX A-Side", mgfxA, mgfxHeaders);
@@ -2762,8 +2769,8 @@ export default function UIDLookup() {
           return (gd || []).map((r: any) => ({ ...r, Link: (r as any).__hiddenLink || '' }));
         } catch { return []; }
       })(),
-      "MGFX A-Side": dataNow.MGFXA,
-      "MGFX Z-Side": dataNow.MGFXZ,
+      "MGFX A-Side": mapMgfx(dataNow.MGFXA),
+      "MGFX Z-Side": mapMgfx(dataNow.MGFXZ),
     } as Record<string, any[]>;
 
     // Preferred header ordering for known sections (used for per-sheet and consolidated All Details)
@@ -3222,7 +3229,7 @@ export default function UIDLookup() {
                         const isDown = v === '0' || v.toLowerCase() === 'down' || v === 'false';
                         return (
                           <td key={j} style={{ textAlign: 'center', width: 24, minWidth: 24 }} title={isUp ? 'Up' : isDown ? 'Down' : String(val ?? '')}>
-                            <span style={{ color: isUp ? '#107c10' : isDown ? '#d13438' : '#a6b7c6', fontWeight: 800, fontSize: 12, lineHeight: '14px' }}>
+                            <span className={`status-arrow ${isUp ? 'up' : isDown ? 'down' : ''}`} style={{ color: isUp ? '#107c10' : isDown ? '#d13438' : '#a6b7c6', fontWeight: 800, fontSize: 12, lineHeight: '14px' }}>
                               {isUp ? '▲' : isDown ? '▼' : ''}
                             </span>
                           </td>
@@ -5187,7 +5194,7 @@ export default function UIDLookup() {
       <Dialog
         hidden={!modalType}
         onDismiss={closeModal}
-        className={modalType === 'create-project' ? 'dialog-create-project' : undefined}
+        className={modalType ? `dialog-${modalType}` : undefined}
         dialogContentProps={{
           type: DialogType.normal,
           title:
@@ -5226,14 +5233,14 @@ export default function UIDLookup() {
               Move the selected project to section <b style={{ color: '#c9ffd8' }}>{dropTargetSection || 'Archives'}</b>?
             </div>
           ) : modalType === 'delete-project' ? (
-            <div style={{ color: '#e6f6ff', lineHeight: 1.5 }}>
+            <div className="modal-text">
               Are you sure you want to delete this project?
             </div>
           ) : modalType === 'create-project' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ color: '#cfe7ff' }}>
-                Choose a section for this project, or create a new one.
-              </div>
+              <div className="create-project-instruction">
+                  Choose a section for this project, or create a new one.
+                </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <label style={{ color: '#a6b7c6', fontSize: 12 }}>Existing section</label>
@@ -5307,8 +5314,8 @@ export default function UIDLookup() {
       </Dialog>
       {/* Overlay shown while creating project from Associated UIDs */}
       {(createFromAssocRunning || createFromAssocMessage) && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto' }}>
-          <div style={{
+        <div className="create-from-assoc-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto' }}>
+          <div className="create-from-assoc-panel" style={{
             background: createFromAssocRunning ? '#01121a' : '#072b12',
             border: `1px solid ${createFromAssocRunning ? '#234' : '#1f7a3f'}`,
             padding: 24,
@@ -5321,11 +5328,11 @@ export default function UIDLookup() {
             {createFromAssocRunning ? (
               <>
                 <Spinner size={SpinnerSize.large} label={`Adding ${createFromAssocCurrent || 0} of ${createFromAssocTotal || 0} UID${(createFromAssocTotal || 0) === 1 ? '' : 's'}`} />
-                <div style={{ marginTop: 12, fontSize: 13, color: '#bfe6ff' }}>Please wait — the project is being assembled. This will process each UID one-by-one.</div>
+                  <div className="create-from-assoc-message" style={{ marginTop: 12 }}>Please wait — the project is being assembled. This will process each UID one-by-one.</div>
               </>
             ) : (
               <>
-                <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: '#c8ffd6' }}>✓ {createFromAssocMessage}</div>
+                  <div className="create-from-assoc-message create-from-assoc-success">✓ {createFromAssocMessage}</div>
                 {createFromAssocFailedUids && createFromAssocFailedUids.length > 0 && (
                   <div style={{ fontSize: 12, color: '#ffb3b3', marginTop: 6 }}>
                     Failed UIDs: {createFromAssocFailedUids.join(', ')}

@@ -450,7 +450,7 @@ const VSOAssistantDev: React.FC = () => {
               onMenuDismiss={() => setDcSearch("")}
             />
 
-            <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500, marginTop: 10 } }}>Diversity Path (Optional)</Text>
+            <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500, marginTop: 10 } }}>Diversity Path <span className="optional-text">(Optional)</span></Text>
             <Dropdown
               placeholder=""
               options={diversityOptions}
@@ -465,7 +465,8 @@ const VSOAssistantDev: React.FC = () => {
               }}
             />
 
-            <TextField label="Splice Rack A (Optional)" placeholder="e.g. AM111" onChange={(_, v) => setSpliceRackA(v || undefined)} styles={textFieldStyles} />
+            <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500 } }}>Splice Rack A <span className="optional-text">(Optional)</span></Text>
+            <TextField placeholder="e.g. AM111" onChange={(_, v) => setSpliceRackA(v || undefined)} styles={textFieldStyles} />
 
             <div className="form-buttons" style={{ marginTop: 16 }}>
               <button className="submit-btn" onClick={handleSubmit}>Submit</button>
@@ -550,7 +551,7 @@ const VSOAssistantDev: React.FC = () => {
 
             {sendError && (<MessageBar messageBarType={MessageBarType.error} isMultiline={false}>{sendError}</MessageBar>)}
 
-            <Dialog hidden={!showSendSuccessDialog} onDismiss={() => setShowSendSuccessDialog(false)} dialogContentProps={{ type: DialogType.normal, title: 'Email Stage', subText: sendSuccess || 'Done.' }} modalProps={{ isBlocking: false }}>
+            <Dialog hidden={!showSendSuccessDialog} className="dialog-send-success" onDismiss={() => setShowSendSuccessDialog(false)} dialogContentProps={{ type: DialogType.normal, title: 'Email Stage', subText: sendSuccess || 'Done.' }} modalProps={{ isBlocking: false }}>
               <DialogFooter>
                 <PrimaryButton text="Start Over" onClick={() => { setComposeOpen(false); setSelectedSpans([]); setSubject(""); setNotificationType("New Maintenance Scheduled"); setLocation(""); setLat(""); setLng(""); setIsp(""); setIspTicket(""); setMaintenanceReason(""); setImpactExpected(true); setStartDate(null); setStartTime("00:00"); setEndDate(null); setEndTime("00:00"); setAdditionalWindows([]); setCc(""); setFieldErrors({}); setShowValidation(false); setSendError(null); setSendSuccess(null); setShowSendSuccessDialog(false); }} />
                 <DefaultButton text="Close" onClick={() => setShowSendSuccessDialog(false)} />

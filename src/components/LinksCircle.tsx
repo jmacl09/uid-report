@@ -12,7 +12,14 @@ export default function LinksCircle({ lines, size = 140, className }: LinksCircl
   const [l0, l1, l2, l3] = lines;
   // Match WF Finished green
   const green = '#00c853';
+  // Slightly lighter / less saturated green for light theme
+  const greenLight = '#5ee08b';
   const themeBlue = '#0078d4';
+
+  // Detect light-theme applied to document (client-only)
+  const isLight = typeof document !== 'undefined' && (
+    document.documentElement.classList.contains('light-theme') || document.body.classList.contains('light-theme')
+  );
 
   const diameter = Math.max(80, Math.min(size, 360));
   const inner = Math.round(diameter * 0.72);
@@ -77,11 +84,13 @@ export default function LinksCircle({ lines, size = 140, className }: LinksCircl
     fontSize: fitFont(text, 0.26),
     lineHeight: 1,
     fontWeight: 900,
-    color: green,
-    textShadow: `0 4px 14px ${green}55, 0 2px 6px rgba(0,0,0,0.6)`,
+    color: isLight ? greenLight : green,
+    // reduce shadow in light theme to avoid harsh contrast
+    textShadow: isLight ? `0 2px 6px rgba(0,0,0,0.18)` : `0 4px 14px ${green}55, 0 2px 6px rgba(0,0,0,0.6)`,
     letterSpacing: -0.5,
     whiteSpace: 'nowrap',
-    animation: 'textGreenPulse 1.8s ease-in-out infinite',
+    // light theme: much subtler pulse; dark theme keeps original pulse
+    animation: isLight ? 'textGreenPulseLight 3.2s ease-in-out infinite' : 'textGreenPulse 1.8s ease-in-out infinite',
   });
 
   const lightStyle = (ratio = 0.16): React.CSSProperties => ({
@@ -123,6 +132,11 @@ export default function LinksCircle({ lines, size = 140, className }: LinksCircl
           @keyframes textGreenPulse {
             0%, 100% { opacity: 0.92; text-shadow: 0 2px 6px rgba(0,0,0,0.6), 0 0 12px rgba(0,200,83,0.35) }
             50% { opacity: 1; text-shadow: 0 2px 6px rgba(0,0,0,0.6), 0 0 20px rgba(0,200,83,0.55) }
+          }
+          /* Subtler pulse for light-theme: smaller glow + slower rhythm */
+          @keyframes textGreenPulseLight {
+            0%, 100% { opacity: 0.98; text-shadow: 0 1px 4px rgba(0,0,0,0.12), 0 0 6px rgba(94,224,139,0.18) }
+            50% { opacity: 1; text-shadow: 0 1px 6px rgba(0,0,0,0.14), 0 0 10px rgba(94,224,139,0.22) }
           }
         `}</style>
       </div>

@@ -70,6 +70,8 @@ const VSOAssistant: React.FC = () => {
   useEffect(() => {
     try { initializeIcons(); } catch {}
   }, []);
+  const isLightTheme = typeof document !== 'undefined' && (document.documentElement.classList.contains('light-theme') || document.body.classList.contains('light-theme'));
+  const labelStyles = (size: number, weight: number, mb?: number) => ({ root: { color: isLightTheme ? 'var(--accent)' : '#ccc', fontSize: size, fontWeight: `${weight}`, marginBottom: mb ?? 0 } });
   const [facilityCodeA, setFacilityCodeA] = useState<string>("");
   const [facilityCodeZ, setFacilityCodeZ] = useState<string>("");
   const [diversity, setDiversity] = useState<string[]>([]);
@@ -234,8 +236,8 @@ const VSOAssistant: React.FC = () => {
 
   // Try to detect signed-in user's email from App Service/Static Web Apps auth
   useEffect(() => {
-    // Read persisted login email (if any) so CC preview is available immediately
     try {
+      // Read persisted login email (if any) so CC preview is available immediately
       const stored = localStorage.getItem("loggedInEmail");
       if (stored && stored.length > 3) setUserEmail(stored);
     } catch (e) {}
@@ -293,11 +295,6 @@ const VSOAssistant: React.FC = () => {
         const res = await fetch("/.auth/me", { credentials: "include" });
         if (!res.ok) return;
         const data = await res.json();
-        // Debugging: print the full /.auth/me response so we can see available claims
-        try {
-          // eslint-disable-next-line no-console
-          console.debug("/.auth/me response:", data);
-        } catch (e) {}
         // Handle both App Service ([identities]) and Static Web Apps ({clientPrincipal}) shapes
         const identities = Array.isArray(data)
           ? data
@@ -307,51 +304,52 @@ const VSOAssistant: React.FC = () => {
         for (const id of identities) {
           const claims = id?.user_claims || [];
           const getClaim = (t: string) => claims.find((c: any) => c?.typ === t)?.val || "";
-          const email =
-            getClaim("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress") ||
-            getClaim("emails") || // SWA sometimes
-            getClaim("preferred_username") ||
-            getClaim("upn") ||
-            "";
-          if (email) {
-            setUserEmail(email);
+          const mail =
+            getClaim("emails") ||
+            getClaim("email") ||
+            getClaim("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress");
+          if (mail && mail.length > 3) {
+            setUserEmail(mail);
             try {
-              localStorage.setItem("loggedInEmail", email);
+              localStorage.setItem("loggedInEmail", mail);
             } catch (e) {}
-            return;
+            break;
           }
         }
-      } catch {}
+      } catch (e) {
+        // ignore auth lookup failures
+      }
     };
+
+    // Invoke once to populate userEmail if available
     fetchUserEmail();
-  }, []);
+  }, []); // end login/email/calendar initialization effect
 
-  // When the user edits any search input, clear the temporary "show all options" state
-  // and reset prompt/exhaustion flags so they can get fresh prompts on a new search.
-  useEffect(() => {
-    // Clear any temporary 'show all' or prompt/exhaustion flags when the user edits search inputs.
-    // We explicitly set values rather than reading them to avoid stale-read dependency issues.
-    setShowAllOptions(false);
-    setOppositePromptUsed(false);
-    setTriedBothNoResults(false);
-    setOppositePrompt({ show: false, from: null });
-    setTriedSides({ A: false, Z: false });
-    // Intentionally do not clear search results or the no-results banner here; keep that visible until the user re-submits.
-  }, [facilityCodeA, facilityCodeZ, spliceRackA, spliceRackZ, diversity]);
-
-  // Persist calendar events whenever they change
+  // Persist calendar events whenever they change (with backup + timestamp)
   useEffect(() => {
     try {
-      const serializable = vsoEvents.map((e) => ({
-        ...e,
-        // Persist both ISO and date-only for robust reload across timezones
-        start: e.start.toISOString(),
-        end: e.end.toISOString(),
-        startYMD: `${e.start.getFullYear()}-${String(e.start.getMonth() + 1).padStart(2, '0')}-${String(e.start.getDate()).padStart(2, '0')}`,
-        endYMD: `${e.end.getFullYear()}-${String(e.end.getMonth() + 1).padStart(2, '0')}-${String(e.end.getDate()).padStart(2, '0')}`,
-      }));
+      const serializable = (vsoEvents || []).map(e => {
+        const start = e.start instanceof Date ? e.start : new Date(e.start as any);
+        const end = e.end instanceof Date ? e.end : new Date(e.end as any);
+        const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        return {
+          id: e.id,
+          title: e.title,
+          status: e.status,
+          start: start.toISOString(),
+          end: end.toISOString(),
+          startYMD: ymd(start),
+          endYMD: ymd(end),
+          summary: (e as any).summary || undefined,
+          dcCode: (e as any).dcCode || undefined,
+          spans: (e as any).spans || [],
+          subject: (e as any).subject || undefined,
+          notificationType: (e as any).notificationType || undefined,
+          location: (e as any).location || undefined,
+          maintenanceReason: (e as any).maintenanceReason || undefined,
+        };
+      });
       localStorage.setItem("vsoEvents", JSON.stringify(serializable));
-      // Also write a backup copy to guard against accidental clears/overwrites
       localStorage.setItem("vsoEventsBackup", JSON.stringify(serializable));
       localStorage.setItem("vsoEventsLastSaved", String(Date.now()));
     } catch {}
@@ -810,16 +808,16 @@ const VSOAssistant: React.FC = () => {
   const comboBoxStyles = {
     root: { width: "100%" },
     input: {
-      color: "#fff",
-      backgroundColor: "#141414",
+      color: "var(--vso-input-text)",
+      backgroundColor: "var(--vso-input-bg)",
       height: 42,
-      border: "1px solid #333",
+      border: "1px solid var(--vso-input-border)",
       borderRadius: 8,
       paddingLeft: 10,
     },
-    callout: { background: "#181818", maxHeight: 240, overflowY: "auto" },
-    optionsContainer: { background: "#181818" },
-    caretDownWrapper: { color: "#fff" },
+    callout: { background: "var(--vso-dropdown-bg)", maxHeight: 240, overflowY: "auto" },
+    optionsContainer: { background: "var(--vso-dropdown-bg)" },
+    caretDownWrapper: { color: "var(--vso-dropdown-text)" },
   } as const;
 
   // Table ref for column resizing
@@ -882,49 +880,45 @@ const VSOAssistant: React.FC = () => {
 
   const dropdownStyles = {
     root: { width: "100%" },
-    dropdown: { backgroundColor: "#141414", color: "#fff", borderRadius: 8 },
+    dropdown: { backgroundColor: "var(--vso-input-bg)", color: "var(--vso-input-text)", borderRadius: 8 },
     title: {
-      background: "#141414",
-      color: "#fff",
-      border: "1px solid #333",
+      background: "var(--vso-input-bg)",
+      color: "var(--vso-input-text)",
+      border: "1px solid var(--vso-input-border)",
       borderRadius: 8,
       height: 42,
       display: "flex",
       alignItems: "center",
       paddingLeft: 10,
     },
-    caretDownWrapper: { color: "#fff" },
-    dropdownItemsWrapper: { background: "#181818" },
+    caretDownWrapper: { color: "var(--vso-dropdown-text)" },
+    dropdownItemsWrapper: { background: "var(--vso-dropdown-bg)" },
+    callout: { background: "var(--vso-dropdown-bg)" },
     dropdownItem: {
       background: "transparent",
-      color: "#fff",
+      color: "var(--vso-dropdown-text)",
       selectors: {
         ':hover': {
-          background: '#225b8a',
-          color: '#fff',
+          background: 'var(--vso-dropdown-item-hover-bg)',
+          color: 'var(--vso-dropdown-text)',
         },
         ':active': {
-          background: '#003b6f',
-          color: '#fff',
+          background: 'var(--vso-dropdown-item-selected-bg)',
+          color: 'var(--vso-dropdown-text)',
         },
       },
     },
     dropdownItemSelected: {
-      background: "#003b6f",
-      color: "#fff",
+      background: 'var(--vso-dropdown-item-selected-bg)',
+      color: 'var(--vso-dropdown-text)',
       selectors: {
         ':hover': {
-          background: '#225b8a',
-          color: '#fff',
-        },
-        ':active': {
-          background: '#003b6f',
-          color: '#fff',
+          background: 'var(--vso-dropdown-item-hover-bg)',
+          color: 'var(--vso-dropdown-text)',
         },
       },
     },
-    callout: { background: "#181818" },
-  };
+  } as const;
 
   // Make Diversity placeholder text exactly match TextField placeholder (e.g., AM111)
   const diversityDropdownStyles = {
@@ -943,9 +937,30 @@ const VSOAssistant: React.FC = () => {
   } as const;
 
   const textFieldStyles = {
-    fieldGroup: { backgroundColor: "#141414", border: "1px solid #333", borderRadius: 8, height: 42 },
-    field: { color: "#fff" },
-  };
+    fieldGroup: {
+      background: "var(--vso-input-bg)",
+      border: "1px solid var(--vso-input-border)",
+      borderRadius: 8,
+      height: 42,
+      selectors: {
+        ':hover': {
+          border: '1px solid var(--vso-input-border-active)',
+        },
+        ':focus': {
+          border: '1px solid var(--vso-input-border-active)',
+        },
+      },
+    },
+    field: {
+      background: "var(--vso-input-bg)",
+      color: "var(--vso-input-text)",
+      selectors: {
+        '::placeholder': {
+          color: 'var(--vso-input-placeholder)',
+        },
+      },
+    },
+  } as const;
 
   // Time dropdown styles (reuse dropdownStyles but allow container width to control it)
   const timeDropdownStyles = {
@@ -953,16 +968,53 @@ const VSOAssistant: React.FC = () => {
     root: { width: '100%' },
   } as const;
 
+  // Light-theme friendly styles for the Decommissioned Spans country ComboBox
+  const decomCountryComboStyles = {
+    ...comboBoxStyles,
+    root: { width: '100%' },
+    input: {
+      color: 'var(--vso-input-text)',
+      background: 'var(--vso-input-bg)',
+    },
+  } as any;
+
+  // Option renderer to force dark readable text when light theme is active (overrides global white !important)
+  const renderLightOption = (option?: IComboBoxOption): JSX.Element => {
+    const label = (option?.text || option?.key || '') as string;
+    return <span style={{ color: 'var(--vso-input-text)', fontSize: 13 }}>{label}</span>;
+  };
+
   // Dark DatePicker styles to avoid white-on-white
   const datePickerStyles: any = {
     root: { width: 220 },
     textField: {
-      fieldGroup: { backgroundColor: "#141414", border: "1px solid #333", borderRadius: 8, height: 42 },
-      field: { color: "#fff", selectors: { '::placeholder': { color: '#a6b7c6', opacity: 0.8 } } },
+      fieldGroup: {
+        background: "var(--vso-input-bg)",
+        border: "1px solid var(--vso-input-border)",
+        borderRadius: 8,
+        height: 42,
+        selectors: {
+          ':hover': {
+            border: '1px solid var(--vso-input-border-active)',
+          },
+          ':focus': {
+            border: '1px solid var(--vso-input-border-active)',
+          },
+        },
+      },
+      field: {
+        color: "var(--vso-input-text)",
+        background: "var(--vso-input-bg)",
+        selectors: { '::placeholder': { color: 'var(--vso-input-placeholder)', opacity: 0.9 } },
+      },
     },
-    callout: { background: "#181818" },
-    // dayPicker (calendar) styles to avoid white popover
-    dayPicker: { root: { background: '#181818', color: '#fff' }, monthPickerVisible: {}, showWeekNumbers: {} },
+    callout: { background: "var(--vso-dropdown-bg)" },
+    // dayPicker (calendar) styles to keep popover theme-aware
+    dayPicker: {
+      root: { background: 'var(--vso-dropdown-bg)', color: 'var(--vso-dropdown-text)' },
+      monthPickerVisible: {},
+      showWeekNumbers: {},
+    },
   };
 
   // Unique DC codes present in the current result set (Facility A/Z columns)
@@ -1374,6 +1426,7 @@ const VSOAssistant: React.FC = () => {
   const getStatusClass = (status?: string) => {
     const t = (status || "").toLowerCase();
     if (t.includes("inproduction") || t === "in production" || t === "production") return "good";
+    if (t.includes('in progress') || t.includes('inprogress') || t.includes('wf in progress') || t.includes('wf inprogress')) return 'warning';
     if (
       t.includes("decom") ||
       t.includes("retired") ||
@@ -1399,6 +1452,15 @@ const VSOAssistant: React.FC = () => {
     if (t.startsWith("east")) return "accent";
     if (t.startsWith("west")) return "danger";
     return "accent";
+  };
+
+  // Map SpanType text to visual pill styles: WAN=red, Fabric=blue, others=yellow
+  const getSpanTypeClass = (t?: string) => {
+    const v = (t || "").toString().toLowerCase().trim();
+    if (!v) return 'warning';
+    if (v.includes('wan')) return 'danger';
+    if (v.includes('fabric')) return 'accent';
+    return 'warning';
   };
 
   return (
@@ -1446,7 +1508,7 @@ const VSOAssistant: React.FC = () => {
             {currentTab === 'A-Z' && (
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500 } }}>
+                  <Text styles={labelStyles(13, 700)}>
                     Facility Code A <span style={{ color: "#ff4d4d" }}>*</span>
                   </Text>
                   <TooltipHost content={"This search will provide results from the FacilityCodeA side using the Datacenter code entered."}>
@@ -1463,6 +1525,7 @@ const VSOAssistant: React.FC = () => {
                   calloutProps={{ className: 'combo-dark-callout' }}
                   componentRef={dcComboRef}
                   styles={comboBoxStyles}
+                  onRenderOption={isLightTheme ? renderLightOption : undefined}
                   onChange={(_, option, index, value) => {
                     const typed = (value || "").toString().toLowerCase();
                     const found = datacenterOptions.find((d) => {
@@ -1484,7 +1547,7 @@ const VSOAssistant: React.FC = () => {
 
                 {/* Diversity for A tab */}
                 <div style={{ marginTop: 8 }}>
-                  <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500, marginBottom: 6 } }}>Diversity (Optional)</Text>
+                  <Text styles={labelStyles(13, 700, 6)}>Diversity <span className="optional-text">(Optional)</span></Text>
                   <Dropdown
                     placeholder=""
                     options={diversityOptions}
@@ -1505,7 +1568,7 @@ const VSOAssistant: React.FC = () => {
                 </div>
 
                 <div style={{ marginTop: 8 }}>
-                  <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500 } }}>Splice Rack A (Optional)</Text>
+                  <Text styles={labelStyles(13, 700)}>Splice Rack A <span className="optional-text">(Optional)</span></Text>
                   <TextField
                     placeholder="e.g. AM111"
                     onChange={(_, value) => { const v = value || undefined; setSpliceRackA(v); if (v) { setSpliceRackZ(undefined); setFacilityCodeZ(""); } }}
@@ -1520,7 +1583,7 @@ const VSOAssistant: React.FC = () => {
             {currentTab === 'Facility' && (
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500 } }}>
+                  <Text styles={labelStyles(13, 700)}>
                     Facility Code <span style={{ color: "#ff4d4d" }}>*</span>
                   </Text>
                   <TooltipHost content={"This search will provide results from both the FacilityCodeA and FacilityCodeZ side using the Datacenter code entered."}>
@@ -1537,6 +1600,7 @@ const VSOAssistant: React.FC = () => {
                   calloutProps={{ className: 'combo-dark-callout' }}
                   componentRef={dcComboRef}
                   styles={comboBoxStyles}
+                  onRenderOption={isLightTheme ? renderLightOption : undefined}
                   onChange={(_, option, index, value) => {
                     const typed = (value || "").toString().toLowerCase();
                     const found = datacenterOptions.find((d) => {
@@ -1558,7 +1622,7 @@ const VSOAssistant: React.FC = () => {
 
                 <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
                   <div style={{ flex: 1 }}>
-                    <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500, marginBottom: 6 } }}>Diversity <span style={{ color: "#e6f6ff", fontWeight: 400, fontStyle: "normal", fontSize: 13, marginLeft: 2 }}>(Optional)</span></Text>
+                      <Text styles={labelStyles(13, 700, 6)}>Diversity <span className="optional-text">(Optional)</span></Text>
                     <Dropdown
                       placeholder=""
                       options={diversityOptions}
@@ -1580,7 +1644,7 @@ const VSOAssistant: React.FC = () => {
                 </div>
                 <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
                   <div style={{ flex: 1 }}>
-                    <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500, marginBottom: 6 } }}>Splice Rack <span style={{ color: "#e6f6ff", fontWeight: 400, fontStyle: "normal", fontSize: 13, marginLeft: 2 }}>(Optional)</span></Text>
+                    <Text styles={labelStyles(13, 700, 6)}>Splice Rack <span className="optional-text">(Optional)</span></Text>
                     <TextField placeholder="e.g. AM111" value={spliceRackA || ''} onChange={(_, v) => { const val = v || undefined; setSpliceRackA(val); if (val) { setSpliceRackZ(undefined); setFacilityCodeZ(""); } }} styles={textFieldStyles} />
                   </div>
                 </div>
@@ -1591,7 +1655,7 @@ const VSOAssistant: React.FC = () => {
             {currentTab === 'Z-A' && (
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Text styles={{ root: { color: "#ccc", fontSize: 15, fontWeight: 500 } }}>Facility Code Z <span style={{ color: "#ff4d4d" }}>*</span></Text>
+                  <Text styles={labelStyles(13, 700)}>Facility Code Z <span style={{ color: "#ff4d4d" }}>*</span></Text>
                   <TooltipHost content={"This search will provide results from the FacilityCodeZ side using the Datacenter code entered."}>
                     <IconButton iconProps={{ iconName: 'Info' }} title="Facility selection info" styles={{ root: { color: '#a6b7c6', height: 20, width: 20 } }} />
                   </TooltipHost>
@@ -1606,6 +1670,7 @@ const VSOAssistant: React.FC = () => {
                   calloutProps={{ className: 'combo-dark-callout' }}
                   componentRef={dcComboRefZ}
                   styles={comboBoxStyles}
+                  onRenderOption={isLightTheme ? renderLightOption : undefined}
                   onChange={(_, option, index, value) => {
                     const typed = (value || "").toString().toLowerCase();
                     const found = datacenterOptions.find((d) => {
@@ -1627,7 +1692,7 @@ const VSOAssistant: React.FC = () => {
 
                 {/* Diversity for Z tab */}
                 <div style={{ marginTop: 8 }}>
-                  <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500, marginBottom: 6 } }}>Diversity (Optional)</Text>
+                  <Text styles={labelStyles(13, 700, 6)}>Diversity <span className="optional-text">(Optional)</span></Text>
                   <Dropdown
                     placeholder=""
                     options={diversityOptions}
@@ -1648,7 +1713,7 @@ const VSOAssistant: React.FC = () => {
                 </div>
 
                 <div style={{ marginTop: 8 }}>
-                  <Text styles={{ root: { color: "#ccc", fontSize: 13, fontWeight: 500 } }}>Splice Rack Z (Optional)</Text>
+                  <Text styles={labelStyles(13, 700)}>Splice Rack Z <span className="optional-text">(Optional)</span></Text>
                   <TextField placeholder="e.g. AJ1508" onChange={(_, value) => { const v = value || undefined; setSpliceRackZ(v); if (v) { setSpliceRackA(undefined); setFacilityCodeA(""); } }} styles={textFieldStyles} disabled={!!spliceRackA} />
                 </div>
               </div>
@@ -1657,17 +1722,17 @@ const VSOAssistant: React.FC = () => {
             {/* Decommissioned tab: country lookup moved here (was a collapsed panel previously) */}
             {currentTab === 'Decom' && (
               <div style={{ flex: 1 }}>
-                <div style={{ background: '#081518', border: '1px solid #123238', padding: 16, borderRadius: 10, boxShadow: '0 6px 18px rgba(0,80,100,0.12)', maxWidth: 680 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div className="decom-card" style={{ background: '#081518', border: '1px solid #123238', padding: 16, borderRadius: 10, boxShadow: '0 6px 18px rgba(0,80,100,0.12)', maxWidth: 680 }}>
+                  <div className="decom-card-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                     <div>
-                        <div style={{ color: '#e6f6ff', fontSize: 16, fontWeight: 700 }}>Decommissioned Spans</div>
+                        <div style={{ fontSize: 16, fontWeight: 700 }}>Decommissioned Spans</div>
                       </div>
                     <IconButton iconProps={{ iconName: 'WarningSolid' }} title="Decommissioned search info" styles={{ root: { color: '#f1c232', height: 28, width: 28 } }} />
                   </div>
 
-                  <div style={{ background: '#071821', border: '1px solid #20343f', padding: 12, borderRadius: 8, marginBottom: 12 }}>
-                    <div style={{ color: '#dfefff', fontSize: 13, marginBottom: 6 }}>This search will pull all spans that are in a Decommission ready state by the country entered.</div>
-                    <div style={{ color: '#9fb3c6', fontSize: 12 }}>Select a country, then click Lookup to fetch spans marked ready for decommission in that country.</div>
+                  <div className="decom-card-inner" style={{ background: '#071821', border: '1px solid #20343f', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+                    <div style={{ fontSize: 13, marginBottom: 6 }}>This search will pull all spans that are in a Decommission ready state by the country entered.</div>
+                    <div style={{ fontSize: 12 }}>Select a country, then click Lookup to fetch spans marked ready for decommission in that country.</div>
                   </div>
 
                   <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
@@ -1683,7 +1748,8 @@ const VSOAssistant: React.FC = () => {
                         componentRef={countryComboRef}
                         onClick={() => countryComboRef.current?.focus(true)}
                         onFocus={() => countryComboRef.current?.focus(true)}
-                        styles={{ ...comboBoxStyles, root: { width: '100%' } } as any}
+                        styles={decomCountryComboStyles}
+                        onRenderOption={isLightTheme ? renderLightOption : undefined}
                         onChange={(_, option, index, value) => {
                           const typed = (value || "").toString().toLowerCase();
                           const found = countryOptions.find((c) => {
@@ -1715,6 +1781,7 @@ const VSOAssistant: React.FC = () => {
                     </div>
                     <div style={{ width: 120, display: 'flex', alignItems: 'center' }}>
                       <PrimaryButton
+                        className="lookup-btn"
                         text="Lookup"
                         disabled={!country}
                         styles={{ root: { height: 40 } }}
@@ -1752,7 +1819,8 @@ const VSOAssistant: React.FC = () => {
 
         {/* Facility-specific inputs moved into the Facility tab above. */}
 
-        <div className="form-buttons" style={{ marginTop: 16 }}>
+        {currentTab !== 'Decom' && (
+          <div className="form-buttons" style={{ marginTop: 16 }}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="submit-btn" onClick={() => handleSubmit()}>
@@ -1770,9 +1838,10 @@ const VSOAssistant: React.FC = () => {
                   </button>
                 )}
               </div>
-              {/* Decommissioned tab content moved into the tabs; removed collapsed toggle here. */}
+              {/* Decommissioned tab omits Submit/Reset (only Lookup button inside tab). */}
             </div>
-        </div>
+          </div>
+        )}
 
         {loading && <Spinner label="Loading results..." size={SpinnerSize.medium} styles={{ root: { marginTop: 15 } }} />}
 
@@ -1976,16 +2045,36 @@ const VSOAssistant: React.FC = () => {
                   </span>
                 ) },
                 { key: 'SpanID', label: 'SpanID', render: (row: SpanData) => (
-                  <a
-                    href={row.OpticalLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <span
+                    role="button"
+                    tabIndex={0}
                     className="uid-click"
-                    onClick={(e) => e.stopPropagation()}
-                    style={{ fontSize: 14, fontWeight: 600 }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      try {
+                        const q = encodeURIComponent(String(row.SpanID || ''));
+                        navigate(`/fiber-span-utilization?spans=${q}`);
+                      } catch (err) {
+                        // fallback: open route without params
+                        navigate('/fiber-span-utilization');
+                      }
+                    }}
+                    onKeyDown={(e: React.KeyboardEvent) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        try {
+                          const q = encodeURIComponent(String(row.SpanID || ''));
+                          navigate(`/fiber-span-utilization?spans=${q}`);
+                        } catch (err) {
+                          navigate('/fiber-span-utilization');
+                        }
+                      }
+                    }}
+                    style={{ fontSize: 14, fontWeight: 600, cursor: 'pointer', outline: 'none' }}
                   >
                     {row.SpanID}
-                  </a>
+                  </span>
                 ) },
                 { key: 'Datacenter', label: 'DC', render: (row: SpanData) => {
                   // Prefer explicit Datacenter/ DataCenter on the row, fallback to rackDC or facility codes
@@ -2003,6 +2092,15 @@ const VSOAssistant: React.FC = () => {
                 { key: 'OpticalDeviceZ', label: 'Optical Z' },
                 { key: 'OpticalRackZ_Unit', label: 'Rack Z' },
                 { key: 'WiringScope', label: 'Scope' },
+                { key: 'SpanType', label: 'Type', render: (row: SpanData) => (
+                  <span
+                    className={`status-label ${getSpanTypeClass((row as any).SpanType)}`}
+                    style={{ display: 'inline-block', padding: '1px 6px', whiteSpace: 'nowrap', marginRight: 6 }}
+                    title={(row as any).SpanType}
+                  >
+                    {(row as any).SpanType}
+                  </span>
+                ) },
                 { key: 'Status', label: 'Status', render: (row: SpanData) => {
                   const stateVal = (((row as any).State || '') as string).toString().toLowerCase();
                   const isNewState = stateVal === 'new';
@@ -2023,10 +2121,10 @@ const VSOAssistant: React.FC = () => {
               const getCandidate = (k: string) => candidate.find(c => c.key === k);
 
               let dynamicCols: any[];
-              if (currentTab === 'Facility') {
+                  if (currentTab === 'Facility') {
                 if (simplifiedView) {
                   // Facility tab simplified view: fixed subset
-                  const facilityKeys = ['Diversity', 'SpanID', 'FacilityCodeA', 'FacilityCodeZ', 'SpliceRackA_Unit', 'SpliceRackZ_Unit', 'WiringScope', 'Status'];
+                  const facilityKeys = ['Diversity', 'SpanID', 'FacilityCodeA', 'FacilityCodeZ', 'SpliceRackA_Unit', 'SpliceRackZ_Unit', 'WiringScope', 'SpanType', 'Status'];
                   dynamicCols = facilityKeys.map((k) => {
                     const found = getCandidate(k);
                     if (found) return found;
@@ -2048,7 +2146,7 @@ const VSOAssistant: React.FC = () => {
                 } else {
                   splicePreferredKey = 'SpliceRackZ';
                 }
-                const simplifiedKeys = ['Diversity', 'SpanID', 'FacilityCodeA', 'FacilityCodeZ', splicePreferredKey, 'WiringScope', 'Status'];
+                const simplifiedKeys = ['Diversity', 'SpanID', 'FacilityCodeA', 'FacilityCodeZ', splicePreferredKey, 'WiringScope', 'SpanType', 'Status'];
                 dynamicCols = simplifiedKeys.map((k) => {
                   const found = getCandidate(k);
                   if (found) return found;
@@ -2099,6 +2197,7 @@ const VSOAssistant: React.FC = () => {
                                   : (c.key === 'IDF_A') ? '5ch'
                                   : (c.key === 'SpliceRackZ' || c.key === 'SpliceRackZ_Unit') ? '5ch'
                                   : (c.key === 'WiringScope') ? '6ch'
+                                  : (c.key === 'SpanType') ? '5ch'
                                   : (c.key === 'Status') ? '12%'
                                   : `${colWidthPercent}%`,
                             ...(c.key === 'Diversity' ? { paddingLeft: 10 } : {}),
@@ -2196,6 +2295,7 @@ const VSOAssistant: React.FC = () => {
                                 : (c.key === 'IDF_A') ? '5ch'
                                 : (c.key === 'SpliceRackZ' || c.key === 'SpliceRackZ_Unit') ? '5ch'
                                 : (c.key === 'WiringScope') ? '6ch'
+                                : (c.key === 'SpanType') ? '5ch'
                                 : (c.key === 'Status') ? '12%'
                                 : `${colWidthPercent}%`,
                               maxWidth: (c.key === 'SpanID') ? '8ch' : (c.key === 'Datacenter' ? '4ch' : (c.key === 'FacilityCodeA' ? '5ch' : (c.key === 'FacilityCodeZ' ? '5ch' : (c.key === 'IDF_A' ? '5ch' : '8ch')))),
@@ -2284,6 +2384,7 @@ const VSOAssistant: React.FC = () => {
 
             <Dialog
               hidden={!showEmergencyDialog}
+              className="dialog-emergency"
               onDismiss={() => { setShowEmergencyDialog(false); setStartWarning(null); setPendingEmergency(false); }}
               dialogContentProps={{
                 type: DialogType.normal,
@@ -2313,6 +2414,7 @@ const VSOAssistant: React.FC = () => {
 
             <Dialog
               hidden={!showSendSuccessDialog}
+              className="dialog-send-success"
               onDismiss={() => setShowSendSuccessDialog(false)}
               dialogContentProps={{
                 type: DialogType.normal,
@@ -2382,7 +2484,7 @@ const VSOAssistant: React.FC = () => {
                 <div className="compose-datetime-row">
                     <div className="dt-field">
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date</Text>
+                        <Text styles={{ root: { color: "var(--vso-label-color)", fontSize: 12, fontWeight: 600 } }}>Start Date</Text>
                         <TooltipHost content={"Times shown are in your local time and will be converted automatically when the VSO is created."}>
                           <IconButton iconProps={{ iconName: 'Info' }} title="Time conversion info" styles={{ root: { color: '#a6b7c6', height: 18, width: 18 } }} />
                         </TooltipHost>
@@ -2417,7 +2519,7 @@ const VSOAssistant: React.FC = () => {
                     </div>
 
                     <div className="dt-time">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time</Text>
+                      <Text styles={{ root: { color: "var(--vso-label-color)", fontSize: 12, fontWeight: 600 } }}>Start Time</Text>
                       <Dropdown
                         componentRef={startTimeRef}
                         options={timeOptions}
@@ -2430,7 +2532,7 @@ const VSOAssistant: React.FC = () => {
                     </div>
 
                     <div className="dt-field">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date</Text>
+                      <Text styles={{ root: { color: "var(--vso-label-color)", fontSize: 12, fontWeight: 600 } }}>End Date</Text>
                       <DatePicker
                         componentRef={endDateRef}
                         placeholder="Select end date"
@@ -2446,7 +2548,7 @@ const VSOAssistant: React.FC = () => {
                     </div>
 
                     <div className="dt-time">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time</Text>
+                      <Text styles={{ root: { color: "var(--vso-label-color)", fontSize: 12, fontWeight: 600 } }}>End Time</Text>
                       <Dropdown
                         componentRef={endTimeRef}
                         options={timeOptions}
@@ -2470,7 +2572,7 @@ const VSOAssistant: React.FC = () => {
                 {additionalWindows.map((w, i) => (
                   <div key={i} className="compose-datetime-row additional-window">
                     <div className="dt-field">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Date</Text>
+                      <Text styles={{ root: { color: "var(--vso-label-color)", fontSize: 12, fontWeight: 600 } }}>Start Date</Text>
                       <DatePicker
                         placeholder="Select start date"
                         value={w.startDate || undefined}
@@ -2502,7 +2604,7 @@ const VSOAssistant: React.FC = () => {
                       />
                     </div>
                     <div className="dt-time">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>Start Time</Text>
+                      <Text styles={{ root: { color: "var(--vso-label-color)", fontSize: 12, fontWeight: 600 } }}>Start Time</Text>
                       <Dropdown
                         options={timeOptions}
                         selectedKey={w.startTime}
@@ -2515,7 +2617,7 @@ const VSOAssistant: React.FC = () => {
                       />
                     </div>
                     <div className="dt-field">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Date</Text>
+                      <Text styles={{ root: { color: "var(--vso-label-color)", fontSize: 12, fontWeight: 600 } }}>End Date</Text>
                       <DatePicker
                         placeholder="Select end date"
                         value={w.endDate || undefined}
@@ -2530,7 +2632,7 @@ const VSOAssistant: React.FC = () => {
                       />
                     </div>
                     <div className="dt-time">
-                      <Text styles={{ root: { color: "#ccc", fontSize: 12, fontWeight: 600 } }}>End Time</Text>
+                      <Text styles={{ root: { color: "var(--vso-label-color)", fontSize: 12, fontWeight: 600 } }}>End Time</Text>
                       <Dropdown
                         options={timeOptions}
                         selectedKey={w.endTime}
@@ -2566,8 +2668,8 @@ const VSOAssistant: React.FC = () => {
 
                 <div style={{ display: 'flex', gap: 12, marginTop: 8, alignItems: 'flex-end' }}>
                     <div style={{ width: 200 }}>
-                      <Text styles={{ root: { color: '#ccc', fontSize: 14, fontWeight: 600, marginBottom: 6 } }}>Tags</Text>
-                      <Dropdown
+                      <Text styles={{ root: { color: 'var(--vso-label-color)', fontSize: 12, fontWeight: 600, marginBottom: 6 } }}>Tags</Text>
+                        <Dropdown
                         placeholder="Select tags"
                         multiSelect
                         options={tagOptions}
@@ -2582,12 +2684,12 @@ const VSOAssistant: React.FC = () => {
                           }
                         }}
                         styles={{
-                          // match the theme and ensure selected/hovered items keep readable text
+                          // use theme variables so light/dark adapt automatically
                           ...dropdownStyles,
                           root: { width: 200 },
-                          dropdownItem: { background: 'transparent', color: '#fff', selectors: { ':hover': { background: '#004b8a', color: '#fff' } } },
-                          dropdownItemSelected: { background: '#004b8a', color: '#fff', selectors: { ':hover': { background: '#003b6f', color: '#fff' } } },
-                          callout: { background: '#181818' },
+                          dropdownItem: { background: 'transparent', color: 'var(--vso-dropdown-text)', selectors: { ':hover': { background: 'var(--vso-dropdown-item-hover-bg)', color: 'var(--vso-dropdown-text)' } } },
+                          dropdownItemSelected: { background: 'var(--vso-dropdown-item-selected-bg)', color: 'var(--vso-dropdown-text)', selectors: { ':hover': { background: 'var(--vso-dropdown-item-hover-bg)', color: 'var(--vso-dropdown-text)' } } },
+                          callout: { background: 'var(--vso-dropdown-bg)' },
                           title: { ...dropdownStyles.title, height: 42 },
                         }}
                       />
@@ -2642,8 +2744,18 @@ const VSOAssistant: React.FC = () => {
               </div>
             </div>
 
-            <div className="section-title" style={{ marginTop: 6 }}>Email Body Preview</div>
-            <div style={{ background: "#0f0f0f", border: "1px solid #333", borderRadius: 8, padding: 12, whiteSpace: "pre-wrap", color: "#dfefff" }}>
+            <div className="section-title email-preview-header" style={{ marginTop: 6 }}>Email Body Preview</div>
+            <div
+              className="email-preview"
+              style={{
+                borderRadius: 8,
+                padding: 12,
+                whiteSpace: "pre-wrap",
+                border: "1px solid #333",
+                background: "#0f0f0f",
+                color: "#dfefff",
+              }}
+            >
               {emailBody}
             </div>
 
@@ -2680,6 +2792,7 @@ const VSOAssistant: React.FC = () => {
       {/* Event Details Dialog - rendered globally so it works from anywhere */}
       <Dialog
         hidden={!showEventDialog}
+        className="dialog-event-details"
         onDismiss={() => setShowEventDialog(false)}
         dialogContentProps={{
           type: DialogType.normal,
@@ -2694,8 +2807,8 @@ const VSOAssistant: React.FC = () => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 12 }}>
                 <div style={{ flex: 2 }}>
-                  <Text styles={{ root: { color: '#a6b7c6', fontSize: 12 } }}>Title</Text>
-                  <div style={{ color: '#e6f6ff' }}>{ev.title}</div>
+                  <Text styles={{ root: { color: 'var(--vso-label-color)', fontSize: 12 } }}>Title</Text>
+                  <div style={{ color: 'var(--text-1)', fontWeight: 700 }}>{ev.title}</div>
                 </div>
                 <div style={{ width: 240 }}>
                   <Dropdown
@@ -2773,13 +2886,13 @@ const VSOAssistant: React.FC = () => {
                 </div>
                 <div className="table-container details-fit" style={{ flex: 1 }}>
                   <div className="section-title">Spans</div>
-                  <div style={{ padding: 8, color: '#e6f6ff' }}>{(ev.spans || []).join(', ') || '--'}</div>
+                  <div style={{ padding: 8, color: 'var(--text-1)' }}>{(ev.spans || []).join(', ') || '--'}</div>
                 </div>
               </div>
 
               <div className="table-container details-fit">
                 <div className="section-title">Reason</div>
-                <div style={{ padding: 8, color: '#dfefff', whiteSpace: 'pre-wrap' }}>{ev.maintenanceReason || ev.summary || '--'}</div>
+                <div style={{ padding: 8, color: 'var(--text-1)', whiteSpace: 'pre-wrap' }}>{ev.maintenanceReason || ev.summary || '--'}</div>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

@@ -216,7 +216,7 @@ const SuggestionsPage: React.FC = () => {
           <span className="title-sub">Share ideas, fixes, and improvements</span>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="suggestions-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <div style={{ width: 220 }}>
               <Dropdown
@@ -236,16 +236,38 @@ const SuggestionsPage: React.FC = () => {
               />
             </div>
           </div>
-          <TextField
-            label="Description"
-            placeholder="Describe the idea, why it helps, and any details"
-            multiline
-            rows={4}
-            value={description}
-            onChange={(_, v) => setDescription(v || "")}
-          />
+          <div style={{ width: '100%' }}>
+            <label style={{ color: 'var(--vso-label-color)', fontWeight: 600, fontSize: 14, marginBottom: 6, display: 'block' }}>Description</label>
+            <TextField
+              placeholder="Describe the idea, why it helps, and any details"
+              multiline
+              rows={4}
+              value={description}
+              onChange={(_, v) => setDescription(v || "")}
+            />
+          </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Checkbox label="Post anonymously" checked={anonymous} onChange={(_, c) => setAnonymous(!!c)} />
+            <Checkbox
+              label="Post anonymously"
+              checked={anonymous}
+              onChange={(_, c) => setAnonymous(!!c)}
+              styles={(props) => ({
+                root: { display: 'flex', alignItems: 'center' },
+                label: { color: 'var(--vso-label-color)', fontWeight: 600, fontSize: 13 },
+                checkbox: {
+                  borderColor: 'var(--vso-label-color)',
+                  background: '#ffffff',
+                  selectors: {
+                    '&.is-checked': {
+                      background: 'var(--vso-label-color)',
+                      borderColor: 'var(--vso-label-color)'
+                    }
+                  }
+                },
+                checkmark: { color: '#ffffff', fontWeight: 700 },
+                text: { color: 'var(--vso-label-color)', fontWeight: 600 }
+              })}
+            />
             <PrimaryButton text="Submit suggestion" onClick={submit} disabled={!summary.trim() || !description.trim()} className="search-btn" />
           </div>
         </div>

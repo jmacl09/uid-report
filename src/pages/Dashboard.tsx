@@ -12,8 +12,8 @@ const Dashboard: React.FC = () => {
       styles={{
         root: {
           height: "100%",
-          color: "#ccc",
-          backgroundColor: "#111",
+          color: "var(--text-1)",
+          backgroundColor: "var(--bg-1)",
         },
       }}
     >

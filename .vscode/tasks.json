@@ -24,6 +24,13 @@
 			"label": "npm install (functions)",
 			"type": "shell",
 			"command": "npm install"
+		},
+		{
+			"label": "npm start (web)",
+			"type": "shell",
+			"command": "npm start",
+			"isBackground": true,
+			"group": "build"
 		}
 	]
 }

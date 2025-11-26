@@ -9,7 +9,6 @@ import {
   PrimaryButton,
   IconButton,
   Checkbox,
-  Toggle,
   Spinner,
   SpinnerSize,
   MessageBar,
@@ -795,6 +794,65 @@ const VSOAssistant: React.FC = () => {
     if (sortDir === "desc") rows.reverse();
     return rows;
   }, [filteredResultsBase, sortBy, sortDir]);
+
+  // Export current filtered results (full detailed view) as CSV for Excel
+  const handleExportSpansToCsv = () => {
+    const rows = [...filteredResultsBase];
+    if (!rows.length) return;
+
+    // Export all detailed span fields except Color and OpticalLink;
+    // append Status as the last column for readability in Excel.
+    const columns: string[] = [
+      'SpanID',
+      'Diversity',
+      'IDF_A',
+      'SpliceRackA',
+      'WiringScope',
+      'FacilityCodeA',
+      'FacilityCodeZ',
+      'SpliceRackA_Unit',
+      'SpliceRackZ_Unit',
+      'OpticalDeviceA',
+      'OpticalRackA_Unit',
+      'OpticalDeviceZ',
+      'OpticalRackZ_Unit',
+      'SpanType',
+      'Status',
+    ];
+
+    const esc = (val: any): string => {
+      if (val === undefined || val === null) return '';
+      const s = String(val);
+      const mustQuote = /[",\n\r]/.test(s);
+      const inner = s.replace(/"/g, '""');
+      return mustQuote ? `"${inner}"` : inner;
+    };
+
+    const header = columns.join(',');
+    const body = rows
+      .map((r) => columns.map((c) => esc((r as any)[c])).join(','))
+      .join('\r\n');
+
+    const csv = `${header}\r\n${body}`;
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+
+    // Build a friendly Excel filename based on FacilityCode and optional Diversity
+    const baseFacility = (facilityCodeA || facilityCodeZ || 'Spans').toString().trim() || 'Spans';
+    const diversityLabel = (diversity && diversity.length ? `_${diversity.join('-')}` : '');
+    const safeBase = `${baseFacility}${diversityLabel}_Spans`
+      .replace(/[^A-Za-z0-9_-]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    a.download = `${safeBase || 'Spans'}.csv`;
+
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   const handleSort = (key: string) => {
     if (sortBy === key) {
@@ -2005,25 +2063,33 @@ const VSOAssistant: React.FC = () => {
               </div>
 
               {/* Right: controls */}
-              <div style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: 12, alignItems: 'center' }}>
+              <div
+                className="span-header-actions"
+                style={{ flex: 1, display: 'flex', justifyContent: 'flex-end', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}
+              >
+                <button
+                  type="button"
+                  className="rack-btn slim"
+                  onClick={handleExportSpansToCsv}
+                  title="Export to Excel"
+                >
+                  Export Spans
+                </button>
+
                 {!isDecomMode && (
                   <button className="rack-btn slim" onClick={() => setShowAll(!showAll)}>
                     {showAll ? "Show Only Production" : "Show All Spans"}
                   </button>
                 )}
-                <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <Toggle
-                    label="Detailed view"
-                    inlineLabel
-                    onText="On"
-                    offText="Off"
-                    // Toggle reflects Detailed view state; invert simplifiedView for checked
-                    checked={!simplifiedView}
-                    onChange={(_, v) => setSimplifiedView(!(!!v))}
-                    // Reduce space between the label text and the toggle control
-                    styles={{ root: { display: 'flex', alignItems: 'center' }, label: { marginRight: 6 } }}
-                  />
-                </div>
+
+                <button
+                  type="button"
+                  className={`rack-btn slim pill-toggle ${!simplifiedView ? 'pill-toggle-on' : 'pill-toggle-off'}`}
+                  onClick={() => setSimplifiedView(!simplifiedView)}
+                >
+                  <span className="pill-toggle-label">Detailed view</span>
+                  <span className="pill-toggle-knob" aria-hidden="true" />
+                </button>
               </div>
             </div>
 

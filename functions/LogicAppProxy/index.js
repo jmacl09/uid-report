@@ -1,5 +1,8 @@
 const axios = require("axios");
 
+// Ensure no client-side timeout is applied by default (0 = no timeout)
+axios.defaults.timeout = 0;
+
 module.exports = async function (context, req) {
     context.log("LogicAppProxy trigger:", req.method, req.url);
 
@@ -53,17 +56,33 @@ module.exports = async function (context, req) {
             const url = process.env.LOGICAPP_UID_URL + `&UID=${encodeURIComponent(uid)}`;
             context.log("Calling UID Logic App:", url);
 
-            const logicResponse = await axios.get(url, { timeout: 0 });
+            try {
+                // Explicitly request no timeout for UID lookups (Logic App may be slow)
+                const logicResponse = await axios.get(url, { timeout: 0 });
 
-            context.res = {
-                status: 200,
-                headers: {
-                    ...corsHeaders,
-                    "Content-Type": "application/json"  // REQUIRED so React parses JSON correctly
-                },
-                body: logicResponse.data  // return raw JSON exactly as before
-            };
-            return;
+                context.res = {
+                    status: 200,
+                    headers: {
+                        ...corsHeaders,
+                        "Content-Type": "application/json"  // REQUIRED so React parses JSON correctly
+                    },
+                    body: logicResponse.data  // return raw JSON exactly as before
+                };
+                return;
+            } catch (e) {
+                // Surface clearer diagnostics back to the client so callers know why it failed
+                context.log.error("UID Logic App request failed:", e && e.message);
+                context.res = {
+                    status: 500,
+                    headers: { ...corsHeaders, "Content-Type": "application/json" },
+                    body: {
+                        ok: false,
+                        error: e && e.message ? String(e.message) : 'UID request failed',
+                        details: e && e.response ? e.response.data : null
+                    }
+                };
+                return;
+            }
         }
 
         // ---------------------------------------------------------------

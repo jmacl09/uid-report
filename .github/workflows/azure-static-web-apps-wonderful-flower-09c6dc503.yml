@@ -21,32 +21,26 @@ jobs:
           submodules: true
           lfs: false
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '22.x'
-          cache: 'npm'
-
-      # Build React app with SWA-relative API base
+      # ✅ Build React app with the API base injected, then copy the config into /build
       - name: Build React app and copy config
         env:
-          REACT_APP_API_BASE: /api
+          REACT_APP_API_BASE: https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api
         run: |
           echo "Using API base: $REACT_APP_API_BASE"
           npm install --no-fund --no-audit
           npm run build
           cp staticwebapp.config.json build/
-
+      # ✅ Deploy to Azure Static Web Apps
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_WONDERFUL_FLOWER_09C6DC503 }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for GitHub integrations (e.g. PR comments)
           action: "upload"
-          app_location: "/"            # React app root
-          api_location: "functions"    # <--- FIXED: This now matches YOUR real folder
-          output_location: "build"     # Build output folder
+          app_location: "/"        # Root of your React app
+          api_location: "functions"         # No serverless functions directory
+          output_location: "build" # Build output folder
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
@@ -60,6 +54,7 @@ jobs:
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_WONDERFUL_FLOWER_09C6DC503 }}
           action: "close"
+          # Inputs below are not required for 'close' but silence some IDE validators
           app_location: "/"
           api_location: ""
           output_location: "build"

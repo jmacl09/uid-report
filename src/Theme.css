@@ -404,6 +404,43 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
   }
 }
 
+/* === GLOBAL SITE BANNER === */
+.global-banner {
+  width: 100%;
+  max-width: 1000px;
+  box-sizing: border-box;
+  margin: 8px 0 18px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(13,34,48,0.95), rgba(11,27,40,0.95));
+  border: 1px solid rgba(80,160,220,0.12);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.45), inset 0 0 10px rgba(80,160,220,0.02);
+}
+.global-banner-inner {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  color: #dfefff;
+  font-size: 13px;
+  font-weight: 600;
+}
+.global-banner .global-banner-text {
+  font-weight: 400;
+  color: #a6b7c6;
+  margin-left: 6px;
+}
+
+@media (max-width: 900px) {
+  .global-banner-inner { font-size: 12px; padding: 6px 0; }
+}
+
+/* Make the headline orange to increase visibility */
+.global-banner-inner strong {
+  color: #ff9800;
+  font-weight: 800;
+}
+
 @keyframes underlinePulse {
   0%, 100% {
     transform: scaleX(0.95);

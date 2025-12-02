@@ -1,18 +1,23 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Stack, Text, TextField, PrimaryButton, IconButton, Dropdown, IDropdownOption, Checkbox } from "@fluentui/react";
-import { saveToStorage } from "../api/saveToStorage";
-import { getAllSuggestions } from "../api/items";
+import {
+  Stack,
+  Text,
+  TextField,
+  PrimaryButton,
+  Dropdown,
+  IDropdownOption,
+  Checkbox
+} from "@fluentui/react";
 
-// Explicit Function endpoint to ensure the Suggestions page posts to the deployed function
-const SUGGESTIONS_FUNCTION_ENDPOINT = "https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1";
+import { API_BASE } from "../api/config";
 
-// Simple suggestion model
+// Suggestion model
 type Suggestion = {
   id: string;
   ts: number;
-  type: string; // Feature, Improvement, Bug, UI/UX, Data, Other
-  summary: string; // short name/title
-  description: string; // full text
+  type: string;
+  summary: string;
+  description: string;
   anonymous?: boolean;
   authorEmail?: string;
   authorAlias?: string;
@@ -20,17 +25,22 @@ type Suggestion = {
 
 const SUGGESTIONS_KEY = "uidSuggestions";
 
+// Dropdown options
 const typeOptions: IDropdownOption[] = [
   { key: "Feature", text: "Feature" },
   { key: "Improvement", text: "Improvement" },
   { key: "Bug", text: "Bug" },
   { key: "UI/UX", text: "UI/UX" },
   { key: "Data", text: "Data" },
-  { key: "Other", text: "Other" },
+  { key: "Other", text: "Other" }
 ];
 
 function getEmail(): string {
-  try { return localStorage.getItem("loggedInEmail") || ""; } catch { return ""; }
+  try {
+    return localStorage.getItem("loggedInEmail") || "";
+  } catch {
+    return "";
+  }
 }
 
 function getAlias(email?: string | null) {
@@ -46,158 +56,145 @@ const SuggestionsPage: React.FC = () => {
       const raw = localStorage.getItem(SUGGESTIONS_KEY);
       const arr = raw ? JSON.parse(raw) : [];
       return Array.isArray(arr) ? arr : [];
-    } catch { return []; }
+    } catch {
+      return [];
+    }
   });
 
-  // form state
+  // Form state
   const [type, setType] = useState<string>("Improvement");
   const [summary, setSummary] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [anonymous, setAnonymous] = useState<boolean>(false);
 
-  // persist on change
+  // Persist items locally (fallback)
   useEffect(() => {
-    try { localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(items)); } catch {}
+    try {
+      localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(items));
+    } catch {}
   }, [items]);
 
-  // Load server-side suggestions on mount
+  // Load suggestions from backend
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+
+    async function load() {
       try {
-        const rows = await getAllSuggestions(SUGGESTIONS_FUNCTION_ENDPOINT);
-        if (cancelled) return;
-        const mapped: Suggestion[] = (rows || []).map((e: any) => {
-          const rk = (e.rowKey || e.RowKey || e.rowkey || '').toString();
-          const saved = (e.savedAt || e.savedAt || e.Timestamp || e.timestamp || e.savedAt || rk || new Date().toISOString()).toString();
-          const ts = Number.isFinite(Date.parse(saved)) ? Date.parse(saved) : Date.now();
+        const res = await fetch(`${API_BASE}/suggestions`, {
+          method: "GET",
+          headers: { Accept: "application/json" }
+        });
+
+        if (!res.ok) throw new Error(`Failed to load suggestions: ${res.status}`);
+
+        const rows = await res.json();
+        if (cancelled || !Array.isArray(rows)) return;
+
+        const mapped: Suggestion[] = rows.map((e: any) => {
+          const owner = (e.owner || e.Owner || "").toString();
+          const anonymous = owner.toLowerCase() === "anonymous";
+
           return {
-            id: rk || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
-            ts,
-            type: (e.category || e.Category || 'Other').toString(),
-            summary: (e.title || e.Title || '').toString(),
-            description: (e.description || e.Description || '').toString(),
-            anonymous: String((e.owner || e.Owner || '')).toLowerCase() === 'anonymous',
-            authorAlias: (e.owner || e.Owner || '').toString() || undefined,
-          } as Suggestion;
+            id: (e.rowKey || e.RowKey || "").toString(),
+            ts: Number.isFinite(Date.parse(e.timestamp || e.Timestamp || "")) ?
+              Date.parse(e.timestamp || e.Timestamp) :
+              Date.now(),
+            type: (e.category || e.Category || "Other").toString(),
+            summary: (e.title || e.Title || "").toString(),
+            description: (e.description || e.Description || "").toString(),
+            anonymous,
+            authorAlias: anonymous ? undefined : owner,
+            authorEmail: anonymous ? undefined : owner
+          };
         });
-        if (mapped && mapped.length) setItems(prev => {
-          // merge server items with local optimistic ones (by id)
-          const existingIds = new Set(mapped.map(m => m.id));
-          const leftovers = prev.filter(p => !existingIds.has(p.id));
-          return [...mapped, ...leftovers];
-        });
-      } catch (e) {
-        // ignore failures; keep local-only suggestions
+
+        // newest first
+        mapped.sort((a, b) => b.ts - a.ts);
+
+        setItems(mapped);
+      } catch {
+        // keep local fallback only
       }
-    })();
-    return () => { cancelled = true; };
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const email = getEmail();
   const alias = getAlias(email);
 
-  const submit = () => {
+  // Submit a suggestion
+  const submit = async () => {
     const s = summary.trim();
     const d = description.trim();
     if (!s || !d) return;
-    const id = `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-    const next: Suggestion = {
-      id,
+
+    // Optimistic entry
+    const optimistic: Suggestion = {
+      id: `opt-${Date.now()}`,
       ts: Date.now(),
       type,
       summary: s,
       description: d,
       anonymous,
-      authorEmail: anonymous ? undefined : (email || undefined),
-      authorAlias: anonymous ? undefined : (alias || undefined),
+      authorEmail: anonymous ? undefined : email,
+      authorAlias: anonymous ? undefined : alias
     };
-    // optimistic update
-    setItems(prev => [next, ...prev]);
-    // reset
+
+    setItems(prev => [optimistic, ...prev]);
     setSummary("");
     setDescription("");
     setAnonymous(false);
 
-    // Fire-and-forget save to server. Suggestions are global so we do not require a UID.
     try {
-      void saveToStorage({
-        category: 'Suggestions',
-        uid: '',
-        title: s,
-        description: d,
-        owner: anonymous ? 'Anonymous' : (alias || email || 'Unknown'),
-        endpoint: SUGGESTIONS_FUNCTION_ENDPOINT,
-      }).then(async (resultText) => {
-        try {
-          const parsed = JSON.parse(resultText);
-          const entity = (parsed?.entity || parsed?.Entity) as any | undefined;
-          if (entity) {
-            const rk = (entity.rowKey || entity.RowKey || '').toString();
-            const saved = (entity.savedAt || entity.timestamp || entity.Timestamp || rk || new Date().toISOString()).toString();
-            const ts = Number.isFinite(Date.parse(saved)) ? Date.parse(saved) : Date.now();
-            const official: Suggestion = {
-              id: rk || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
-              ts,
-              type: (entity.category || entity.Category || 'Other').toString(),
-              summary: (entity.title || entity.Title || '').toString(),
-              description: (entity.description || entity.Description || '').toString(),
-              anonymous: String((entity.owner || entity.Owner || '')).toLowerCase() === 'anonymous',
-              authorAlias: (entity.owner || entity.Owner || '').toString() || undefined,
-            };
-            // replace optimistic entry (match by summary+description and optimistic id) conservatively
-            setItems(prev => {
-              const idx = prev.findIndex(x => x.id === id);
-              if (idx === -1) return [official, ...prev];
-              const copy = [...prev]; copy[idx] = official; return copy;
-            });
-          }
-        } catch {
-          // ignore parse errors
-        }
-
-        // Refresh list after short delay to pick up other people's suggestions too
-        await new Promise(resolve => setTimeout(resolve, 900));
-        try {
-          const rows = await getAllSuggestions(SUGGESTIONS_FUNCTION_ENDPOINT);
-          if (rows && rows.length) {
-            const mapped = rows.map((e: any) => {
-              const rk = (e.rowKey || e.RowKey || e.rowkey || '').toString();
-              const saved = (e.savedAt || e.Timestamp || e.timestamp || rk || new Date().toISOString()).toString();
-              const ts = Number.isFinite(Date.parse(saved)) ? Date.parse(saved) : Date.now();
-              return {
-                id: rk || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
-                ts,
-                type: (e.category || e.Category || 'Other').toString(),
-                summary: (e.title || e.Title || '').toString(),
-                description: (e.description || e.Description || '').toString(),
-                anonymous: String((e.owner || e.Owner || '')).toLowerCase() === 'anonymous',
-                authorAlias: (e.owner || e.Owner || '').toString() || undefined,
-              } as Suggestion;
-            });
-            setItems(prev => {
-              const existingIds = new Set(mapped.map(m => m.id));
-              const leftovers = prev.filter(p => !existingIds.has(p.id));
-              return [...mapped, ...leftovers];
-            });
-          }
-        } catch {}
-      }).catch((e) => {
-        // eslint-disable-next-line no-console
-        console.warn('Failed to save suggestion to server (kept locally):', e?.body || e?.message || e);
+      await fetch(`${API_BASE}/suggestions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: type,
+          title: s,
+          description: d,
+          owner: anonymous ? "Anonymous" : (alias || email || "Unknown")
+        })
       });
-    } catch {}
+
+      // Refresh after submit
+      const res = await fetch(`${API_BASE}/suggestions`);
+      if (res.ok) {
+        const rows = await res.json();
+        const mapped: Suggestion[] = rows.map((e: any) => {
+          const owner = (e.owner || "").toString();
+          const anon = owner.toLowerCase() === "anonymous";
+
+          return {
+            id: (e.rowKey || "").toString(),
+            ts: Number.isFinite(Date.parse(e.timestamp)) ? Date.parse(e.timestamp) : Date.now(),
+            type: (e.category || "Other").toString(),
+            summary: (e.title || "").toString(),
+            description: (e.description || "").toString(),
+            anonymous: anon,
+            authorAlias: anon ? undefined : owner,
+            authorEmail: anon ? undefined : owner
+          };
+        });
+
+        mapped.sort((a, b) => b.ts - a.ts);
+        setItems(mapped);
+      }
+    } catch {
+      // keep optimistic only
+    }
   };
 
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const sorted = useMemo(() => {
-    return [...items].sort((a, b) => b.ts - a.ts);
-  }, [items]);
+  const sorted = useMemo(() => [...items].sort((a, b) => b.ts - a.ts), [items]);
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      {/* Header */}
       <div className="vso-form-container glow" style={{ width: "100%" }}>
         <div className="banner-title">
           <span className="title-text">Suggestions</span>
@@ -213,9 +210,9 @@ const SuggestionsPage: React.FC = () => {
                 options={typeOptions}
                 selectedKey={type}
                 onChange={(_, opt) => setType(String(opt?.key || "Improvement"))}
-                styles={{ dropdown: { width: 220 } }}
               />
             </div>
+
             <div style={{ flex: 1 }}>
               <TextField
                 label="Name / short summary"
@@ -225,6 +222,7 @@ const SuggestionsPage: React.FC = () => {
               />
             </div>
           </div>
+
           <TextField
             label="Description"
             placeholder="Describe the idea, why it helps, and any details"
@@ -233,23 +231,25 @@ const SuggestionsPage: React.FC = () => {
             value={description}
             onChange={(_, v) => setDescription(v || "")}
           />
+
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <Checkbox
               label="Post anonymously"
               checked={anonymous}
               onChange={(_, c) => setAnonymous(!!c)}
             />
+
             <PrimaryButton
               text="Submit suggestion"
-              onClick={submit}
               disabled={!summary.trim() || !description.trim()}
+              onClick={submit}
               className="search-btn"
             />
           </div>
         </div>
       </div>
 
-      {/* List */}
+      {/* Suggestions list */}
       <div className="notes-card" style={{ marginTop: 16 }}>
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Text className="section-title">Community suggestions</Text>
@@ -260,16 +260,37 @@ const SuggestionsPage: React.FC = () => {
           <div className="note-empty">No suggestions yet. Be the first to post one.</div>
         ) : (
           <div className="notes-list">
-            {sorted.map((s) => {
+            {sorted.map(s => {
               const open = expanded === s.id;
+
               return (
                 <div key={s.id} className="note-item">
                   <div className="note-header" style={{ alignItems: "center" }}>
-                    <div className="note-meta" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span className="wf-inprogress-badge" style={{ color: "#50b3ff", border: "1px solid rgba(80,179,255,0.28)", borderRadius: 8, padding: "2px 8px", fontWeight: 700, fontSize: 12 }}>{s.type}</span>
-                      <span className="note-alias" style={{ color: "#e6f1ff" }}>{s.summary}</span>
+                    <div
+                      className="note-meta"
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
+                      <span
+                        className="wf-inprogress-badge"
+                        style={{
+                          color: "#50b3ff",
+                          border: "1px solid rgba(80,179,255,0.28)",
+                          borderRadius: 8,
+                          padding: "2px 8px",
+                          fontWeight: 700,
+                          fontSize: 12
+                        }}
+                      >
+                        {s.type}
+                      </span>
+
+                      <span className="note-alias" style={{ color: "#e6f1ff" }}>
+                        {s.summary}
+                      </span>
+
                       <span className="note-dot">·</span>
                       <span className="note-time">{new Date(s.ts).toLocaleString()}</span>
+
                       {!s.anonymous && (s.authorAlias || s.authorEmail) && (
                         <>
                           <span className="note-dot">·</span>
@@ -277,15 +298,22 @@ const SuggestionsPage: React.FC = () => {
                         </>
                       )}
                     </div>
+
                     <div className="note-controls">
-                      <button className="note-btn" onClick={() => setExpanded(open ? null : s.id)} title={open ? "Collapse" : "Expand"}>
+                      <button
+                        className="note-btn"
+                        onClick={() => setExpanded(open ? null : s.id)}
+                      >
                         {open ? "Hide" : "Show"}
                       </button>
                     </div>
                   </div>
+
                   {open && (
                     <div className="note-body">
-                      <div className="note-text" style={{ whiteSpace: "pre-wrap" }}>{s.description}</div>
+                      <div className="note-text" style={{ whiteSpace: "pre-wrap" }}>
+                        {s.description}
+                      </div>
                     </div>
                   )}
                 </div>

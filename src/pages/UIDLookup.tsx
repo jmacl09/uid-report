@@ -1806,19 +1806,24 @@ export default function UIDLookup() {
   const t0 = Date.now();
 
   // Direct Logic App call (no local proxy)
-  const directUrl = `https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net/api/fiberflow/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=8KqIymphhOqUAlnd7UGwLRaxP0ot5ZH30b7jWCEUedQ&UID=${encodeURIComponent(query)}`;
+    // Call backend proxy (LogicAppProxy) instead of direct Logic App
+  try {
+    const isJson = (r: Response) =>
+      /application\/json/i.test(r.headers.get("content-type") || "");
 
-    try {
-      // Helper to verify JSON response
-      const isJson = (r: Response) => /application\/json/i.test(r.headers.get('content-type') || '');
+    const res = await fetch("/api/LogicAppProxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "UID", uid: query }),
+    });
 
-      const res = await fetch(directUrl, { redirect: 'follow' });
-      if (!(res.ok && isJson(res))) {
-        const text = await res.text().catch(() => '');
-        const statusPart = `HTTP ${res.status}`;
-        const bodyPart = text ? `: ${text.slice(0, 220)}` : '';
-        throw new Error(statusPart + bodyPart);
-      }
+    if (!(res.ok && isJson(res))) {
+      const text = await res.text().catch(() => "");
+      const statusPart = `HTTP ${res.status}`;
+      const bodyPart = text ? `: ${text.slice(0, 220)}` : "";
+      throw new Error(statusPart + bodyPart);
+    }
+
   const result = await res.json();
   // Parse and attach AllWorkflowStatus (stringified or array)
   try {
@@ -3036,9 +3041,11 @@ export default function UIDLookup() {
     const persistSingle = async (rowKey: string, rowObj: any) => {
       try {
         // Determine server-side uid param and partition
-        const serverUid = contextUid ? String(contextUid) : (activeProjectId ? `PROJECT_${activeProjectId}` : null);
-        if (!serverUid) return;
-        const partition = contextUid ? `UID_${String(contextUid)}` : `PROJECT_${activeProjectId}`;
+        // Prefer explicit contextUid (when Table is rendered for a project or provided UID),
+        // otherwise fall back to the last searched UID so saves from the main UID lookup work.
+        const serverUid = contextUid ? String(contextUid) : (activeProjectId ? `PROJECT_${activeProjectId}` : (lastSearched ? String(lastSearched) : null));
+        if (!serverUid) return; // nothing sensible to save against
+        const partition = contextUid ? `UID_${String(contextUid)}` : (activeProjectId ? `PROJECT_${activeProjectId}` : `UID_${String(lastSearched)}`);
         const alias = getAlias(getEmail());
         const payload = {
           aDevice: rowObj.aDevice || '',
@@ -3073,8 +3080,8 @@ export default function UIDLookup() {
             TableName: 'Troubleshooting',
             tableName: 'Troubleshooting',
             targetTable: 'Troubleshooting',
-            ContextType: contextUid ? 'uid' : 'project',
-            ContextId: contextUid ? String(contextUid) : String(activeProjectId),
+            ContextType: contextUid ? 'uid' : (activeProjectId ? 'project' : 'uid'),
+            ContextId: contextUid ? String(contextUid) : (activeProjectId ? String(activeProjectId) : String(lastSearched)),
           },
         });
         try {
@@ -5357,4 +5364,7 @@ export default function UIDLookup() {
 
 
 // Use a consistent endpoint for saving/fetching notes to avoid mismatches
-const NOTES_ENDPOINT = "https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1";
+// NOTE: this should be the function name (no '/api' prefix). `saveToStorage`
+// will join this with `API_BASE` so having 'api/HttpTrigger1' caused
+// duplicate `/api/api/...` routes when `API_BASE` already contains `/api`.
+const NOTES_ENDPOINT = "HttpTrigger1";

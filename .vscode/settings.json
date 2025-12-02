@@ -21,5 +21,6 @@
     // Avoid downloading remote schemas (prevents ETIMEDOUT warnings)
     "json.schemaDownload.enable": false,
     "python-envs.defaultEnvManager": "ms-python.python:venv",
-    "python-envs.pythonProjects": []
+    "python-envs.pythonProjects": [],
+    "git.ignoreLimitWarning": true
 }

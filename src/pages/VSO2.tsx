@@ -1,5 +1,4 @@
 import React, { useMemo, useState } from "react";
-import { API_BASE } from "../api/config";
 
 type Stage = "VSO_Details" | "Email_Template" | "Card_3";
 
@@ -39,12 +38,16 @@ export default function VSO2() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<VsoDetailsResponse | null>(null);
 
-  const canSubmit = useMemo(() => !!stage && (stage !== "VSO_Details" || !!facility), [stage, facility]);
+  const canSubmit = useMemo(
+    () => !!stage && (stage !== "VSO_Details" || !!facility),
+    [stage, facility]
+  );
 
   const submit = async () => {
     setLoading(true);
     setError(null);
     setData(null);
+
     try {
       const payload: VsoDetailsRequest = {
         FacilityCodeA: facility,
@@ -52,21 +55,35 @@ export default function VSO2() {
         SpliceRackA: spliceRack,
         Stage: stage,
       };
-      const res = await fetch(`${API_BASE}/vso2`, {
+
+      const res = await fetch("/api/LogicAppProxy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ type: "VSO", ...payload }),
       });
+
       const raw = await res.text();
       let json: any;
+
       try {
         json = JSON.parse(raw);
       } catch (e) {
-        throw new Error(`Backend did not return JSON (HTTP ${res.status}). Body: ${raw.slice(0, 240)}`);
+        throw new Error(
+          `Backend did not return JSON (HTTP ${res.status}). Body: ${raw.slice(
+            0,
+            240
+          )}`
+        );
       }
+
       if (!res.ok) {
-        throw new Error(json?.error || json?.message || `Request failed (${res.status})`);
+        throw new Error(
+          json?.error ||
+            json?.message ||
+            `Request failed (${res.status})`
+        );
       }
+
       setData(json as VsoDetailsResponse);
     } catch (e: any) {
       setError(e?.message || "Unknown error");
@@ -81,7 +98,11 @@ export default function VSO2() {
       <div style={{ display: "grid", gap: 12, maxWidth: 720 }}>
         <label>
           Stage
-          <select value={stage} onChange={(e) => setStage(e.target.value as Stage)} style={{ marginLeft: 8 }}>
+          <select
+            value={stage}
+            onChange={(e) => setStage(e.target.value as Stage)}
+            style={{ marginLeft: 8 }}
+          >
             <option value="VSO_Details">VSO_Details</option>
             <option value="Email_Template">Email_Template</option>
           </select>
@@ -98,6 +119,7 @@ export default function VSO2() {
                 style={{ marginLeft: 8 }}
               />
             </label>
+
             <label>
               Diversity
               <input
@@ -107,6 +129,7 @@ export default function VSO2() {
                 style={{ marginLeft: 8 }}
               />
             </label>
+
             <label>
               SpliceRackA
               <input
@@ -120,7 +143,11 @@ export default function VSO2() {
         )}
 
         <button disabled={!canSubmit || loading} onClick={submit}>
-          {loading ? "Running..." : stage === "VSO_Details" ? "Run Query" : "Send Email"}
+          {loading
+            ? "Running..."
+            : stage === "VSO_Details"
+            ? "Run Query"
+            : "Send Email"}
         </button>
 
         {error && (
@@ -132,8 +159,14 @@ export default function VSO2() {
         {data && (
           <div>
             <h3>Data Center: {data.DataCenter}</h3>
+
             <div style={{ overflowX: "auto" }}>
-              <table style={{ borderCollapse: "collapse", minWidth: 960 }}>
+              <table
+                style={{
+                  borderCollapse: "collapse",
+                  minWidth: 960,
+                }}
+              >
                 <thead>
                   <tr>
                     {[
@@ -147,28 +180,101 @@ export default function VSO2() {
                       "maintSpans",
                       "prodPct",
                     ].map((h) => (
-                      <th key={h} style={{ textAlign: "left", padding: "6px 10px", borderBottom: "1px solid #ddd" }}>
+                      <th
+                        key={h}
+                        style={{
+                          textAlign: "left",
+                          padding: "6px 10px",
+                          borderBottom: "1px solid #ddd",
+                        }}
+                      >
                         {h}
                       </th>
                     ))}
                   </tr>
                 </thead>
+
                 <tbody>
                   {data.Spans.map((r: SpanRow) => (
                     <tr key={r.SpanID}>
-                      <td style={{ padding: "6px 10px", borderBottom: "1px solid #eee" }}>{r.Diversity}</td>
-                      <td style={{ padding: "6px 10px", borderBottom: "1px solid #eee" }}>
-                        <a href={r.OpticalLink} target="_blank" rel="noreferrer">
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          borderBottom: "1px solid #eee",
+                        }}
+                      >
+                        {r.Diversity}
+                      </td>
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          borderBottom: "1px solid #eee",
+                        }}
+                      >
+                        <a
+                          href={r.OpticalLink}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
                           {r.SpanID}
                         </a>
                       </td>
-                      <td style={{ padding: "6px 10px", borderBottom: "1px solid #eee" }}>{r.IDF_A}</td>
-                      <td style={{ padding: "6px 10px", borderBottom: "1px solid #eee" }}>{r.SpliceRackA}</td>
-                      <td style={{ padding: "6px 10px", borderBottom: "1px solid #eee" }}>{r.WiringScope}</td>
-                      <td style={{ padding: "6px 10px", borderBottom: "1px solid #eee" }}>{r.Status}</td>
-                      <td style={{ padding: "6px 10px", borderBottom: "1px solid #eee" }}>{r.prodSpans ?? ""}</td>
-                      <td style={{ padding: "6px 10px", borderBottom: "1px solid #eee" }}>{r.maintSpans ?? ""}</td>
-                      <td style={{ padding: "6px 10px", borderBottom: "1px solid #eee" }}>{r.prodPct ?? ""}</td>
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          borderBottom: "1px solid #eee",
+                        }}
+                      >
+                        {r.IDF_A}
+                      </td>
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          borderBottom: "1px solid #eee",
+                        }}
+                      >
+                        {r.SpliceRackA}
+                      </td>
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          borderBottom: "1px solid #eee",
+                        }}
+                      >
+                        {r.WiringScope}
+                      </td>
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          borderBottom: "1px solid #eee",
+                        }}
+                      >
+                        {r.Status}
+                      </td>
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          borderBottom: "1px solid #eee",
+                        }}
+                      >
+                        {r.prodSpans ?? ""}
+                      </td>
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          borderBottom: "1px solid #eee",
+                        }}
+                      >
+                        {r.maintSpans ?? ""}
+                      </td>
+                      <td
+                        style={{
+                          padding: "6px 10px",
+                          borderBottom: "1px solid #eee",
+                        }}
+                      >
+                        {r.prodPct ?? ""}
+                      </td>
                     </tr>
                   ))}
                 </tbody>

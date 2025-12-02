@@ -448,7 +448,7 @@ const FiberSpanUtilization: React.FC = () => {
                   <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginRight: 6 }}>
                     {[1,3,7].map((d) => (
                       <button
-                        key={d}
+                        key={`d-${d}`}
                         onClick={() => {
                           setTimeframeDays(d);
                           if (fullSpansData && fullSpansData.length) {
@@ -467,6 +467,32 @@ const FiberSpanUtilization: React.FC = () => {
                         }}
                       >{`${d}D`}</button>
                     ))}
+                  </div>
+                  <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', marginRight: 6, marginTop: 6 }}>
+                    {[12,6,1].map((h) => {
+                      const days = h / 24;
+                      return (
+                        <button
+                          key={`h-${h}`}
+                          onClick={() => {
+                            setTimeframeDays(days);
+                            if (fullSpansData && fullSpansData.length) {
+                              setDisplayedSpansData(filterByDays(fullSpansData, days));
+                            }
+                          }}
+                          style={{
+                            background: timeframeDays === days ? '#0b4856' : 'transparent',
+                            border: '1px solid #274648',
+                            color: timeframeDays === days ? '#dff6fb' : '#9fb3c6',
+                            padding: '6px 8px',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            fontSize: 12,
+                            fontWeight: 600,
+                          }}
+                        >{`${h}H`}</button>
+                      );
+                    })}
                   </div>
                   <div style={{ display: 'flex', gap: 12, alignItems: 'baseline', justifyContent: 'flex-end' }}>
                     <div className="fiber-util-stat-card">

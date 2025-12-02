@@ -1,42 +1,83 @@
-// Small wrapper for posting to the project's Logic App webhook used across pages
+// Wrapper for posting to UID + VSO Logic Apps through LogicAppProxy
+
 export type LogicAppResponse = {
   Spans?: any[] | any;
   DataCenter?: string;
   [k: string]: any;
 };
 
-const LOGIC_APP_URL =
-  "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net:443/api/VSO/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=6ViXNM-TmW5F7Qd9_e4fz3IhRNqmNzKwovWvcmuNJto";
-
-async function postToLogicApp(payload: object): Promise<LogicAppResponse> {
-  const res = await fetch(LOGIC_APP_URL, {
+/**
+ * Generic POST helper that always calls the Azure Function API:
+ * /api/LogicAppProxy
+ */
+async function callProxy(payload: object): Promise<LogicAppResponse> {
+  const res = await fetch("/api/LogicAppProxy", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    throw new Error(`Logic App request failed: ${res.status} ${txt}`);
+    throw new Error(`LogicAppProxy failed: ${res.status} — ${txt}`);
   }
-  const data = await res.json();
-  return data as LogicAppResponse;
+
+  return (await res.json()) as LogicAppResponse;
 }
 
+/**
+ * -------------------------
+ * VSO Logic App (Stage-based)
+ * -------------------------
+ */
+export async function vsoPostStage(stage: string | number, payload: object) {
+  return callProxy({
+    type: "VSO",
+    Stage: stage,
+    ...payload,
+  });
+}
+
+/**
+ * Fiber Span Utilization — Stage 11
+ * Called exactly like the VSO Assistant
+ */
 export async function getSpanUtilization(span: string, days?: number) {
   if (!span) throw new Error("Span is required");
-  const payload: any = { Stage: "11", Span: span };
-  if (typeof days === 'number') payload.Days = days;
-  return postToLogicApp(payload);
+
+  const payload: any = {
+    type: "VSO",
+    Stage: "11",
+    Span: span,
+  };
+
+  if (typeof days === "number") {
+    payload.Days = days;
+  }
+
+  return callProxy(payload);
 }
 
-export async function postStagePayload(stage: string, payload: object) {
-  const body = { Stage: stage, ...payload };
-  return postToLogicApp(body);
+/**
+ * -------------------------
+ * UID Logic App functions
+ * -------------------------
+ */
+export async function uidPostStage(stage: string | number, payload: object) {
+  return callProxy({
+    type: "UID",
+    Stage: stage,
+    ...payload,
+  });
 }
 
+/**
+ * Export grouped API
+ */
 const fetchLogicApp = {
+  vsoPostStage,
+  uidPostStage,
   getSpanUtilization,
-  postStagePayload,
 };
 
 export default fetchLogicApp;

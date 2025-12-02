@@ -2,7 +2,14 @@
   "name": "uid-report",
   "version": "0.1.0",
   "private": true,
+  "azureFunctions": {
+    "projectLanguage": "JavaScript",
+    "projectRuntime": "~4",
+    "funcPort": 7071,
+    "scriptRoot": "functions"
+  },
   "dependencies": {
+    "@azure/functions": "^4.2.0",
     "@azure/data-tables": "^13.3.1",
     "@fluentui/react": "^8.124.2",
     "@testing-library/dom": "^10.4.1",

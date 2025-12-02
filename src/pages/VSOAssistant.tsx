@@ -111,7 +111,7 @@ const VSOAssistant: React.FC = () => {
   // is fully reset when the user hits Reset.
   const [formKey, setFormKey] = useState<number>(0);
   // UI tab state for the new tabbed search layout: A-Z, Facility (both), Z-A, Decommissioned
-  const [currentTab, setCurrentTab] = useState<'A-Z' | 'Facility' | 'Z-A' | 'Decom'>('A-Z');
+  const [currentTab, setCurrentTab] = useState<'A-Z' | 'Facility' | 'Z-A' | 'Decom'>('Facility');
 
   // Sorting state for results table
   const [sortBy, setSortBy] = useState<string>("");
@@ -121,7 +121,6 @@ const VSOAssistant: React.FC = () => {
   // === Stage 2: Compose Email state ===
   const [composeOpen, setComposeOpen] = useState<boolean>(false);
   const EMAIL_TO = "opticaldri@microsoft.com"; // fixed
-  const EMAIL_LOGIC_APP_URL = "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net:443/api/VSO/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=6ViXNM-TmW5F7Qd9_e4fz3IhRNqmNzKwovWvcmuNJto";
   const [subject, setSubject] = useState<string>("");
   const [notificationType, setNotificationType] = useState<string>("New Maintenance Scheduled");
   const [location, setLocation] = useState<string>("");
@@ -135,6 +134,9 @@ const VSOAssistant: React.FC = () => {
   const [startWarning, setStartWarning] = useState<string | null>(null);
   const [pendingEmergency, setPendingEmergency] = useState<boolean>(false);
   const [showEmergencyDialog, setShowEmergencyDialog] = useState<boolean>(false);
+  // Generic field error dialog (used for past dates / invalid time ranges)
+  const [showFieldErrorDialog, setShowFieldErrorDialog] = useState<boolean>(false);
+  const [fieldErrorMessageDialog, setFieldErrorMessageDialog] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   const [startTime, setStartTime] = useState<string>("00:00");
   const [endTime, setEndTime] = useState<string>("00:00");
@@ -578,9 +580,6 @@ const VSOAssistant: React.FC = () => {
     setSearchDone(false);
 
     try {
-      const logicAppUrl =
-        "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net:443/api/VSO/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=6ViXNM-TmW5F7Qd9_e4fz3IhRNqmNzKwovWvcmuNJto";
-
       // Format diversity as comma-separated string for payload
       const diversityValue = (diversity && diversity.length > 0)
         ? diversity.join(', ')
@@ -623,10 +622,10 @@ const VSOAssistant: React.FC = () => {
         if (spliceRackZ) payload.SpliceRackZ = spliceRackZ;
       }
 
-      const response = await fetch(logicAppUrl, {
+      const response = await fetch("/api/LogicAppProxy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ type: "VSO", ...payload }),
       });
 
       if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
@@ -1148,6 +1147,20 @@ const VSOAssistant: React.FC = () => {
     return `${m}/${d}/${y} ${H}:${M}`;
   };
 
+  const parseTimeToDate = (date: Date | null, time: string | null) => {
+    if (!date || !time) return null;
+    const [hh, mm] = (time || "00:00").split(":").map((s) => parseInt(s, 10));
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate(), isNaN(hh) ? 0 : hh, isNaN(mm) ? 0 : mm);
+  };
+
+  const isPastDay = (date: Date | null) => {
+    if (!date) return false;
+    const today = new Date();
+    const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return d.getTime() < t.getTime();
+  };
+
   const isWithinDays = (date: Date | null, days: number) => {
     if (!date) return false;
     const now = new Date();
@@ -1244,6 +1257,8 @@ const VSOAssistant: React.FC = () => {
       `Subject: ${subject}`,
       ``,
       `----------------------------------------`,
+      `SentBy: VSO Assistant`,
+      `Timezone: Local`,
       `CircuitIds: ${spansComma}`,
       `Diversity: ${diversityStr}`,
       `StartDatetime: ${startList.join(', ')}`,
@@ -1285,6 +1300,30 @@ const VSOAssistant: React.FC = () => {
     if (!(impactExpected === true || impactExpected === false)) errors.impactExpected = "Required";
     if (!maintenanceReason?.trim()) errors.maintenanceReason = "Required";
     if (!cc?.trim()) errors.cc = "Required";
+    // Additional checks: dates not in past and end after start
+    if (startDate && isPastDay(startDate)) {
+      errors.startDate = 'Start date cannot be in the past';
+    }
+    if (endDate && isPastDay(endDate)) {
+      errors.endDate = 'End date cannot be in the past';
+    }
+    // Primary window ordering
+    const primaryStart = parseTimeToDate(startDate, startTime);
+    const primaryEnd = parseTimeToDate(endDate, endTime);
+    if (primaryStart && primaryEnd && primaryEnd.getTime() <= primaryStart.getTime()) {
+      errors.endTime = 'End must be after start';
+    }
+    // Additional windows ordering
+    for (let i = 0; i < (additionalWindows || []).length; i++) {
+      const w = additionalWindows[i];
+      const s = parseTimeToDate(w.startDate, w.startTime);
+      const e = parseTimeToDate(w.endDate || w.startDate, w.endTime);
+      if (s && e && e.getTime() <= s.getTime()) {
+        errors.endTime = 'End must be after start';
+        break;
+      }
+    }
+
     setFieldErrors(errors);
 
     // Decide first invalid field in desired order
@@ -1336,12 +1375,25 @@ const VSOAssistant: React.FC = () => {
       try {
         if (r && r.current) {
           // Try to focus the control; many Fluent controls expose focus() via componentRef
-          if (typeof r.current.focus === 'function') r.current.focus();
+          if (typeof r.current.focus === 'function') {
+            try { r.current.focus(); } catch (e) { /* ignore */ }
+          }
+          // Try to select text where possible (TextField exposes inputElement)
+          try {
+            if (r.current.inputElement && typeof r.current.inputElement.select === 'function') {
+              r.current.inputElement.select();
+            } else if (r.current.refs && r.current.refs.input && typeof r.current.refs.input.select === 'function') {
+              r.current.refs.input.select();
+            }
+          } catch (e) { /* ignore */ }
+
           // If the componentRef wraps the native input, try to scroll into view
-          if (r.current && typeof r.current.scrollIntoView === 'function') {
+          if (typeof r.current.scrollIntoView === 'function') {
             r.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          } else if (r.current && r.current.rootElement && typeof r.current.rootElement.scrollIntoView === 'function') {
+          } else if (r.current.rootElement && typeof r.current.rootElement.scrollIntoView === 'function') {
             r.current.rootElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          } else if (r.current.domElement && typeof r.current.domElement.scrollIntoView === 'function') {
+            r.current.domElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
           } else {
             // fallback: scroll to top
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1351,6 +1403,14 @@ const VSOAssistant: React.FC = () => {
         }
       } catch (e) {
         window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      // Show a concise dialog explaining the required field
+      try {
+        const friendly = friendlyFieldNames[firstInvalid] || firstInvalid;
+        setFieldErrorMessageDialog(`${friendly} is required. Please complete this field.`);
+        setShowFieldErrorDialog(true);
+      } catch (e) {
+        // ignore
       }
       return;
     }
@@ -1390,10 +1450,10 @@ const VSOAssistant: React.FC = () => {
         ImpactExpected: impactExpected ? "True" : "False",
       };
 
-      const resp = await fetch(EMAIL_LOGIC_APP_URL, {
+      const resp = await fetch("/api/LogicAppProxy", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ type: "VSO", ...payload }),
       });
 
       if (!resp.ok) {
@@ -1521,6 +1581,19 @@ const VSOAssistant: React.FC = () => {
     return 'warning';
   };
 
+  // Helper to compute display text for datacenter combo boxes so typed/selected
+  // values persist across tabs. Prefer the pending typed text, then the
+  // combo's own selected key, then fall back to the opposite side's text.
+  const dcTextFor = (key?: string) => {
+    if (!key) return '';
+    const opt = datacenterOptions.find(d => String(d.key) === String(key));
+    return opt?.text?.toString() || String(key) || '';
+  };
+
+  const azText = dcSearch || (facilityCodeA ? dcTextFor(facilityCodeA) : (facilityCodeZ ? dcTextFor(facilityCodeZ) : ''));
+  const facilityText = dcSearch || (facilityCodeA ? dcTextFor(facilityCodeA) : (facilityCodeZ ? dcTextFor(facilityCodeZ) : ''));
+  const zaText = dcSearchZ || (facilityCodeZ ? dcTextFor(facilityCodeZ) : (facilityCodeA ? dcTextFor(facilityCodeA) : ''));
+
   return (
     <div className="main-content fade-in">
   {/* Increased container width (~30%) to allow more horizontal room for table/content */}
@@ -1577,6 +1650,7 @@ const VSOAssistant: React.FC = () => {
                   placeholder="Type or select Facility Code A"
                   options={filteredDcOptions}
                   selectedKey={facilityCodeA || undefined}
+                  text={azText}
                   allowFreeform={true}
                   autoComplete="on"
                   useComboBoxAsMenuWidth
@@ -1594,9 +1668,9 @@ const VSOAssistant: React.FC = () => {
                     if (option) {
                       const selectedKey = option.key?.toString() ?? "";
                       if (selectedKey === "") { setFacilityCodeA(""); return; }
-                      if (selectedKey === facilityCodeA) { setFacilityCodeA(""); }
-                      else { setFacilityCodeA(selectedKey); setFacilityCodeZ(""); setSpliceRackZ(undefined); }
-                    } else if (found) { setFacilityCodeA(found.key.toString()); setFacilityCodeZ(""); setSpliceRackZ(undefined); }
+                      if (selectedKey === facilityCodeA) { setFacilityCodeA(""); setDcSearch(""); }
+                      else { setFacilityCodeA(selectedKey); setDcSearch(option.text?.toString() || selectedKey); }
+                    } else if (found) { setFacilityCodeA(found.key.toString()); }
                     else setFacilityCodeA("");
                   }}
                   onPendingValueChanged={(option, index, value) => setDcSearch(value || "")}
@@ -1629,7 +1703,7 @@ const VSOAssistant: React.FC = () => {
                   <Text styles={labelStyles(13, 700)}>Splice Rack A <span className="optional-text">(Optional)</span></Text>
                   <TextField
                     placeholder="e.g. AM111"
-                    onChange={(_, value) => { const v = value || undefined; setSpliceRackA(v); if (v) { setSpliceRackZ(undefined); setFacilityCodeZ(""); } }}
+                    onChange={(_, value) => { const v = value || undefined; setSpliceRackA(v); }}
                     styles={textFieldStyles}
                     disabled={!!spliceRackZ}
                   />
@@ -1652,6 +1726,7 @@ const VSOAssistant: React.FC = () => {
                   placeholder="Type or select Facility Code"
                   options={filteredDcOptions}
                   selectedKey={facilityCodeA || undefined}
+                  text={facilityText}
                   allowFreeform={true}
                   autoComplete="on"
                   useComboBoxAsMenuWidth
@@ -1669,9 +1744,9 @@ const VSOAssistant: React.FC = () => {
                     if (option) {
                       const selectedKey = option.key?.toString() ?? "";
                       if (selectedKey === "") { setFacilityCodeA(""); return; }
-                      if (selectedKey === facilityCodeA) { setFacilityCodeA(""); }
-                      else { setFacilityCodeA(selectedKey); setFacilityCodeZ(""); }
-                    } else if (found) { setFacilityCodeA(found.key.toString()); setFacilityCodeZ(""); }
+                      if (selectedKey === facilityCodeA) { setFacilityCodeA(""); setDcSearch(""); }
+                      else { setFacilityCodeA(selectedKey); setDcSearch(option.text?.toString() || selectedKey); }
+                    } else if (found) { setFacilityCodeA(found.key.toString()); }
                     else setFacilityCodeA("");
                   }}
                   onPendingValueChanged={(option, index, value) => setDcSearch(value || "")}
@@ -1703,7 +1778,7 @@ const VSOAssistant: React.FC = () => {
                 <div style={{ display: 'flex', gap: 12, marginTop: 12 }}>
                   <div style={{ flex: 1 }}>
                     <Text styles={labelStyles(13, 700, 6)}>Splice Rack <span className="optional-text">(Optional)</span></Text>
-                    <TextField placeholder="e.g. AM111" value={spliceRackA || ''} onChange={(_, v) => { const val = v || undefined; setSpliceRackA(val); if (val) { setSpliceRackZ(undefined); setFacilityCodeZ(""); } }} styles={textFieldStyles} />
+                    <TextField placeholder="e.g. AM111" value={spliceRackA || ''} onChange={(_, v) => { const val = v || undefined; setSpliceRackA(val); }} styles={textFieldStyles} />
                   </div>
                 </div>
               </div>
@@ -1722,6 +1797,7 @@ const VSOAssistant: React.FC = () => {
                   placeholder="Type or select Facility Code Z"
                   options={filteredDcOptionsZ}
                   selectedKey={facilityCodeZ || undefined}
+                  text={zaText}
                   allowFreeform={true}
                   autoComplete="on"
                   useComboBoxAsMenuWidth
@@ -1739,9 +1815,9 @@ const VSOAssistant: React.FC = () => {
                     if (option) {
                       const selectedKey = option.key?.toString() ?? "";
                       if (selectedKey === "") { setFacilityCodeZ(""); return; }
-                      if (selectedKey === facilityCodeZ) { setFacilityCodeZ(""); }
-                      else { setFacilityCodeZ(selectedKey); setFacilityCodeA(""); setSpliceRackA(undefined); }
-                    } else if (found) { setFacilityCodeZ(found.key.toString()); setFacilityCodeA(""); setSpliceRackA(undefined); }
+                      if (selectedKey === facilityCodeZ) { setFacilityCodeZ(""); setDcSearchZ(""); }
+                      else { setFacilityCodeZ(selectedKey); setDcSearchZ(option.text?.toString() || selectedKey); }
+                    } else if (found) { setFacilityCodeZ(found.key.toString()); }
                     else setFacilityCodeZ("");
                   }}
                   onPendingValueChanged={(option, index, value) => setDcSearchZ(value || "")}
@@ -1772,7 +1848,7 @@ const VSOAssistant: React.FC = () => {
 
                 <div style={{ marginTop: 8 }}>
                   <Text styles={labelStyles(13, 700)}>Splice Rack Z <span className="optional-text">(Optional)</span></Text>
-                  <TextField placeholder="e.g. AJ1508" onChange={(_, value) => { const v = value || undefined; setSpliceRackZ(v); if (v) { setSpliceRackA(undefined); setFacilityCodeA(""); } }} styles={textFieldStyles} disabled={!!spliceRackA} />
+                  <TextField placeholder="e.g. AJ1508" onChange={(_, value) => { const v = value || undefined; setSpliceRackZ(v); }} styles={textFieldStyles} disabled={!!spliceRackA} />
                 </div>
               </div>
             )}
@@ -1850,9 +1926,8 @@ const VSOAssistant: React.FC = () => {
                           setIsDecomMode(true);
                           setShowAll(true); // show all decom'd spans
                           try {
-                            const logicAppUrl = "https://fibertools-dsavavdcfdgnh2cm.westeurope-01.azurewebsites.net:443/api/VSO/triggers/When_an_HTTP_request_is_received/invoke?api-version=2022-05-01&sp=%2Ftriggers%2FWhen_an_HTTP_request_is_received%2Frun&sv=1.0&sig=6ViXNM-TmW5F7Qd9_e4fz3IhRNqmNzKwovWvcmuNJto";
                             const payload = { Stage: "10", Country: country };
-                            const resp = await fetch(logicAppUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                            const resp = await fetch("/api/LogicAppProxy", { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: "VSO", ...payload }) });
                             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
                             const data: LogicAppResponse = await resp.json();
                             const spans = Array.isArray(data?.Spans) ? data.Spans : (data?.Spans ? [data.Spans] : []);
@@ -2119,10 +2194,11 @@ const VSOAssistant: React.FC = () => {
                       e.stopPropagation();
                       try {
                         const q = encodeURIComponent(String(row.SpanID || ''));
-                        navigate(`/fiber-span-utilization?spans=${q}`);
+                        const url = `${window.location.origin}/fiber-span-utilization?spans=${q}`;
+                        window.open(url, '_blank');
                       } catch (err) {
-                        // fallback: open route without params
-                        navigate('/fiber-span-utilization');
+                        // fallback: open route without params in new tab
+                        try { window.open(`${window.location.origin}/fiber-span-utilization`, '_blank'); } catch { /* ignore */ }
                       }
                     }}
                     onKeyDown={(e: React.KeyboardEvent) => {
@@ -2131,9 +2207,10 @@ const VSOAssistant: React.FC = () => {
                         e.stopPropagation();
                         try {
                           const q = encodeURIComponent(String(row.SpanID || ''));
-                          navigate(`/fiber-span-utilization?spans=${q}`);
+                          const url = `${window.location.origin}/fiber-span-utilization?spans=${q}`;
+                          window.open(url, '_blank');
                         } catch (err) {
-                          navigate('/fiber-span-utilization');
+                          try { window.open(`${window.location.origin}/fiber-span-utilization`, '_blank'); } catch { /* ignore */ }
                         }
                       }
                     }}
@@ -2398,10 +2475,11 @@ const VSOAssistant: React.FC = () => {
                       onClick={() => {
                         try {
                           const q = encodeURIComponent(selectedSpans.join(','));
-                          navigate(`/fiber-span-utilization?spans=${q}`);
+                          const url = `${window.location.origin}/fiber-span-utilization?spans=${q}`;
+                          window.open(url, '_blank');
                         } catch (e) {
-                          // fallback: open without params
-                          navigate('/fiber-span-utilization');
+                          // fallback: open without params in new tab
+                          try { window.open(`${window.location.origin}/fiber-span-utilization`, '_blank'); } catch { /* ignore */ }
                         }
                       }}
                       styles={{ root: { backgroundColor: selectedSpans.length > 20 ? undefined : '#6a00ff', borderColor: '#5a00e6', height: 36, borderRadius: 6, color: '#fff' } }}
@@ -2475,6 +2553,22 @@ const VSOAssistant: React.FC = () => {
                   text="Cancel"
                   onClick={() => { setShowEmergencyDialog(false); setStartWarning(null); setPendingEmergency(false); }}
                 />
+              </DialogFooter>
+            </Dialog>
+
+            <Dialog
+              hidden={!showFieldErrorDialog}
+              className="dialog-field-error"
+              onDismiss={() => { setShowFieldErrorDialog(false); setFieldErrorMessageDialog(null); }}
+              dialogContentProps={{
+                type: DialogType.normal,
+                title: 'Invalid Selection',
+                subText: fieldErrorMessageDialog || 'Selected value is invalid. Please correct and try again.'
+              }}
+              modalProps={{ isBlocking: false }}
+            >
+              <DialogFooter>
+                <PrimaryButton text="OK" onClick={() => { setShowFieldErrorDialog(false); setFieldErrorMessageDialog(null); }} />
               </DialogFooter>
             </Dialog>
 
@@ -2559,8 +2653,15 @@ const VSOAssistant: React.FC = () => {
                         componentRef={startDateRef}
                         placeholder="Select start date"
                         value={startDate || undefined}
+                        minDate={new Date()}
                         onSelectDate={(d) => {
                           const selected = d || null;
+                          // Prevent past-day selection (and show popup)
+                          if (isPastDay(selected)) {
+                            setFieldErrorMessageDialog("Selected Start Date is in the past. Please choose today or a future date.");
+                            setShowFieldErrorDialog(true);
+                            return;
+                          }
                           setStartDate(selected);
                           if (isWithinDays(selected, 7)) {
                             setStartWarning(
@@ -2590,7 +2691,21 @@ const VSOAssistant: React.FC = () => {
                         componentRef={startTimeRef}
                         options={timeOptions}
                         selectedKey={startTime}
-                        onChange={(_, opt) => opt && setStartTime(opt.key.toString())}
+                        onChange={(_, opt) => {
+                          if (!opt) return;
+                          const next = opt.key.toString();
+                          setStartTime(next);
+                          // If end is already selected, ensure end > new start
+                          const sDT = parseTimeToDate(startDate, next);
+                          const eDT = parseTimeToDate(endDate, endTime);
+                          if (sDT && eDT && eDT.getTime() <= sDT.getTime()) {
+                            setFieldErrors((prev) => ({ ...prev, endTime: 'End must be after start' }));
+                            setFieldErrorMessageDialog('End date/time must be after start date/time.');
+                            setShowFieldErrorDialog(true);
+                          } else {
+                            setFieldErrors((prev) => { const copy = { ...prev }; delete copy.endTime; return copy; });
+                          }
+                        }}
                         styles={timeDropdownStyles}
                         required
                         errorMessage={showValidation ? fieldErrors.startTime : undefined}
@@ -2603,7 +2718,26 @@ const VSOAssistant: React.FC = () => {
                         componentRef={endDateRef}
                         placeholder="Select end date"
                         value={endDate || undefined}
-                        onSelectDate={(d) => setEndDate(d || null)}
+                        minDate={new Date()}
+                        onSelectDate={(d) => {
+                          const selected = d || null;
+                          if (isPastDay(selected)) {
+                            setFieldErrorMessageDialog("Selected End Date is in the past. Please choose today or a future date.");
+                            setShowFieldErrorDialog(true);
+                            return;
+                          }
+                          setEndDate(selected || null);
+                          // If both dates present, ensure end (date+time) > start (date+time)
+                          const sDT = parseTimeToDate(startDate, startTime);
+                          const eDT = parseTimeToDate(selected, endTime);
+                          if (sDT && eDT && eDT.getTime() <= sDT.getTime()) {
+                            setFieldErrors((prev) => ({ ...prev, endTime: 'End must be after start' }));
+                            setFieldErrorMessageDialog('End date/time must be after start date/time.');
+                            setShowFieldErrorDialog(true);
+                          } else {
+                            setFieldErrors((prev) => { const copy = { ...prev }; delete copy.endTime; return copy; });
+                          }
+                        }}
                         styles={datePickerStyles}
                         isRequired
                         aria-label="End Date"
@@ -2619,7 +2753,22 @@ const VSOAssistant: React.FC = () => {
                         componentRef={endTimeRef}
                         options={timeOptions}
                         selectedKey={endTime}
-                        onChange={(_, opt) => opt && setEndTime(opt.key.toString())}
+                        onChange={(_, opt) => {
+                          if (!opt) return;
+                          const next = opt.key.toString();
+                          // If start date/time known, validate ordering
+                          const sDT = parseTimeToDate(startDate, startTime);
+                          const eDT = parseTimeToDate(endDate || startDate, next);
+                          if (sDT && eDT && eDT.getTime() <= sDT.getTime()) {
+                            setFieldErrors((prev) => ({ ...prev, endTime: 'End must be after start' }));
+                            setFieldErrorMessageDialog('End date/time must be after start date/time.');
+                            setShowFieldErrorDialog(true);
+                            setEndTime(next);
+                            return;
+                          }
+                          setFieldErrors((prev) => { const copy = { ...prev }; delete copy.endTime; return copy; });
+                          setEndTime(next);
+                        }}
                         styles={timeDropdownStyles}
                         required
                         errorMessage={showValidation ? fieldErrors.endTime : undefined}
@@ -2642,8 +2791,14 @@ const VSOAssistant: React.FC = () => {
                       <DatePicker
                         placeholder="Select start date"
                         value={w.startDate || undefined}
+                        minDate={new Date()}
                         onSelectDate={(d) => {
                           const selected = d || null;
+                          if (isPastDay(selected)) {
+                            setFieldErrorMessageDialog("Selected Start Date is in the past. Please choose today or a future date.");
+                            setShowFieldErrorDialog(true);
+                            return;
+                          }
                           setAdditionalWindows((arr) => {
                             const next = [...arr];
                             next[i] = { ...next[i], startDate: selected };
@@ -2674,11 +2829,26 @@ const VSOAssistant: React.FC = () => {
                       <Dropdown
                         options={timeOptions}
                         selectedKey={w.startTime}
-                        onChange={(_, opt) => opt && setAdditionalWindows((arr) => {
-                          const next = [...arr];
-                          next[i] = { ...next[i], startTime: opt.key.toString() };
-                          return next;
-                        })}
+                        onChange={(_, opt) => {
+                          if (!opt) return;
+                          const nextTime = opt.key.toString();
+                          setAdditionalWindows((arr) => {
+                            const next = [...arr];
+                            next[i] = { ...next[i], startTime: nextTime };
+                            return next;
+                          });
+                          // Validate with end time for this window
+                          const win = additionalWindows[i];
+                          const sDT = parseTimeToDate(win?.startDate || null, nextTime);
+                          const eDT = parseTimeToDate(win?.endDate || win?.startDate || null, win?.endTime || null);
+                          if (sDT && eDT && eDT.getTime() <= sDT.getTime()) {
+                            setFieldErrors((prev) => ({ ...prev, [`additional-${i}-endTime`]: 'End must be after start' }));
+                            setFieldErrorMessageDialog('End date/time must be after start date/time for the additional window.');
+                            setShowFieldErrorDialog(true);
+                          } else {
+                            setFieldErrors((prev) => { const copy = { ...prev }; delete copy[`additional-${i}-endTime`]; return copy; });
+                          }
+                        }}
                         styles={timeDropdownStyles}
                       />
                     </div>
@@ -2687,12 +2857,29 @@ const VSOAssistant: React.FC = () => {
                       <DatePicker
                         placeholder="Select end date"
                         value={w.endDate || undefined}
+                        minDate={new Date()}
                         onSelectDate={(d) => {
+                          const selected = d || null;
+                          if (isPastDay(selected)) {
+                            setFieldErrorMessageDialog("Selected End Date is in the past. Please choose today or a future date.");
+                            setShowFieldErrorDialog(true);
+                            return;
+                          }
                           setAdditionalWindows((arr) => {
                             const next = [...arr];
-                            next[i] = { ...next[i], endDate: d || null };
+                            next[i] = { ...next[i], endDate: selected || null };
                             return next;
                           });
+                          const win = additionalWindows[i];
+                          const sDT = parseTimeToDate(win?.startDate || null, win?.startTime || null);
+                          const eDT = parseTimeToDate(selected, win?.endTime || null);
+                          if (sDT && eDT && eDT.getTime() <= sDT.getTime()) {
+                            setFieldErrors((prev) => ({ ...prev, [`additional-${i}-endTime`]: 'End must be after start' }));
+                            setFieldErrorMessageDialog('End date/time must be after start date/time for the additional window.');
+                            setShowFieldErrorDialog(true);
+                          } else {
+                            setFieldErrors((prev) => { const copy = { ...prev }; delete copy[`additional-${i}-endTime`]; return copy; });
+                          }
                         }}
                         styles={datePickerStyles}
                       />
@@ -2702,11 +2889,25 @@ const VSOAssistant: React.FC = () => {
                       <Dropdown
                         options={timeOptions}
                         selectedKey={w.endTime}
-                        onChange={(_, opt) => opt && setAdditionalWindows((arr) => {
-                          const next = [...arr];
-                          next[i] = { ...next[i], endTime: opt.key.toString() };
-                          return next;
-                        })}
+                        onChange={(_, opt) => {
+                          if (!opt) return;
+                          const nextTime = opt.key.toString();
+                          setAdditionalWindows((arr) => {
+                            const next = [...arr];
+                            next[i] = { ...next[i], endTime: nextTime };
+                            return next;
+                          });
+                          const win = additionalWindows[i];
+                          const sDT = parseTimeToDate(win?.startDate || null, win?.startTime || null);
+                          const eDT = parseTimeToDate(win?.endDate || win?.startDate || null, nextTime);
+                          if (sDT && eDT && eDT.getTime() <= sDT.getTime()) {
+                            setFieldErrors((prev) => ({ ...prev, [`additional-${i}-endTime`]: 'End must be after start' }));
+                            setFieldErrorMessageDialog('End date/time must be after start date/time for the additional window.');
+                            setShowFieldErrorDialog(true);
+                          } else {
+                            setFieldErrors((prev) => { const copy = { ...prev }; delete copy[`additional-${i}-endTime`]; return copy; });
+                          }
+                        }}
                         styles={timeDropdownStyles}
                       />
                     </div>

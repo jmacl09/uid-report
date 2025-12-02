@@ -21,27 +21,26 @@ jobs:
           submodules: true
           lfs: false
 
-      # ✅ Build React app with the API base injected, then copy the config into /build
+      # Build React app with SWA-relative API base
       - name: Build React app and copy config
         env:
-          REACT_APP_API_BASE: https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api
+          REACT_APP_API_BASE: /api
         run: |
           echo "Using API base: $REACT_APP_API_BASE"
           npm install --no-fund --no-audit
           npm run build
           cp staticwebapp.config.json build/
 
-      # ✅ Deploy to Azure Static Web Apps
       - name: Build And Deploy
         id: builddeploy
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_WONDERFUL_FLOWER_09C6DC503 }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for GitHub integrations (e.g. PR comments)
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
           action: "upload"
-          app_location: "/"        # Root of your React app
-          api_location: "src/functions"         # No serverless functions directory
-          output_location: "build" # Build output folder
+          app_location: "/"            # React app root
+          api_location: "functions"    # <--- FIXED: This now matches YOUR real folder
+          output_location: "build"     # Build output folder
 
   close_pull_request_job:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
@@ -55,7 +54,6 @@ jobs:
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_WONDERFUL_FLOWER_09C6DC503 }}
           action: "close"
-          # Inputs below are not required for 'close' but silence some IDE validators
           app_location: "/"
           api_location: ""
           output_location: "build"

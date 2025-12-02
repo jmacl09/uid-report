@@ -22,5 +22,5 @@
   },
   "include": [
     "src"
-  ]
+, "functions/LogicAppProxy", "functions/HttpTrigger1"  ]
 }

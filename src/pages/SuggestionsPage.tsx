@@ -15,15 +15,17 @@ type Suggestion = {
 
 const SUGGESTIONS_KEY = "uidSuggestions";
 
-// API endpoint for server-side function (HttpTrigger1). Prefer REACT_APP_API_TRIGGER_URL when built.
-const API_TRIGGER_URL = (process.env.REACT_APP_API_TRIGGER_URL as string) || (window as any).REACT_APP_API_TRIGGER_URL || '/api/HttpTrigger1';
-// Variable name requested: TABLES_TABLE_NAME_SUGGESTIONS. Use env var when present; default to the provided name 'Sugestions'.
-const TABLES_TABLE_NAME_SUGGESTIONS = (process.env.REACT_APP_TABLES_TABLE_NAME_SUGGESTIONS as string) || (process.env as any).TABLES_TABLE_NAME_SUGGESTIONS || (window as any).TABLES_TABLE_NAME_SUGGESTIONS || "Sugestions";
+// API endpoint for server-side function (HttpTrigger1)
+const API_TRIGGER_URL =
+  (process.env.REACT_APP_API_TRIGGER_URL as string) ||
+  (window as any).REACT_APP_API_TRIGGER_URL ||
+  "/api/HttpTrigger1";
 
-// Helper to build a table endpoint URL. If account URL includes a query (SAS token), additional
-// query params will be appended using '&', otherwise start with '?'.
-// We use the server-side function `HttpTrigger1` for table operations,
-// so no direct table URL builder is necessary in the client.
+// Table name used by HttpTrigger1 via chooseTable logic
+const TABLES_TABLE_NAME_SUGGESTIONS =
+  (process.env.REACT_APP_TABLES_TABLE_NAME_SUGGESTIONS as string) ||
+  (window as any).TABLES_TABLE_NAME_SUGGESTIONS ||
+  "Suggestions";
 
 const typeOptions: IDropdownOption[] = [
   { key: "Feature", text: "Feature" },
@@ -40,14 +42,12 @@ function getEmail(): string {
 
 function getAlias(email?: string | null) {
   const e = (email || "").trim();
-  if (!e) return "";
   const at = e.indexOf("@");
   return at > 0 ? e.slice(0, at) : e;
 }
 
 const SuggestionsPage: React.FC = () => {
   const [items, setItems] = useState<Suggestion[]>([]);
-  // loading/error are only used to set state; we don't read them in the UI so avoid unused-var by omitting the read-side
   const [, setLoading] = useState<boolean>(false);
   const [, setError] = useState<string | null>(null);
 
@@ -56,157 +56,140 @@ const SuggestionsPage: React.FC = () => {
   const [description, setDescription] = useState<string>("");
   const [anonymous, setAnonymous] = useState<boolean>(false);
 
-  // Persist locally as a lightweight fallback, but primary source is Table Storage.
+  // Persist locally as fallback
   useEffect(() => {
     try { localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(items)); } catch {}
   }, [items]);
 
-  // Load suggestions from Azure Table Storage on mount. Falls back to localStorage when
-  // Table configuration is not available or request fails.
+  // Load suggestions from Table Storage via HttpTrigger1
   useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoading(true);
       setError(null);
-      try {
-        // Use the server-side function to load suggestions. Provide uid to namespace suggestions
-        // and tableName to target the 'Sugestions' table in the function's chooseTable logic.
-        const tableName = TABLES_TABLE_NAME_SUGGESTIONS || 'Sugestions';
-        const url = `${API_TRIGGER_URL}?uid=suggestions&tableName=${encodeURIComponent(tableName)}`;
-        const headers: Record<string,string> = { 'Accept': 'application/json' };
 
-        let fetchedItems: Suggestion[] = [];
-        try {
-          // eslint-disable-next-line no-console
-          console.debug('[Suggestions] GET via function', url);
-          const res = await fetch(url, { method: 'GET', headers, credentials: 'same-origin' });
-          if (!res.ok) throw new Error(`Function GET failed ${res.status}`);
-          const body = await res.json();
-          const entities = Array.isArray(body?.items) ? body.items : [];
-          fetchedItems = entities.map((e: any) => {
-            const id = e.rowKey || e.RowKey || `${e.savedAt || Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-            const ts = (() => {
-              const d = e.savedAt || e.SavedAt || e.Timestamp || e.timestamp || e.rowKey || e.RowKey;
-              const parsed = Date.parse(d || '');
-              return Number.isNaN(parsed) ? (e.ts || Date.now()) : parsed;
-            })();
-            return {
-              id: String(id),
-              ts: ts,
-              type: e.category || e.Category || e.type || 'Other',
-              summary: e.title || e.Title || e.description?.slice?.(0,80) || e.description || '',
-              description: e.description || e.Description || '',
-              anonymous: !!e.anonymous,
-              authorEmail: e.owner || e.Owner || undefined,
-              authorAlias: e.authorAlias || e.author || undefined,
-            } as Suggestion;
-          });
-        } catch (fnErr) {
-          // Fallback to localStorage if function call fails
-          // eslint-disable-next-line no-console
-          console.warn('[Suggestions] Function GET failed, falling back to localStorage', fnErr);
-          const raw = localStorage.getItem(SUGGESTIONS_KEY);
-          const arr = raw ? JSON.parse(raw) : [];
-          fetchedItems = Array.isArray(arr) ? arr : [];
-          if (!cancelled) setError(String((fnErr as any)?.message || fnErr));
-        }
+      const tableName = TABLES_TABLE_NAME_SUGGESTIONS;
+      const url = `${API_TRIGGER_URL}?uid=suggestions&tableName=${encodeURIComponent(tableName)}`;
+
+      try {
+        const res = await fetch(url, {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          credentials: "same-origin",
+        });
+
+        if (!res.ok) throw new Error(`Function GET failed ${res.status}`);
+
+        const body = await res.json();
+        const entities = Array.isArray(body?.items) ? body.items : [];
+
+        const mapped = entities.map((e: any) => {
+          const rowKey = e.rowKey || e.RowKey || e.savedAt || Date.now();
+          const tsParsed = Date.parse(
+            e.savedAt || e.Timestamp || e.timestamp || e.rowKey || ""
+          );
+          const ts = Number.isNaN(tsParsed) ? Date.now() : tsParsed;
+
+          return {
+            id: String(rowKey),
+            ts,
+            type: e.category || e.Category || e.type || "Other",
+            summary: e.title || e.Title || e.description || "",
+            description: e.description || e.Description || "",
+            anonymous: !!e.anonymous,
+            authorEmail: e.owner || e.Owner || undefined,
+            authorAlias: e.authorAlias || e.author || undefined,
+          } as Suggestion;
+        });
 
         if (!cancelled) {
-          // Sort newest first by ts
-          fetchedItems.sort((a,b) => (b.ts||0) - (a.ts||0));
-          setItems(fetchedItems);
+          mapped.sort((a: Suggestion, b: Suggestion) => b.ts - a.ts);
+          setItems(mapped);
         }
-      } catch (e: any) {
-        // Top-level failure: fall back to localStorage
-  // eslint-disable-next-line no-console
-  console.error('[Suggestions] Load failed', e);
-        try {
-          const raw = localStorage.getItem(SUGGESTIONS_KEY);
-          const arr = raw ? JSON.parse(raw) : [];
-          if (!cancelled) setItems(Array.isArray(arr) ? arr : []);
-        } catch { /* ignore */ }
-  if (!cancelled) setError(String((e as any)?.message || e));
+      } catch (err) {
+        // fallback to localStorage
+        const raw = localStorage.getItem(SUGGESTIONS_KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        if (!cancelled) {
+          setItems(Array.isArray(arr) ? arr : []);
+          setError(String((err as any)?.message || err));
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
-    void load();
+
+    load();
     return () => { cancelled = true; };
   }, []);
 
   const email = getEmail();
   const alias = getAlias(email);
 
+  // Submit a new suggestion
   const submit = () => {
     const s = summary.trim();
     const d = description.trim();
     if (!s || !d) return;
-    // Build entity for Azure Table Storage
-    const nowIso = new Date().toISOString();
-    const rowKey = nowIso;
-  const tableName = TABLES_TABLE_NAME_SUGGESTIONS || 'Sugestions';
-    // `entity` structure prepared for Table Storage (not used directly client-side); kept here as documentation of server shape
 
-    // Optimistically update UI while we POST. If POST fails, we keep local copy
+    const nowIso = new Date().toISOString();
+    const tableName = TABLES_TABLE_NAME_SUGGESTIONS;
+
+    // Optimistic update
     const optimistic: Suggestion = {
-      id: rowKey,
+      id: nowIso,
       ts: Date.parse(nowIso),
       type,
       summary: s,
       description: d,
       anonymous,
-      authorEmail: anonymous ? undefined : (email || undefined),
-      authorAlias: anonymous ? undefined : (alias || undefined),
+      authorEmail: anonymous ? undefined : email,
+      authorAlias: anonymous ? undefined : alias,
     };
+
     setItems([optimistic, ...items]);
     setSummary("");
     setDescription("");
     setAnonymous(false);
 
-    // Send suggestion to the server-side function (HttpTrigger1). The function will persist
-    // to the configured table server-side. We provide uid='suggestions' so entries are namespaced.
+    // Save to table storage via HttpTrigger1
     (async () => {
       try {
         const payload = {
-          uid: 'suggestions',
+          uid: "suggestions",
           category: type,
           title: s,
           description: d,
-          owner: anonymous ? undefined : (email || 'Unknown'),
+          owner: anonymous ? undefined : email,
           timestamp: nowIso,
-          rowKey: rowKey,
-          tableName: tableName,
-        } as any;
-
-        const url = API_TRIGGER_URL;
-        const headers: Record<string,string> = {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json'
+          rowKey: nowIso,
+          tableName,
         };
-        // eslint-disable-next-line no-console
-        console.debug('[Suggestions] POST via function', url, payload);
-        const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload), credentials: 'same-origin' });
+
+        const res = await fetch(API_TRIGGER_URL, {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          credentials: "same-origin",
+          body: JSON.stringify(payload),
+        });
+
         if (!res.ok) {
-          // eslint-disable-next-line no-console
-          console.warn('[Suggestions] Function POST failed', res.status, await res.text());
-          if (!anonymous) setError(`Save failed: ${res.status}`);
-        } else {
-          try {
-            const body = await res.json().catch(() => null);
-            // eslint-disable-next-line no-console
-            console.debug('[Suggestions] Function POST succeeded', body);
-          } catch {}
+          setError(`Save failed: ${res.status}`);
         }
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.warn('[Suggestions] Function POST error', err);
-        if (!anonymous) setError(String((err as any)?.message || err));
+        setError(String((err as any)?.message || err));
       }
     })();
   };
 
   const [expanded, setExpanded] = useState<string | null>(null);
-  const sorted = useMemo(() => [...items].sort((a, b) => b.ts - a.ts), [items]);
+  const sorted = useMemo(
+    () => [...items].sort((a: Suggestion, b: Suggestion) => b.ts - a.ts),
+    [items]
+  );
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
@@ -224,9 +207,9 @@ const SuggestionsPage: React.FC = () => {
                 options={typeOptions}
                 selectedKey={type}
                 onChange={(_, opt) => setType(String(opt?.key || "Improvement"))}
-                styles={{ dropdown: { width: 220 } }}
               />
             </div>
+
             <div style={{ flex: 1 }}>
               <TextField
                 label="Name / short summary"
@@ -236,8 +219,20 @@ const SuggestionsPage: React.FC = () => {
               />
             </div>
           </div>
-          <div style={{ width: '100%' }}>
-            <label style={{ color: 'var(--vso-label-color)', fontWeight: 600, fontSize: 14, marginBottom: 6, display: 'block' }}>Description</label>
+
+          <div style={{ width: "100%" }}>
+            <label
+              style={{
+                color: "var(--vso-label-color)",
+                fontWeight: 600,
+                fontSize: 14,
+                marginBottom: 6,
+                display: "block",
+              }}
+            >
+              Description
+            </label>
+
             <TextField
               placeholder="Describe the idea, why it helps, and any details"
               multiline
@@ -246,29 +241,19 @@ const SuggestionsPage: React.FC = () => {
               onChange={(_, v) => setDescription(v || "")}
             />
           </div>
+
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <Checkbox
               label="Post anonymously"
               checked={anonymous}
               onChange={(_, c) => setAnonymous(!!c)}
-              styles={(props) => ({
-                root: { display: 'flex', alignItems: 'center' },
-                label: { color: 'var(--vso-label-color)', fontWeight: 600, fontSize: 13 },
-                checkbox: {
-                  borderColor: 'var(--vso-label-color)',
-                  background: '#ffffff',
-                  selectors: {
-                    '&.is-checked': {
-                      background: 'var(--vso-label-color)',
-                      borderColor: 'var(--vso-label-color)'
-                    }
-                  }
-                },
-                checkmark: { color: '#ffffff', fontWeight: 700 },
-                text: { color: 'var(--vso-label-color)', fontWeight: 600 }
-              })}
             />
-            <PrimaryButton text="Submit suggestion" onClick={submit} disabled={!summary.trim() || !description.trim()} className="search-btn" />
+
+            <PrimaryButton
+              text="Submit suggestion"
+              disabled={!summary.trim() || !description.trim()}
+              onClick={submit}
+            />
           </div>
         </div>
       </div>
@@ -288,11 +273,31 @@ const SuggestionsPage: React.FC = () => {
               return (
                 <div key={s.id} className="note-item">
                   <div className="note-header" style={{ alignItems: "center" }}>
-                    <div className="note-meta" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span className="wf-inprogress-badge" style={{ color: "#50b3ff", border: "1px solid rgba(80,179,255,0.28)", borderRadius: 8, padding: "2px 8px", fontWeight: 700, fontSize: 12 }}>{s.type}</span>
-                      <span className="note-alias" style={{ color: "#e6f1ff" }}>{s.summary}</span>
+                    <div
+                      className="note-meta"
+                      style={{ display: "flex", alignItems: "center", gap: 8 }}
+                    >
+                      <span
+                        className="wf-inprogress-badge"
+                        style={{
+                          color: "#50b3ff",
+                          border: "1px solid rgba(80,179,255,0.28)",
+                          borderRadius: 8,
+                          padding: "2px 8px",
+                          fontWeight: 700,
+                          fontSize: 12,
+                        }}
+                      >
+                        {s.type}
+                      </span>
+
+                      <span className="note-alias" style={{ color: "#e6f1ff" }}>
+                        {s.summary}
+                      </span>
+
                       <span className="note-dot">·</span>
                       <span className="note-time">{new Date(s.ts).toLocaleString()}</span>
+
                       {!s.anonymous && (s.authorAlias || s.authorEmail) && (
                         <>
                           <span className="note-dot">·</span>
@@ -300,15 +305,23 @@ const SuggestionsPage: React.FC = () => {
                         </>
                       )}
                     </div>
+
                     <div className="note-controls">
-                      <button className="note-btn" onClick={() => setExpanded(open ? null : s.id)} title={open ? "Collapse" : "Expand"}>
+                      <button
+                        className="note-btn"
+                        onClick={() => setExpanded(open ? null : s.id)}
+                        title={open ? "Collapse" : "Expand"}
+                      >
                         {open ? "Hide" : "Show"}
                       </button>
                     </div>
                   </div>
+
                   {open && (
                     <div className="note-body">
-                      <div className="note-text" style={{ whiteSpace: "pre-wrap" }}>{s.description}</div>
+                      <div className="note-text" style={{ whiteSpace: "pre-wrap" }}>
+                        {s.description}
+                      </div>
                     </div>
                   )}
                 </div>

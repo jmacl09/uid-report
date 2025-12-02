@@ -2,6 +2,9 @@
   "name": "optical360-functions",
   "version": "1.0.0",
   "description": "Azure Functions backend for Optical360",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "func start",
     "test": "echo \"No tests configured\""

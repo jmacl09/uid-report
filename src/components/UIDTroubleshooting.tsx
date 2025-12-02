@@ -4,23 +4,34 @@ import { saveToStorage, SaveError } from "../api/saveToStorage";
 
 interface Props {
   uid: string;
+  /** Optional LinkKey to associate this entry with a specific link row */
+  linkKey?: string;
 }
 
-const UIDTroubleshooting: React.FC<Props> = ({ uid }) => {
+const UIDTroubleshooting: React.FC<Props> = ({ uid, linkKey }) => {
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [description, setDescription] = useState<string>("");
 
   const handleSave = async () => {
     setSaving(true);
     setError(null);
     try {
+      const extras: Record<string, unknown> = {
+        TableName: "Troubleshooting",
+        tableName: "Troubleshooting",
+        targetTable: "Troubleshooting",
+      };
+      if (linkKey) extras.LinkKey = linkKey;
+
       const result = await saveToStorage({
         category: "Troubleshooting",
         uid,
-        title: "Fiber flap investigation",
-        description: "Investigating intermittent LOS alarms on span RE-0083",
-        owner: "Josh Maclean",
+        title: "Troubleshooting Entry",
+        description: description || "",
+        owner: "Unknown",
+        extras,
       });
 
       // Parse the saved entity (rowKey, timestamp, etc.)
@@ -58,6 +69,21 @@ const UIDTroubleshooting: React.FC<Props> = ({ uid }) => {
         maxWidth: 380,
       }}
     >
+      <textarea
+        placeholder="Enter troubleshooting notes for this UID (or optional LinkKey mapping)..."
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        rows={4}
+        style={{
+          width: "100%",
+          padding: "6px 8px",
+          borderRadius: 4,
+          border: '1px solid rgba(166,183,198,0.10)',
+          background: 'transparent',
+          color: '#d0e7ff',
+        }}
+      />
+
       <button
         onClick={handleSave}
         disabled={saving}
@@ -67,7 +93,7 @@ const UIDTroubleshooting: React.FC<Props> = ({ uid }) => {
           cursor: saving ? "not-allowed" : "pointer",
         }}
       >
-        {saving ? "Saving..." : "Save Troubleshooting (example)"}
+        {saving ? "Saving..." : "Save Troubleshooting"}
       </button>
 
       {lastSaved && !error && (

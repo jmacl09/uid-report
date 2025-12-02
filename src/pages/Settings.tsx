@@ -8,7 +8,19 @@ const themeOptions: IDropdownOption[] = [
 ];
 
 const SettingsPage: React.FC = () => {
-  const [theme, setTheme] = useState<string>(localStorage.getItem('appTheme') || 'dark');
+  const [email, setEmail] = useState<string>(() => {
+    try { return localStorage.getItem('loggedInEmail') || ''; } catch { return ''; }
+  });
+
+  const themeKeyFor = (e?: string) => (e && e.trim() ? `appTheme_${e}` : 'appTheme');
+
+  const [theme, setTheme] = useState<string>(() => {
+    try {
+      const e = localStorage.getItem('loggedInEmail') || '';
+      const key = themeKeyFor(e);
+      return localStorage.getItem(key) || localStorage.getItem('appTheme') || 'dark';
+    } catch { return 'dark'; }
+  });
 
   useEffect(() => {
     try {
@@ -17,9 +29,27 @@ const SettingsPage: React.FC = () => {
     } catch (e) {}
   }, [theme]);
 
+  useEffect(() => {
+    const handler = (ev: any) => {
+      try {
+        const newEmail = ev?.detail || localStorage.getItem('loggedInEmail') || '';
+        setEmail(newEmail);
+        const key = themeKeyFor(newEmail);
+        const t = localStorage.getItem(key) || localStorage.getItem('appTheme') || 'dark';
+        setTheme(t);
+      } catch {}
+    };
+
+    window.addEventListener('loggedInEmailChanged', handler as EventListener);
+    return () => window.removeEventListener('loggedInEmailChanged', handler as EventListener);
+  }, []);
+
   const handleThemeChange = (t: string) => {
     try {
       setTheme(t);
+      const key = themeKeyFor(email);
+      localStorage.setItem(key, t);
+      // also keep legacy key in sync
       localStorage.setItem('appTheme', t);
     } catch (e) {}
   };

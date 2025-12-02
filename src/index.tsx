@@ -4,6 +4,7 @@ import "./index.css";
 import App from "./App";
 import reportWebVitals from "./reportWebVitals";
 import { initializeIcons } from '@fluentui/react';
+import { appInsights } from './telemetry';
 // Initialize Fluent UI icons once at app startup
 initializeIcons();
 
@@ -15,7 +16,9 @@ const root = ReactDOM.createRoot(
 const applyInitialTheme = () => {
   try {
     const rootEl = document.documentElement;
-    const storedTheme = localStorage.getItem('appTheme') || 'dark';
+    const loggedInEmail = localStorage.getItem('loggedInEmail') || '';
+    const themeKey = loggedInEmail ? `appTheme_${loggedInEmail}` : 'appTheme';
+    const storedTheme = localStorage.getItem(themeKey) || localStorage.getItem('appTheme') || 'dark';
     const animations = localStorage.getItem('appAnimations');
     const compact = localStorage.getItem('appCompact');
 
@@ -33,6 +36,18 @@ const applyInitialTheme = () => {
 };
 
 applyInitialTheme();
+
+// If authentication info is present in sessionStorage, set the authenticated user context
+try {
+  const raw = sessionStorage.getItem('clientPrincipal');
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      const userId = parsed?.userId || parsed?.user_id || parsed?.user?.id || parsed?.id || parsed?.sub || null;
+      if (userId) appInsights.setAuthenticatedUserContext(String(userId));
+    } catch {}
+  }
+} catch {}
 
 root.render(
   <React.StrictMode>

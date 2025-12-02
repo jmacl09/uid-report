@@ -31,6 +31,8 @@ import VSOCalendar, { VsoCalendarEvent } from "../components/VSOCalendar";
 import { getCalendarEntries } from "../api/items";
 import { computeScopeStage } from "./utils/scope";
 import { saveToStorage } from "../api/saveToStorage";
+import useTelemetry from "../hooks/useTelemetry";
+import { apiFetch } from "../api/http";
 
 interface SpanData {
   SpanID: string;
@@ -69,6 +71,8 @@ const VSOAssistant: React.FC = () => {
   useEffect(() => {
     try { initializeIcons(); } catch {}
   }, []);
+
+  const { trackClick, trackInput, trackComponent } = useTelemetry('VSOAssistant');
   const isLightTheme = typeof document !== 'undefined' && (document.documentElement.classList.contains('light-theme') || document.body.classList.contains('light-theme'));
   const labelStyles = (size: number, weight: number, mb?: number) => ({ root: { color: isLightTheme ? 'var(--accent)' : '#ccc', fontSize: size, fontWeight: `${weight}`, marginBottom: mb ?? 0 } });
   const [facilityCodeA, setFacilityCodeA] = useState<string>("");
@@ -293,7 +297,7 @@ const VSOAssistant: React.FC = () => {
 
     const fetchUserEmail = async () => {
       try {
-        const res = await fetch("/.auth/me", { credentials: "include" });
+        const res = await apiFetch("/.auth/me", { credentials: "include" });
         if (!res.ok) return;
         const data = await res.json();
         // Handle both App Service ([identities]) and Static Web Apps ({clientPrincipal}) shapes
@@ -311,9 +315,7 @@ const VSOAssistant: React.FC = () => {
             getClaim("http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress");
           if (mail && mail.length > 3) {
             setUserEmail(mail);
-            try {
-              localStorage.setItem("loggedInEmail", mail);
-            } catch (e) {}
+            try { localStorage.setItem("loggedInEmail", mail); } catch (e) {}
             break;
           }
         }
@@ -1074,6 +1076,44 @@ const VSOAssistant: React.FC = () => {
     },
   };
 
+  // Helpers to return error-aware styles (highlight red when validation marks a field)
+  const getTextFieldStyles = (key: string) => {
+    const base: any = textFieldStyles as any;
+    const has = showValidation && !!(fieldErrors as any)[key];
+    if (!has) return base;
+    const fg = { ...(base.fieldGroup || {}) };
+    const selectors = { ...(fg.selectors || {}) };
+    fg.border = '1px solid #a80000';
+    selectors[':hover'] = { border: '1px solid #a80000' };
+    selectors[':focus'] = { border: '1px solid #a80000' };
+    fg.selectors = selectors;
+    return { ...base, fieldGroup: fg } as any;
+  };
+
+  const getDatePickerStyles = (key: string) => {
+    const base: any = datePickerStyles || {};
+    const has = showValidation && !!(fieldErrors as any)[key];
+    if (!has) return base;
+    const tg = { ...(base.textField || {}) };
+    const fg = { ...(tg.fieldGroup || {}) };
+    const selectors = { ...(fg.selectors || {}) };
+    fg.border = '1px solid #a80000';
+    selectors[':hover'] = { border: '1px solid #a80000' };
+    selectors[':focus'] = { border: '1px solid #a80000' };
+    fg.selectors = selectors;
+    tg.fieldGroup = fg;
+    return { ...base, textField: tg } as any;
+  };
+
+  const getDropdownStyles = (key: string, baseStyles: any = dropdownStyles) => {
+    const base: any = baseStyles || dropdownStyles;
+    const has = showValidation && !!(fieldErrors as any)[key];
+    if (!has) return base;
+    const t = { ...(base.title || {}) };
+    t.border = '1px solid #a80000';
+    return { ...base, title: t } as any;
+  };
+
   // Unique DC codes present in the current result set (Facility A/Z columns)
   const availableDcOptions: IDropdownOption[] = useMemo(() => {
     const set = new Set<string>();
@@ -1407,7 +1447,7 @@ const VSOAssistant: React.FC = () => {
       // Show a concise dialog explaining the required field
       try {
         const friendly = friendlyFieldNames[firstInvalid] || firstInvalid;
-        setFieldErrorMessageDialog(`${friendly} is required. Please complete this field.`);
+        setFieldErrorMessageDialog(`${friendly} cannot be empty. Please complete this field.`);
         setShowFieldErrorDialog(true);
       } catch (e) {
         // ignore
@@ -2522,7 +2562,7 @@ const VSOAssistant: React.FC = () => {
             )}
             {showValidation && Object.keys(fieldErrors).length > 0 && (
               <MessageBar messageBarType={MessageBarType.error} isMultiline={false}>
-                Please complete the required fields: {Object.keys(fieldErrors).map(k => friendlyFieldNames[k] || k).join(', ')}
+                Please complete the required fields (these cannot be empty): {Object.keys(fieldErrors).map(k => friendlyFieldNames[k] || k).join(', ')}
               </MessageBar>
             )}
 
@@ -2607,7 +2647,7 @@ const VSOAssistant: React.FC = () => {
                       placeholder="Fiber Maintenance scheduled in <FacilityCode> for Spans <Enter Spans here>"
                       value={subject}
                       onChange={(_, v) => setSubject(v || "")}
-                      styles={textFieldStyles}
+                      styles={getTextFieldStyles('subject')}
                       required
                       errorMessage={showValidation ? fieldErrors.subject : undefined}
                     />
@@ -2619,7 +2659,7 @@ const VSOAssistant: React.FC = () => {
                       placeholder="name@contoso.com"
                       value={cc}
                       onChange={(_, v) => setCc(v || "")}
-                      styles={textFieldStyles}
+                      styles={getTextFieldStyles('cc')}
                       required
                       errorMessage={showValidation ? fieldErrors.cc : undefined}
                     />
@@ -2676,7 +2716,7 @@ const VSOAssistant: React.FC = () => {
                             if (!anyWindowWithin7Days(selected, additionalWindows)) removeEmergencyTag();
                           }
                         }}
-                        styles={datePickerStyles}
+                        styles={getDatePickerStyles('startDate')}
                         isRequired
                         aria-label="Start Date"
                       />
@@ -2706,7 +2746,7 @@ const VSOAssistant: React.FC = () => {
                             setFieldErrors((prev) => { const copy = { ...prev }; delete copy.endTime; return copy; });
                           }
                         }}
-                        styles={timeDropdownStyles}
+                        styles={getDropdownStyles('startTime', timeDropdownStyles)}
                         required
                         errorMessage={showValidation ? fieldErrors.startTime : undefined}
                       />
@@ -2738,7 +2778,7 @@ const VSOAssistant: React.FC = () => {
                             setFieldErrors((prev) => { const copy = { ...prev }; delete copy.endTime; return copy; });
                           }
                         }}
-                        styles={datePickerStyles}
+                        styles={getDatePickerStyles('endDate')}
                         isRequired
                         aria-label="End Date"
                       />
@@ -2849,7 +2889,7 @@ const VSOAssistant: React.FC = () => {
                             setFieldErrors((prev) => { const copy = { ...prev }; delete copy[`additional-${i}-endTime`]; return copy; });
                           }
                         }}
-                        styles={timeDropdownStyles}
+                        styles={getDropdownStyles('endTime', timeDropdownStyles)}
                       />
                     </div>
                     <div className="dt-field">
@@ -2967,7 +3007,7 @@ const VSOAssistant: React.FC = () => {
                       options={[{ key: "true", text: "Yes/True" }, { key: "false", text: "No/False" }]}
                       selectedKey={impactExpected ? "true" : "false"}
                       onChange={(_, opt) => opt && setImpactExpected(opt.key === "true")}
-                      styles={dropdownStyles}
+                      styles={getDropdownStyles('impactExpected', dropdownStyles)}
                       required
                       errorMessage={showValidation ? fieldErrors.impactExpected : undefined}
                     />
@@ -2994,9 +3034,9 @@ const VSOAssistant: React.FC = () => {
                   value={maintenanceReason}
                   onChange={(_, v) => setMaintenanceReason(v || "")}
                   styles={{
-                    ...textFieldStyles,
-                    field: { ...(textFieldStyles as any).field, minHeight: 220, paddingBottom: 28 },
-                    fieldGroup: { ...(textFieldStyles as any).fieldGroup, height: 'auto' },
+                    ...getTextFieldStyles('maintenanceReason'),
+                    field: { ...(getTextFieldStyles('maintenanceReason') as any).field, minHeight: 220, paddingBottom: 28 },
+                    fieldGroup: { ...((getTextFieldStyles('maintenanceReason') as any).fieldGroup || {}), height: 'auto' },
                   }}
                   // limit to a reasonable amount
                   maxLength={2000}
@@ -3073,9 +3113,8 @@ const VSOAssistant: React.FC = () => {
           return (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div style={{ display: 'flex', gap: 12 }}>
-                <div style={{ flex: 2 }}>
-                  <Text styles={{ root: { color: 'var(--vso-label-color)', fontSize: 12 } }}>Title</Text>
-                  <div style={{ color: 'var(--text-1)', fontWeight: 700 }}>{ev.title}</div>
+                <div style={{ flex: 1 }}>
+                  <TextField componentRef={locationRef} label="Location" value={location} onChange={(_, v) => setLocation(v || "")} styles={getTextFieldStyles('location')} required errorMessage={showValidation ? fieldErrors.location : undefined} />
                 </div>
                 <div style={{ width: 240 }}>
                   <Dropdown

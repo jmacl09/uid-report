@@ -1,4 +1,5 @@
 const { TableClient } = require("@azure/data-tables");
+const crypto = require("crypto");
 
 let DefaultAzureCredential = null;
 try { ({ DefaultAzureCredential } = require("@azure/identity")); } catch { }
@@ -104,7 +105,7 @@ async function handleRequest(request, context) {
 
             /* SUGGESTIONS: GET ALL */
             if ((category || "").toLowerCase() === "suggestions" || qTable === "Suggestions") {
-                const tableName = "Suggestions";
+                const tableName = process.env.TABLES_TABLE_NAME_SUGGESTIONS || "Suggestions";
                 const { client, auth } = getTableClient(tableName);
 
                 context.log(`[Table] GET ALL -> ${tableName} auth=${auth}`);
@@ -114,7 +115,8 @@ async function handleRequest(request, context) {
                     items.push(mapEntity(raw));
                 }
 
-                items.sort((a, b) => (a.rowKey < b.rowKey ? 1 : -1));
+                // Sort by savedAt (newest first) if available
+                items.sort((a, b) => (a.savedAt && b.savedAt ? (a.savedAt < b.savedAt ? 1 : -1) : (a.rowKey < b.rowKey ? 1 : -1)));
 
                 context.res = { status: 200, headers: corsHeaders, body: { ok: true, items } };
                 return;
@@ -264,20 +266,47 @@ async function handleRequest(request, context) {
         }
 
         try {
-            const tableName = "Suggestions";
+            const tableName = process.env.TABLES_TABLE_NAME_SUGGESTIONS || "Suggestions";
             const { client, auth } = getTableClient(tableName);
 
             context.log(`[Table] POST -> ${tableName} auth=${auth}`);
 
             const nowIso = timestamp ? new Date(timestamp).toISOString() : new Date().toISOString();
-            const resolvedRowKey = rowKey?.trim() || nowIso;
 
+            // Try to extract submitter email from x-ms-client-principal header (App Service / Easy Auth)
+            let submitterEmail = null;
+            try {
+                const principalHeader = request.headers && (request.headers['x-ms-client-principal'] || request.headers['X-MS-CLIENT-PRINCIPAL']);
+                if (principalHeader) {
+                    const buff = Buffer.from(principalHeader, 'base64');
+                    const parsed = JSON.parse(buff.toString('utf8'));
+                    submitterEmail = parsed && (parsed.userDetails || parsed.userId || parsed.identity || null);
+                    if (!submitterEmail && parsed && Array.isArray(parsed.identities) && parsed.identities.length) {
+                        const id = parsed.identities[0];
+                        if (id && Array.isArray(id.claims)) {
+                            const emailClaim = id.claims.find(c => (c.typ || c.type || '').toLowerCase().includes('email') || (c.typ || c.type || '').toLowerCase().includes('emails'));
+                            if (emailClaim) submitterEmail = emailClaim.val || emailClaim.value || submitterEmail;
+                        }
+                    }
+                }
+            } catch { }
+
+            const uniqueId = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+            const resolvedRowKey = rowKey?.trim() || uniqueId;
+
+            // Accept additional suggestion fields: type, name, summary, comment
             const entity = {
                 partitionKey: "Suggestions",
                 rowKey: resolvedRowKey,
+                id: resolvedRowKey,
                 title,
+                type: payload.type || payload.suggestionType || "",
+                name: payload.name || "",
+                summary: payload.summary || "",
+                comment: payload.comment || description || "",
                 description: description || "",
-                owner: owner || "Unknown",
+                submitterEmail: submitterEmail || owner || "Unknown",
+                owner: submitterEmail || owner || "Unknown",
                 savedAt: nowIso
             };
 

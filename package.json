@@ -12,9 +12,10 @@
     "scriptRoot": "functions"
   },
   "dependencies": {
-    "@azure/functions": "^4.2.0",
     "@azure/data-tables": "^13.3.1",
+    "@azure/functions": "^4.2.0",
     "@fluentui/react": "^8.124.2",
+    "@microsoft/applicationinsights-web": "^3.3.10",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.8.0",
     "@testing-library/react": "^16.3.0",

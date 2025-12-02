@@ -25,6 +25,8 @@ import CapacityCircle from "../components/CapacityCircle";
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import deriveLineForC0 from "../data/mappedlines";
+import useTelemetry from "../hooks/useTelemetry";
+import { apiFetch } from "../api/http";
 
 // MGFX A/Z with derived Line column (and without SKU column)
 const mgfxHeaders = [
@@ -132,6 +134,8 @@ const getWFStatusFor = (src: any, uidKey?: string | null): string => {
 export default function UIDLookup() {
   const location = useLocation();
   const navigate = useNavigate();
+
+  const { trackClick, trackInput, trackComponent } = useTelemetry("UIDLookup");
 
   const [uid, setUid] = useState<string>("");
   const [data, setData] = useState<any>(null);
@@ -438,6 +442,7 @@ export default function UIDLookup() {
       // Override default paste to ensure sanitized content only once
       e.preventDefault();
       setUid(cleaned);
+      try { trackInput && trackInput('UIDInput', cleaned); } catch {}
       setUidError(() => {
         if (!cleaned) return null;
         return cleaned.length === 11 ? null : 'Invalid UID. It must contain exactly 11 numbers.';
@@ -583,7 +588,7 @@ export default function UIDLookup() {
 
     const tasks = uids.map((u) => {
       const url = `${NOTES_ENDPOINT}?uid=${encodeURIComponent(String(u))}`;
-      return fetch(url)
+      return apiFetch(url)
         .then(async (res) => {
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const json = await res.json().catch(() => null);

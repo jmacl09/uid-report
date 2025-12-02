@@ -21,6 +21,12 @@ jobs:
           submodules: true
           lfs: false
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22.x'
+          cache: 'npm'
+
       # Build React app with SWA-relative API base
       - name: Build React app and copy config
         env:

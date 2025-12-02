@@ -72,7 +72,7 @@ const VSOAssistant: React.FC = () => {
     try { initializeIcons(); } catch {}
   }, []);
 
-  const { trackClick, trackInput, trackComponent } = useTelemetry('VSOAssistant');
+  useTelemetry('VSOAssistant');
   const isLightTheme = typeof document !== 'undefined' && (document.documentElement.classList.contains('light-theme') || document.body.classList.contains('light-theme'));
   const labelStyles = (size: number, weight: number, mb?: number) => ({ root: { color: isLightTheme ? 'var(--accent)' : '#ccc', fontSize: size, fontWeight: `${weight}`, marginBottom: mb ?? 0 } });
   const [facilityCodeA, setFacilityCodeA] = useState<string>("");

@@ -135,7 +135,7 @@ export default function UIDLookup() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const { trackClick, trackInput, trackComponent } = useTelemetry("UIDLookup");
+  const { trackInput } = useTelemetry("UIDLookup");
 
   const [uid, setUid] = useState<string>("");
   const [data, setData] = useState<any>(null);

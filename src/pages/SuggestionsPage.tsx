@@ -107,9 +107,12 @@ const SuggestionsPage: React.FC = () => {
   }, []);
 
   /* ---------------------------------------------------------
-     Submit suggestion
+     Submit suggestion (optimistic, then POST, then reload)
   --------------------------------------------------------- */
-  const submit = async () => {
+  const submit = async (e?: React.MouseEvent<any>) => {
+    if (e && typeof e.preventDefault === "function") {
+      e.preventDefault();
+    }
 
     console.log("[Suggestions] Submit fired");
 
@@ -120,9 +123,10 @@ const SuggestionsPage: React.FC = () => {
       return;
     }
 
+    const owner = anonymous ? "Anonymous" : alias || email || "Unknown";
     const now = Date.now();
 
-    // Optimistic UI
+    // Optimistic UI update
     const optimistic: Suggestion = {
       id: `temp-${now}`,
       ts: now,
@@ -142,38 +146,44 @@ const SuggestionsPage: React.FC = () => {
     setAnonymous(false);
 
     try {
-      console.log("[Suggestions] Sending POST:", {
+      const payload = {
         category: "Suggestions",
         title: s,
         summary: s,
         description: d,
         type,
-        owner: anonymous ? "Anonymous" : alias || email || "Unknown",
-      });
+        owner,
+      };
 
-      await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
+      console.log("[Suggestions] Sending POST:", payload);
+
+      const postRes = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category: "Suggestions",
-          title: s,
-          summary: s,
-          description: d,
-          type,
-          owner: anonymous ? "Anonymous" : alias || email || "Unknown",
-        }),
+        body: JSON.stringify(payload),
       });
 
-      // Reload from server
-      const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`);
-      if (!res.ok) return;
+      if (!postRes.ok) {
+        console.warn("Suggestion POST failed:", postRes.status, postRes.statusText);
+      }
+
+      // Reload list from server to ensure consistency
+      const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+      });
+
+      if (!res.ok) {
+        console.warn("Suggestions reload failed:", res.status, res.statusText);
+        return;
+      }
 
       const json = await res.json();
       const rows = Array.isArray(json) ? json : json.items || [];
 
-      const mapped = rows.map((e: any) => {
-        const owner = (e.owner || "").toString();
-        const anon = owner.toLowerCase() === "anonymous";
+      const mapped: Suggestion[] = rows.map((e: any) => {
+        const rowOwner = (e.owner || "").toString();
+        const anon = rowOwner.toLowerCase() === "anonymous";
 
         return {
           id: e.rowKey,
@@ -182,12 +192,12 @@ const SuggestionsPage: React.FC = () => {
           summary: e.summary || e.title || "",
           description: e.description || "",
           anonymous: anon,
-          authorAlias: anon ? undefined : owner,
-          authorEmail: anon ? undefined : owner,
+          authorEmail: anon ? undefined : rowOwner,
+          authorAlias: anon ? undefined : rowOwner,
         };
       });
 
-      mapped.sort((a: { ts: number }, b: { ts: number }) => b.ts - a.ts);
+      mapped.sort((a, b) => b.ts - a.ts);
       setItems(mapped);
     } catch (err) {
       console.warn("Suggestion submit failed:", err);
@@ -205,7 +215,7 @@ const SuggestionsPage: React.FC = () => {
      RENDER UI
   --------------------------------------------------------- */
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto" }}>
+    <div onSubmit={(e) => e.preventDefault()} style={{ maxWidth: 900, margin: "0 auto" }}>
       <div className="vso-form-container glow" style={{ width: "100%" }}>
         <div className="banner-title">
           <span className="title-text">Suggestions</span>
@@ -252,8 +262,9 @@ const SuggestionsPage: React.FC = () => {
 
             <PrimaryButton
               text="Submit suggestion"
+              type="button"
               disabled={!summary.trim() || !description.trim()}
-              onClick={submit}
+              onClick={(e) => submit(e)}
             />
           </div>
         </div>

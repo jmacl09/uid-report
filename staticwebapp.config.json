@@ -6,27 +6,23 @@
       "/.auth/*"
     ]
   },
-
   "routes": [
     {
       "route": "/api/uid",
       "allowedRoles": ["authenticated"],
       "methods": ["GET"],
-      "rewrite": "https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/LogicAppProxy"
+      "rewrite": "/api/LogicAppProxy" 
     },
     {
       "route": "/api/Projects",
       "methods": ["GET", "POST", "OPTIONS"],
       "allowedRoles": ["anonymous"],
-      "rewrite": "https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/HttpTrigger1"
+      "rewrite": "/api/HttpTrigger1"
     },
-
     {
       "route": "/api/*",
-      "allowedRoles": ["anonymous"],
-      "rewrite": "https://optical360v2-ffa9ewbfafdvfyd8.westeurope-01.azurewebsites.net/api/*"
+      "allowedRoles": ["anonymous"]
     },
-
     {
       "route": "/manifest.json",
       "allowedRoles": ["anonymous"]
@@ -35,7 +31,6 @@
       "route": "/favicon.ico",
       "allowedRoles": ["anonymous"]
     },
-
     {
       "route": "/login",
       "rewrite": "/.auth/login/aad"
@@ -44,13 +39,11 @@
       "route": "/logout",
       "redirect": "/.auth/logout"
     },
-
     {
       "route": "/*",
       "allowedRoles": ["authenticated"]
     }
   ],
-
   "auth": {
     "identityProviders": {
       "azureActiveDirectory": {
@@ -59,22 +52,26 @@
           "clientId": "70f3fda5-4fc5-446e-87b0-3adff82fba7b"
         },
         "login": {
-          "scopes": ["openid", "profile", "email"],
-          "loginParameters": ["domain_hint=microsoft.com"]
+          "scopes": [
+            "openid",
+            "profile",
+            "email"
+          ],
+          "loginParameters": [
+            "domain_hint=microsoft.com"
+          ]
         }
       }
     }
   },
-
   "responseOverrides": {
     "401": {
       "statusCode": 302,
       "redirect": "/login"
     }
   },
-
   "globalHeaders": {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": "https://optical360.net, http://localhost:3000",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type,Authorization",
     "Access-Control-Allow-Credentials": "true"

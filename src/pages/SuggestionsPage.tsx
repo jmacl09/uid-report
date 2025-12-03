@@ -106,6 +106,35 @@ const SuggestionsPage: React.FC = () => {
     load();
   }, []);
 
+  // ⛔ TEST BLOCK — automatically POST a test suggestion on page load
+  useEffect(() => {
+    async function autoTestPost() {
+      console.log("🔥 autoTestPost running...");
+
+      try {
+        const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            category: "Suggestions",
+            title: "AutoTest",
+            summary: "AutoTest summary",
+            description: "This suggestion was auto-posted on mount.",
+            type: "Test",
+            owner: "AutoTester",
+          }),
+        });
+
+        const j = await res.json();
+        console.log("🔥 autoTestPost result:", j);
+      } catch (err) {
+        console.error("🔥 autoTestPost error:", err);
+      }
+    }
+
+    autoTestPost();
+  }, []);
+
   /* ---------------------------------------------------------
      Submit suggestion (optimistic, then POST, then reload)
   --------------------------------------------------------- */

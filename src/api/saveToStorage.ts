@@ -58,6 +58,9 @@ export async function saveToStorage(input: SaveInput): Promise<any> {
 
   if (input.extras) body.extras = input.extras;
 
+  // Include UID when provided for tables that expect a logical partition key
+  if (input.uid) body.uid = input.uid;
+
   if (category === "Troubleshooting") {
     if (!input.uid) throw new Error("Troubleshooting requires UID");
     body.uid = input.uid;

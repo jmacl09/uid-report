@@ -85,11 +85,8 @@ const SuggestionsPage: React.FC = () => {
           return {
             id: e.rowKey,
             ts: Date.parse(e.savedAt || new Date().toISOString()),
-
-            // FIX — summary and type must use the correct keys
             type: e.type || "Other",
             summary: e.summary || e.title || "",
-
             description: e.description || "",
             anonymous: anon,
             authorEmail: anon ? undefined : owner,
@@ -113,9 +110,15 @@ const SuggestionsPage: React.FC = () => {
      Submit suggestion
   --------------------------------------------------------- */
   const submit = async () => {
+
+    console.log("[Suggestions] Submit fired");
+
     const s = summary.trim();
     const d = description.trim();
-    if (!s || !d) return;
+    if (!s || !d) {
+      console.log("[Suggestions] Missing summary or description");
+      return;
+    }
 
     const now = Date.now();
 
@@ -139,15 +142,24 @@ const SuggestionsPage: React.FC = () => {
     setAnonymous(false);
 
     try {
+      console.log("[Suggestions] Sending POST:", {
+        category: "Suggestions",
+        title: s,
+        summary: s,
+        description: d,
+        type,
+        owner: anonymous ? "Anonymous" : alias || email || "Unknown",
+      });
+
       await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           category: "Suggestions",
           title: s,
-          summary: s,        // 🔥 REQUIRED FOR BACKEND
+          summary: s,
           description: d,
-          type,              // 🔥 REQUIRED
+          type,
           owner: anonymous ? "Anonymous" : alias || email || "Unknown",
         }),
       });

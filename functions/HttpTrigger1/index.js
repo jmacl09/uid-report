@@ -105,7 +105,7 @@ async function handleRequest(request, context) {
 
             /* SUGGESTIONS: GET ALL */
             if ((category || "").toLowerCase() === "suggestions" || qTable === "Suggestions") {
-                const tableName = process.env.TABLES_TABLE_NAME_SUGGESTIONS || "Suggestions";
+                const tableName = "Suggestions";
                 const { client, auth } = getTableClient(tableName);
 
                 context.log(`[Table] GET ALL -> ${tableName} auth=${auth}`);
@@ -266,7 +266,7 @@ async function handleRequest(request, context) {
         }
 
         try {
-            const tableName = process.env.TABLES_TABLE_NAME_SUGGESTIONS || "Suggestions";
+            const tableName = "Suggestions";
             const { client, auth } = getTableClient(tableName);
 
             context.log(`[Table] POST -> ${tableName} auth=${auth}`);

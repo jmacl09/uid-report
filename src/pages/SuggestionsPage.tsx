@@ -8,7 +8,6 @@ import {
   IDropdownOption,
   Checkbox,
 } from "@fluentui/react";
-
 import { API_BASE } from "../api/config";
 
 /* ---------------------------------------------------------
@@ -55,34 +54,36 @@ function getAlias(email?: string) {
    MAIN COMPONENT
 --------------------------------------------------------- */
 const SuggestionsPage: React.FC = () => {
+  console.log("🔥 SuggestionsPage mounted");
+
   const [items, setItems] = useState<Suggestion[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [type, setType] = useState<string>("Improvement");
-  const [summary, setSummary] = useState<string>("");
-  const [description, setDescription] = useState<string>("");
-  const [anonymous, setAnonymous] = useState<boolean>(false);
+  const [loading, setLoading] = useState(false);
+  const [type, setType] = useState("Improvement");
+  const [summary, setSummary] = useState("");
+  const [description, setDescription] = useState("");
+  const [anonymous, setAnonymous] = useState(false);
 
   const email = getEmail();
   const alias = getAlias(email);
 
   /* ---------------------------------------------------------
-     Load suggestions from API
+     Load suggestions
   --------------------------------------------------------- */
   useEffect(() => {
+    console.log("📥 Loading suggestions...");
+
     async function load() {
       setLoading(true);
       try {
         const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`);
-        if (!res.ok) throw new Error("Failed to load suggestions");
-
         const json = await res.json();
         const rows = Array.isArray(json) ? json : json.items || [];
 
-        const mapped: Suggestion[] = rows.map((e: any) => {
+        const mapped: Suggestion[] = rows.map((e: any): Suggestion => {
           const owner = (e.owner || "").toString();
           const anon = owner.toLowerCase() === "anonymous";
 
-          return {
+          return { 
             id: e.rowKey,
             ts: Date.parse(e.savedAt || new Date().toISOString()),
             type: e.type || "Other",
@@ -94,10 +95,10 @@ const SuggestionsPage: React.FC = () => {
           };
         });
 
-        mapped.sort((a, b) => b.ts - a.ts);
+        mapped.sort((a: Suggestion, b: Suggestion) => b.ts - a.ts);
         setItems(mapped);
       } catch (err) {
-        console.warn("Suggestions load error:", err);
+        console.error("❌ Suggestions load error:", err);
       } finally {
         setLoading(false);
       }
@@ -106,11 +107,13 @@ const SuggestionsPage: React.FC = () => {
     load();
   }, []);
 
-  // ⛔ TEST BLOCK — automatically POST a test suggestion on page load
+  /* ---------------------------------------------------------
+     Auto POST test to prove POST works
+  --------------------------------------------------------- */
   useEffect(() => {
-    async function autoTestPost() {
-      console.log("🔥 autoTestPost running...");
+    console.log("🔥 autoTestPost effect running...");
 
+    async function autoTestPost() {
       try {
         const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
           method: "POST",
@@ -119,14 +122,14 @@ const SuggestionsPage: React.FC = () => {
             category: "Suggestions",
             title: "AutoTest",
             summary: "AutoTest summary",
-            description: "This suggestion was auto-posted on mount.",
-            type: "Test",
+            description: "Posted on mount",
+            type: "Auto",
             owner: "AutoTester",
           }),
         });
 
-        const j = await res.json();
-        console.log("🔥 autoTestPost result:", j);
+        const out = await res.json();
+        console.log("🔥 autoTestPost result:", out);
       } catch (err) {
         console.error("🔥 autoTestPost error:", err);
       }
@@ -136,115 +139,100 @@ const SuggestionsPage: React.FC = () => {
   }, []);
 
   /* ---------------------------------------------------------
-     Submit suggestion (optimistic, then POST, then reload)
+     Submit suggestion
   --------------------------------------------------------- */
-  const submit = async (e?: React.MouseEvent<any>) => {
-    if (e && typeof e.preventDefault === "function") {
-      e.preventDefault();
-    }
-
-    console.log("[Suggestions] Submit fired");
+  const submit = async () => {
+    console.log("🔥 submit() CALLED");
 
     const s = summary.trim();
     const d = description.trim();
     if (!s || !d) {
-      console.log("[Suggestions] Missing summary or description");
+      console.log("❌ Missing summary or description");
       return;
     }
 
     const owner = anonymous ? "Anonymous" : alias || email || "Unknown";
     const now = Date.now();
 
-    // Optimistic UI update
-    const optimistic: Suggestion = {
-      id: `temp-${now}`,
-      ts: now,
-      type,
-      summary: s,
-      description: d,
-      anonymous,
-      authorEmail: anonymous ? undefined : email,
-      authorAlias: anonymous ? undefined : alias,
-    };
+    // optimistic UI
+    setItems(prev => [
+      {
+        id: `temp-${now}`,
+        ts: now,
+        type,
+        summary: s,
+        description: d,
+        anonymous,
+        authorEmail: anonymous ? undefined : email,
+        authorAlias: anonymous ? undefined : alias,
+      },
+      ...prev,
+    ]);
 
-    setItems((prev) => [optimistic, ...prev]);
-
-    // Reset form
     setSummary("");
     setDescription("");
     setAnonymous(false);
 
     try {
-      const payload = {
+      console.log("📤 Sending POST:", {
         category: "Suggestions",
         title: s,
         summary: s,
         description: d,
         type,
         owner,
-      };
+      });
 
-      console.log("[Suggestions] Sending POST:", payload);
-
-      const postRes = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
+      await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          category: "Suggestions",
+          title: s,
+          summary: s,
+          description: d,
+          type,
+          owner,
+        }),
       });
 
-      if (!postRes.ok) {
-        console.warn("Suggestion POST failed:", postRes.status, postRes.statusText);
-      }
-
-      // Reload list from server to ensure consistency
-      const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      });
-
-      if (!res.ok) {
-        console.warn("Suggestions reload failed:", res.status, res.statusText);
-        return;
-      }
-
+      console.log("📥 Reloading suggestions...");
+      const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`);
       const json = await res.json();
       const rows = Array.isArray(json) ? json : json.items || [];
 
-      const mapped: Suggestion[] = rows.map((e: any) => {
-        const rowOwner = (e.owner || "").toString();
-        const anon = rowOwner.toLowerCase() === "anonymous";
+      const mapped: Suggestion[] = rows.map((e: any): Suggestion => {
+        const owner = (e.owner || "").toString();
+        const anon = owner.toLowerCase() === "anonymous";
 
-        return {
+          return { 
           id: e.rowKey,
           ts: Date.parse(e.savedAt || new Date().toISOString()),
           type: e.type || "Other",
           summary: e.summary || e.title || "",
           description: e.description || "",
           anonymous: anon,
-          authorEmail: anon ? undefined : rowOwner,
-          authorAlias: anon ? undefined : rowOwner,
+          authorEmail: anon ? undefined : owner,
+          authorAlias: anon ? undefined : owner,
         };
       });
 
-      mapped.sort((a, b) => b.ts - a.ts);
+        mapped.sort((a: Suggestion, b: Suggestion) => b.ts - a.ts);
       setItems(mapped);
     } catch (err) {
-      console.warn("Suggestion submit failed:", err);
+      console.error("❌ submit() error:", err);
     }
   };
 
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const sorted = useMemo(
-    () => [...items].sort((a, b) => b.ts - a.ts),
-    [items]
-  );
+  const sorted = useMemo(() => [...items].sort((a: Suggestion, b: Suggestion) => b.ts - a.ts), [items]);
 
   /* ---------------------------------------------------------
      RENDER UI
   --------------------------------------------------------- */
   return (
-    <div onSubmit={(e) => e.preventDefault()} style={{ maxWidth: 900, margin: "0 auto" }}>
+    <div style={{ maxWidth: 900, margin: "0 auto" }}>
       <div className="vso-form-container glow" style={{ width: "100%" }}>
         <div className="banner-title">
           <span className="title-text">Suggestions</span>
@@ -266,7 +254,7 @@ const SuggestionsPage: React.FC = () => {
             <div style={{ flex: 1 }}>
               <TextField
                 label="Summary"
-                placeholder="Short title for your suggestion"
+                placeholder="Short title"
                 value={summary}
                 onChange={(_, v) => setSummary(v || "")}
               />
@@ -282,18 +270,56 @@ const SuggestionsPage: React.FC = () => {
             onChange={(_, v) => setDescription(v || "")}
           />
 
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <Checkbox
               label="Post anonymously"
               checked={anonymous}
               onChange={(_, c) => setAnonymous(!!c)}
             />
 
+            {/* TEST BUTTON 1 */}
             <PrimaryButton
-              text="Submit suggestion"
-              type="button"
+              text="Test Console Log"
+              onClick={() => console.log("🔥 BUTTON 1 CLICKED")}
+            />
+
+            {/* TEST BUTTON 2 */}
+            <PrimaryButton
+              text="Test Alert"
+              onClick={() => {
+                console.log("🔥 BUTTON 2 CLICKED");
+                alert("🔥 Alert test successful");
+              }}
+            />
+
+            {/* TEST BUTTON 3 */}
+            <PrimaryButton
+              text="Test submit()"
               disabled={!summary.trim() || !description.trim()}
-              onClick={(e) => submit(e)}
+              onClick={() => {
+                console.log("🔥 BUTTON 3 CLICKED → submit()");
+                submit();
+              }}
+            />
+
+            {/* TEST BUTTON 4 */}
+            <PrimaryButton
+              text="Force POST"
+              onClick={async () => {
+                console.log("🔥 BUTTON 4 CLICKED → Force POST");
+                await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    category: "Suggestions",
+                    title: "ForcePost",
+                    summary: "Force post summary",
+                    description: "Manual POST test",
+                    type: "Force",
+                    owner: "ForceTester",
+                  }),
+                });
+              }}
             />
           </div>
         </div>
@@ -343,7 +369,9 @@ const SuggestionsPage: React.FC = () => {
                       {!s.anonymous && (s.authorAlias || s.authorEmail) && (
                         <>
                           <span className="note-dot">·</span>
-                          <span className="note-email">{s.authorAlias || s.authorEmail}</span>
+                          <span className="note-email">
+                            {s.authorAlias || s.authorEmail}
+                          </span>
                         </>
                       )}
                     </div>

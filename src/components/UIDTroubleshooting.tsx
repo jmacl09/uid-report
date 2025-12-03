@@ -1,6 +1,6 @@
 // UIDTroubleshooting.tsx
 import React, { useState } from "react";
-import { saveToStorage, SaveError } from "../api/saveToStorage";
+import { saveToStorage } from "../api/saveToStorage";
 
 interface Props {
   uid: string;
@@ -49,8 +49,10 @@ const UIDTroubleshooting: React.FC<Props> = ({ uid, linkKey }) => {
 
       console.log(`[Troubleshooting] Saved for UID ${uid}:`, result);
     } catch (e: any) {
-      const se: SaveError | undefined = e instanceof SaveError ? e : undefined;
-      const msg = se?.body || se?.message || String(e);
+      const msg =
+        (e && typeof e === "object" && "message" in e && (e as any).message) ||
+        String(e);
+
       setError(msg);
       console.error("Troubleshooting save failed:", msg);
     } finally {

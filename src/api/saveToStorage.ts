@@ -36,10 +36,24 @@ export async function saveToStorage(input: SaveInput): Promise<any> {
   if (input.rowKey) body.rowKey = input.rowKey;
 
   if (input.timestamp) {
-    body.timestamp =
-      input.timestamp instanceof Date
-        ? input.timestamp.toISOString()
-        : String(input.timestamp);
+    // Ensure we don't call toISOString on an invalid Date (throws RangeError)
+    if (input.timestamp instanceof Date) {
+      const d = input.timestamp as Date;
+      if (!isNaN(d.getTime())) {
+        body.timestamp = d.toISOString();
+      } else {
+        // fallback to current time if provided Date is invalid
+        body.timestamp = new Date().toISOString();
+      }
+    } else {
+      // Try to interpret string-like timestamps as Dates; otherwise use the raw string
+      const parsed = new Date(String(input.timestamp));
+      if (!isNaN(parsed.getTime())) {
+        body.timestamp = parsed.toISOString();
+      } else {
+        body.timestamp = String(input.timestamp);
+      }
+    }
   }
 
   if (input.extras) body.extras = input.extras;
@@ -56,8 +70,14 @@ export async function saveToStorage(input: SaveInput): Promise<any> {
   });
 
   if (!res.ok) {
-    throw new Error(`Save failed ${res.status}`);
+    const text = await res.text().catch(() => "");
+    throw new Error(`Save failed ${res.status}: ${text}`);
   }
 
-  return res.json();
+  // Try to return parsed JSON, fall back to raw text
+  try {
+    return await res.json();
+  } catch {
+    return await res.text();
+  }
 }

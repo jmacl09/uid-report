@@ -15,8 +15,7 @@ export interface SaveInput {
   title?: string;
   description: string;
   owner: string;
-  // optional overrides/additional fields used by callers
-  endpoint?: string; // e.g., 'HttpTrigger1' or full path
+  endpoint?: string;
   timestamp?: string | Date;
   rowKey?: string;
   extras?: Record<string, any>;
@@ -24,7 +23,7 @@ export interface SaveInput {
 
 export async function saveToStorage(input: SaveInput): Promise<any> {
   const category = input.category;
-  const endpoint = input.endpoint || 'HttpTrigger1';
+  const endpoint = input.endpoint || "HttpTrigger1";
   const url = `${API_BASE}/${endpoint}?category=${category.toLowerCase()}`;
 
   const body: any = {
@@ -35,7 +34,14 @@ export async function saveToStorage(input: SaveInput): Promise<any> {
   };
 
   if (input.rowKey) body.rowKey = input.rowKey;
-  if (input.timestamp) body.timestamp = (input.timestamp instanceof Date) ? input.timestamp.toISOString() : String(input.timestamp);
+
+  if (input.timestamp) {
+    body.timestamp =
+      input.timestamp instanceof Date
+        ? input.timestamp.toISOString()
+        : String(input.timestamp);
+  }
+
   if (input.extras) body.extras = input.extras;
 
   if (category === "Troubleshooting") {

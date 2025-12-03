@@ -4,13 +4,18 @@ const crypto = require("crypto");
 
 // --------------------- HELPERS ---------------------
 function getTableClient(tableName) {
+    const allowConnString = process.env.TABLES_ALLOW_CONNECTION_STRING;
+    const connStr = process.env.TABLE_CONNECTION;
+
+    if (allowConnString === '1' && connStr) {
+        return TableClient.fromConnectionString(connStr, tableName);
+    }
+
     const url = process.env.TABLES_ACCOUNT_URL;
     if (!url) throw new Error("TABLES_ACCOUNT_URL missing");
 
     const credential = new DefaultAzureCredential();
-    const client = new TableClient(url, tableName, credential);
-
-    return client;
+    return new TableClient(url, tableName, credential);
 }
 
 function map(raw) {
@@ -31,6 +36,7 @@ function map(raw) {
 // ---------------------------------------------------
 module.exports = async function (context, req) {
     const method = req.method.toUpperCase();
+
     const cors = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
@@ -47,10 +53,16 @@ module.exports = async function (context, req) {
     const uid = url.searchParams.get("uid") || req.body?.uid || null;
 
     // ---------------------------------------------------
+    // TABLE NAMES FROM AZURE APP SETTINGS
+    // ---------------------------------------------------
+    const SUGGESTIONS_TABLE = process.env.TABLES_TABLE_NAME_SUGGESTIONS || "Suggestions";
+    const TROUBLE_TABLE = process.env.TABLES_TABLE_NAME_TROUBLESHOOTING || "Troubleshooting";
+
+    // ---------------------------------------------------
     // SUGGESTIONS — GET ALL
     // ---------------------------------------------------
     if (method === "GET" && category === "suggestions") {
-        const client = getTableClient("Suggestions");
+        const client = getTableClient(SUGGESTIONS_TABLE);
         const items = [];
 
         for await (const entity of client.listEntities()) {
@@ -72,7 +84,7 @@ module.exports = async function (context, req) {
             return;
         }
 
-        const client = getTableClient("Troubleshooting");
+        const client = getTableClient(TROUBLE_TABLE);
         const filter = `PartitionKey eq 'UID_${uid}'`;
 
         const items = [];
@@ -97,18 +109,16 @@ module.exports = async function (context, req) {
             return;
         }
 
-        const client = getTableClient("Suggestions");
-        const rowKey = crypto.randomUUID();
-        const now = new Date().toISOString();
+        const client = getTableClient(SUGGESTIONS_TABLE);
 
         const entity = {
             partitionKey: "Suggestions",
-            rowKey,
+            rowKey: crypto.randomUUID(),
             category: "Suggestions",
             title,
             description,
             owner: owner || "Anonymous",
-            savedAt: now
+            savedAt: new Date().toISOString()
         };
 
         await client.upsertEntity(entity);
@@ -132,7 +142,8 @@ module.exports = async function (context, req) {
             return;
         }
 
-        const client = getTableClient("Troubleshooting");
+        const client = getTableClient(TROUBLE_TABLE);
+
         const rowKey = new Date().toISOString();
 
         const entity = {
@@ -163,7 +174,12 @@ module.exports = async function (context, req) {
             return;
         }
 
-        const client = getTableClient(category === "suggestions" ? "Suggestions" : "Troubleshooting");
+        const tableName =
+            category === "suggestions"
+                ? SUGGESTIONS_TABLE
+                : TROUBLE_TABLE;
+
+        const client = getTableClient(tableName);
 
         await client.deleteEntity(partitionKey, rowKey);
 

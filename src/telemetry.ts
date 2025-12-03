@@ -1,23 +1,40 @@
 import React from 'react';
 import { ApplicationInsights } from '@microsoft/applicationinsights-web';
 
-const INSTRUMENTATION_KEY = process.env.REACT_APP_APPINSIGHTS_INSTRUMENTATIONKEY || '';
+// Allow the key to be provided at runtime by the Static Web App (window) or at build-time
+const INSTRUMENTATION_KEY = (typeof window !== 'undefined' && (window as any).REACT_APP_APPINSIGHTS_INSTRUMENTATIONKEY) || process.env.REACT_APP_APPINSIGHTS_INSTRUMENTATIONKEY || '';
 
-const config = {
-  instrumentationKey: INSTRUMENTATION_KEY,
-  enableAutoRouteTracking: true,
-  enableCorsCorrelation: true,
-  enableRequestHeaderTracking: true,
-  enableResponseHeaderTracking: true,
-  enableAutoExceptionTracking: true,
-  enableUnhandledPromiseRejectionTracking: true,
-};
+let ai: any = null;
+let appInsights: any = null;
 
-const ai = new ApplicationInsights({ config });
-ai.loadAppInsights();
+if (INSTRUMENTATION_KEY) {
+  const config = {
+    instrumentationKey: INSTRUMENTATION_KEY,
+    enableAutoRouteTracking: true,
+    enableCorsCorrelation: true,
+    enableRequestHeaderTracking: true,
+    enableResponseHeaderTracking: true,
+    enableAutoExceptionTracking: true,
+    enableUnhandledPromiseRejectionTracking: true,
+  };
 
-// Expose appInsights instance
-export const appInsights = ai;
+  ai = new ApplicationInsights({ config });
+  ai.loadAppInsights();
+
+  // Expose appInsights instance
+  appInsights = ai;
+} else {
+  // No instrumentation key provided — expose a safe no-op stub so callers can call methods without checks
+  const noop = () => {};
+  appInsights = {
+    trackEvent: noop,
+    trackException: noop,
+    trackTrace: noop,
+    trackMetric: noop,
+    setAuthenticatedUserContext: noop,
+    context: { user: { id: null } },
+  } as any;
+}
 
 // Track global window errors
 if (typeof window !== 'undefined') {
@@ -69,4 +86,5 @@ export const trackRenderMetric = (name: string, value: number, properties?: { [k
   try { appInsights.trackMetric({ name, average: value }, properties); } catch {}
 };
 
+export { appInsights };
 export default appInsights;

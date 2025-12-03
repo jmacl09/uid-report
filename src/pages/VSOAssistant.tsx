@@ -3070,7 +3070,13 @@ const VSOAssistant: React.FC = () => {
               <button className="sleek-btn danger" onClick={() => setComposeOpen(false)}>
                 Back
               </button>
-              <button className="sleek-btn wan" disabled={!canSend || sendLoading} onClick={handleSend}>
+              <button
+                className={`sleek-btn wan ${!canSend && !sendLoading ? 'muted-disabled' : ''}`}
+                // Keep clickable so handleSend can show validation; only truly disable while sending
+                disabled={sendLoading}
+                onClick={handleSend}
+                title={!canSend && !sendLoading ? 'Some required fields are missing. Click to validate.' : undefined}
+              >
                 {sendLoading ? "Sending..." : "Confirm & Send"}
               </button>
             </div>

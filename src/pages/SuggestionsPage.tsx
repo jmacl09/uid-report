@@ -66,22 +66,17 @@ const SuggestionsPage: React.FC = () => {
   const alias = getAlias(email);
 
   /* ---------------------------------------------------------
-     Load suggestions on page load
+     Load suggestions from API
   --------------------------------------------------------- */
   useEffect(() => {
     async function load() {
       setLoading(true);
-
       try {
-        const res = await fetch(
-          `${API_BASE}/HttpTrigger1?category=suggestions`,
-          { method: "GET" }
-        );
-
+        const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`);
         if (!res.ok) throw new Error("Failed to load suggestions");
 
-        const rows = await res.json();
-        if (!Array.isArray(rows)) return;
+        const json = await res.json();
+        const rows = Array.isArray(json) ? json : json.items || [];
 
         const mapped: Suggestion[] = rows.map((e: any) => {
           const owner = (e.owner || "").toString();
@@ -94,8 +89,8 @@ const SuggestionsPage: React.FC = () => {
             summary: e.title || "",
             description: e.description || "",
             anonymous: anon,
-            authorAlias: anon ? undefined : owner,
             authorEmail: anon ? undefined : owner,
+            authorAlias: anon ? undefined : owner,
           };
         });
 
@@ -112,7 +107,7 @@ const SuggestionsPage: React.FC = () => {
   }, []);
 
   /* ---------------------------------------------------------
-     Submit a suggestion
+     Submit suggestion
   --------------------------------------------------------- */
   const submit = async () => {
     const s = summary.trim();
@@ -121,7 +116,7 @@ const SuggestionsPage: React.FC = () => {
 
     const now = Date.now();
 
-    // Optimistic UI update
+    // Optimistic UI entry
     const optimistic: Suggestion = {
       id: `temp-${now}`,
       ts: now,
@@ -135,7 +130,7 @@ const SuggestionsPage: React.FC = () => {
 
     setItems((prev) => [optimistic, ...prev]);
 
-    // Reset inputs
+    // Reset fields
     setSummary("");
     setDescription("");
     setAnonymous(false);
@@ -152,35 +147,38 @@ const SuggestionsPage: React.FC = () => {
         }),
       });
 
-      // Reload from server
+      // Reload fresh from server
       const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`);
-      if (res.ok) {
-        const rows = await res.json();
-        const mapped = rows.map((e: any) => {
-          const owner = (e.owner || "").toString();
-          const anon = owner.toLowerCase() === "anonymous";
+      if (!res.ok) return;
 
-          return {
-            id: e.rowKey,
-            ts: Date.parse(e.savedAt || new Date().toISOString()),
-            type: e.type || "Other",
-            summary: e.title || "",
-            description: e.description || "",
-            anonymous: anon,
-            authorAlias: anon ? undefined : owner,
-            authorEmail: anon ? undefined : owner,
-          };
-        });
+      const json = await res.json();
+      const rows = Array.isArray(json) ? json : json.items || [];
 
-        mapped.sort((a: Suggestion, b: Suggestion) => b.ts - a.ts);
-        setItems(mapped);
-      }
+      const mapped = rows.map((e: any) => {
+        const owner = (e.owner || "").toString();
+        const anon = owner.toLowerCase() === "anonymous";
+
+        return {
+          id: e.rowKey,
+          ts: Date.parse(e.savedAt || new Date().toISOString()),
+          type: e.type || "Other",
+          summary: e.title || "",
+          description: e.description || "",
+          anonymous: anon,
+          authorEmail: anon ? undefined : owner,
+          authorAlias: anon ? undefined : owner,
+        };
+      });
+
+      mapped.sort((a: Suggestion, b: Suggestion) => b.ts - a.ts);
+      setItems(mapped);
     } catch (err) {
       console.warn("Suggestion submit failed:", err);
     }
   };
 
   const [expanded, setExpanded] = useState<string | null>(null);
+
   const sorted = useMemo(
     () => [...items].sort((a: Suggestion, b: Suggestion) => b.ts - a.ts),
     [items]
@@ -188,7 +186,7 @@ const SuggestionsPage: React.FC = () => {
 
   /* ---------------------------------------------------------
      RENDER
-  --------------------------------------------------------- */
+--------------------------------------------------------- */
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
       <div className="vso-form-container glow" style={{ width: "100%" }}>
@@ -198,14 +196,7 @@ const SuggestionsPage: React.FC = () => {
         </div>
 
         {/* Form */}
-        <div
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-            marginTop: 16,
-          }}
-        >
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ width: 220 }}>
               <Dropdown
@@ -235,13 +226,7 @@ const SuggestionsPage: React.FC = () => {
             onChange={(_, v) => setDescription(v || "")}
           />
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <Checkbox
               label="Post anonymously"
               checked={anonymous}
@@ -257,13 +242,11 @@ const SuggestionsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Suggestions list */}
+      {/* Suggestions List */}
       <div className="notes-card" style={{ marginTop: 20 }}>
         <Stack horizontal horizontalAlign="space-between">
           <Text className="section-title">Community suggestions</Text>
-          <span style={{ color: "#a6b7c6", fontSize: 12 }}>
-            {sorted.length} total
-          </span>
+          <span style={{ color: "#a6b7c6", fontSize: 12 }}>{sorted.length} total</span>
         </Stack>
 
         {loading && <div className="note-empty">Loading…</div>}
@@ -298,9 +281,7 @@ const SuggestionsPage: React.FC = () => {
                       <Text className="note-alias">{s.summary}</Text>
 
                       <span className="note-dot">·</span>
-                      <span className="note-time">
-                        {new Date(s.ts).toLocaleString()}
-                      </span>
+                      <span className="note-time">{new Date(s.ts).toLocaleString()}</span>
 
                       {!s.anonymous && (s.authorAlias || s.authorEmail) && (
                         <>

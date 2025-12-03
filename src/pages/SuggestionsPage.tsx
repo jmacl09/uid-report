@@ -1,32 +1,33 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Stack, Text, TextField, PrimaryButton, Dropdown, IDropdownOption, Checkbox } from "@fluentui/react";
+import {
+  Stack,
+  Text,
+  TextField,
+  PrimaryButton,
+  Dropdown,
+  IDropdownOption,
+  Checkbox,
+} from "@fluentui/react";
 
-// Suggestion model
+import { API_BASE } from "../api/config";
+
+/* ---------------------------------------------------------
+   Suggestion Model
+--------------------------------------------------------- */
 type Suggestion = {
   id: string;
   ts: number;
   type: string;
   summary: string;
   description: string;
-  anonymous?: boolean;
+  anonymous: boolean;
   authorEmail?: string;
   authorAlias?: string;
 };
 
-const SUGGESTIONS_KEY = "uidSuggestions";
-
-// API endpoint for server-side function (HttpTrigger1)
-const API_TRIGGER_URL =
-  (process.env.REACT_APP_API_TRIGGER_URL as string) ||
-  (window as any).REACT_APP_API_TRIGGER_URL ||
-  "/api/HttpTrigger1";
-
-// Table name used by HttpTrigger1 via chooseTable logic
-const TABLES_TABLE_NAME_SUGGESTIONS =
-  (process.env.REACT_APP_TABLES_TABLE_NAME_SUGGESTIONS as string) ||
-  (window as any).TABLES_TABLE_NAME_SUGGESTIONS ||
-  "Suggestions";
-
+/* ---------------------------------------------------------
+   Dropdown Options
+--------------------------------------------------------- */
 const typeOptions: IDropdownOption[] = [
   { key: "Feature", text: "Feature" },
   { key: "Improvement", text: "Improvement" },
@@ -37,108 +38,93 @@ const typeOptions: IDropdownOption[] = [
 ];
 
 function getEmail(): string {
-  try { return localStorage.getItem("loggedInEmail") || ""; } catch { return ""; }
+  try {
+    return localStorage.getItem("loggedInEmail") || "";
+  } catch {
+    return "";
+  }
 }
 
-function getAlias(email?: string | null) {
+function getAlias(email?: string) {
   const e = (email || "").trim();
   const at = e.indexOf("@");
   return at > 0 ? e.slice(0, at) : e;
 }
 
+/* ---------------------------------------------------------
+   MAIN COMPONENT
+--------------------------------------------------------- */
 const SuggestionsPage: React.FC = () => {
   const [items, setItems] = useState<Suggestion[]>([]);
-  const [, setLoading] = useState<boolean>(false);
-  const [, setError] = useState<string | null>(null);
-
+  const [loading, setLoading] = useState<boolean>(false);
   const [type, setType] = useState<string>("Improvement");
   const [summary, setSummary] = useState<string>("");
   const [description, setDescription] = useState<string>("");
   const [anonymous, setAnonymous] = useState<boolean>(false);
 
-  // Persist locally as fallback
-  useEffect(() => {
-    try { localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(items)); } catch {}
-  }, [items]);
+  const email = getEmail();
+  const alias = getAlias(email);
 
-  // Load suggestions from Table Storage via HttpTrigger1
+  /* ---------------------------------------------------------
+     Load suggestions on page load
+  --------------------------------------------------------- */
   useEffect(() => {
-    let cancelled = false;
     async function load() {
       setLoading(true);
-      setError(null);
-
-      const tableName = TABLES_TABLE_NAME_SUGGESTIONS;
-      const url = `${API_TRIGGER_URL}?uid=suggestions&tableName=${encodeURIComponent(tableName)}`;
 
       try {
-        const res = await fetch(url, {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          credentials: "same-origin",
-        });
+        const res = await fetch(
+          `${API_BASE}/HttpTrigger1?category=suggestions`,
+          { method: "GET" }
+        );
 
-        if (!res.ok) throw new Error(`Function GET failed ${res.status}`);
+        if (!res.ok) throw new Error("Failed to load suggestions");
 
-        const body = await res.json();
-        const entities = Array.isArray(body?.items) ? body.items : [];
+        const rows = await res.json();
+        if (!Array.isArray(rows)) return;
 
-        const mapped = entities.map((e: any) => {
-          const rowKey = e.rowKey || e.RowKey || e.savedAt || Date.now();
-          const tsParsed = Date.parse(
-            e.savedAt || e.Timestamp || e.timestamp || e.rowKey || ""
-          );
-          const ts = Number.isNaN(tsParsed) ? Date.now() : tsParsed;
+        const mapped: Suggestion[] = rows.map((e: any) => {
+          const owner = (e.owner || "").toString();
+          const anon = owner.toLowerCase() === "anonymous";
 
           return {
-            id: String(rowKey),
-            ts,
-            type: e.category || e.Category || e.type || "Other",
-            summary: e.title || e.Title || e.description || "",
-            description: e.description || e.Description || "",
-            anonymous: !!e.anonymous,
-            authorEmail: e.owner || e.Owner || undefined,
-            authorAlias: e.authorAlias || e.author || undefined,
-          } as Suggestion;
+            id: e.rowKey,
+            ts: Date.parse(e.savedAt || new Date().toISOString()),
+            type: e.type || "Other",
+            summary: e.title || "",
+            description: e.description || "",
+            anonymous: anon,
+            authorAlias: anon ? undefined : owner,
+            authorEmail: anon ? undefined : owner,
+          };
         });
 
-        if (!cancelled) {
-          mapped.sort((a: Suggestion, b: Suggestion) => b.ts - a.ts);
-          setItems(mapped);
-        }
+        mapped.sort((a: Suggestion, b: Suggestion) => b.ts - a.ts);
+        setItems(mapped);
       } catch (err) {
-        // fallback to localStorage
-        const raw = localStorage.getItem(SUGGESTIONS_KEY);
-        const arr = raw ? JSON.parse(raw) : [];
-        if (!cancelled) {
-          setItems(Array.isArray(arr) ? arr : []);
-          setError(String((err as any)?.message || err));
-        }
+        console.warn("Suggestions load error:", err);
       } finally {
-        if (!cancelled) setLoading(false);
+        setLoading(false);
       }
     }
 
     load();
-    return () => { cancelled = true; };
   }, []);
 
-  const email = getEmail();
-  const alias = getAlias(email);
-
-  // Submit a new suggestion
-  const submit = () => {
+  /* ---------------------------------------------------------
+     Submit a suggestion
+  --------------------------------------------------------- */
+  const submit = async () => {
     const s = summary.trim();
     const d = description.trim();
     if (!s || !d) return;
 
-    const nowIso = new Date().toISOString();
-    const tableName = TABLES_TABLE_NAME_SUGGESTIONS;
+    const now = Date.now();
 
-    // Optimistic update
+    // Optimistic UI update
     const optimistic: Suggestion = {
-      id: nowIso,
-      ts: Date.parse(nowIso),
+      id: `temp-${now}`,
+      ts: now,
       type,
       summary: s,
       description: d,
@@ -147,42 +133,51 @@ const SuggestionsPage: React.FC = () => {
       authorAlias: anonymous ? undefined : alias,
     };
 
-    setItems([optimistic, ...items]);
+    setItems((prev) => [optimistic, ...prev]);
+
+    // Reset inputs
     setSummary("");
     setDescription("");
     setAnonymous(false);
 
-    // Save to table storage via HttpTrigger1
-    (async () => {
-      try {
-        const payload = {
-          uid: "suggestions",
-          category: type,
+    try {
+      await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: "Suggestions",
           title: s,
           description: d,
-          owner: anonymous ? undefined : email,
-          timestamp: nowIso,
-          rowKey: nowIso,
-          tableName,
-        };
+          owner: anonymous ? "Anonymous" : alias || email || "Unknown",
+        }),
+      });
 
-        const res = await fetch(API_TRIGGER_URL, {
-          method: "POST",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          credentials: "same-origin",
-          body: JSON.stringify(payload),
+      // Reload from server
+      const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`);
+      if (res.ok) {
+        const rows = await res.json();
+        const mapped = rows.map((e: any) => {
+          const owner = (e.owner || "").toString();
+          const anon = owner.toLowerCase() === "anonymous";
+
+          return {
+            id: e.rowKey,
+            ts: Date.parse(e.savedAt || new Date().toISOString()),
+            type: e.type || "Other",
+            summary: e.title || "",
+            description: e.description || "",
+            anonymous: anon,
+            authorAlias: anon ? undefined : owner,
+            authorEmail: anon ? undefined : owner,
+          };
         });
 
-        if (!res.ok) {
-          setError(`Save failed: ${res.status}`);
-        }
-      } catch (err) {
-        setError(String((err as any)?.message || err));
+        mapped.sort((a: Suggestion, b: Suggestion) => b.ts - a.ts);
+        setItems(mapped);
       }
-    })();
+    } catch (err) {
+      console.warn("Suggestion submit failed:", err);
+    }
   };
 
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -191,6 +186,9 @@ const SuggestionsPage: React.FC = () => {
     [items]
   );
 
+  /* ---------------------------------------------------------
+     RENDER
+  --------------------------------------------------------- */
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
       <div className="vso-form-container glow" style={{ width: "100%" }}>
@@ -199,8 +197,16 @@ const SuggestionsPage: React.FC = () => {
           <span className="title-sub">Share ideas, fixes, and improvements</span>
         </div>
 
-        <div className="suggestions-form" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+        {/* Form */}
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            marginTop: 16,
+          }}
+        >
+          <div style={{ display: "flex", gap: 10 }}>
             <div style={{ width: 220 }}>
               <Dropdown
                 label="Type"
@@ -212,37 +218,30 @@ const SuggestionsPage: React.FC = () => {
 
             <div style={{ flex: 1 }}>
               <TextField
-                label="Name / short summary"
-                placeholder="e.g., Align export columns with CIS order"
+                label="Summary"
+                placeholder="e.g., Improve search performance"
                 value={summary}
                 onChange={(_, v) => setSummary(v || "")}
               />
             </div>
           </div>
 
-          <div style={{ width: "100%" }}>
-            <label
-              style={{
-                color: "var(--vso-label-color)",
-                fontWeight: 600,
-                fontSize: 14,
-                marginBottom: 6,
-                display: "block",
-              }}
-            >
-              Description
-            </label>
+          <TextField
+            label="Description"
+            multiline
+            rows={4}
+            placeholder="Describe your idea…"
+            value={description}
+            onChange={(_, v) => setDescription(v || "")}
+          />
 
-            <TextField
-              placeholder="Describe the idea, why it helps, and any details"
-              multiline
-              rows={4}
-              value={description}
-              onChange={(_, v) => setDescription(v || "")}
-            />
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
             <Checkbox
               label="Post anonymously"
               checked={anonymous}
@@ -258,70 +257,72 @@ const SuggestionsPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="notes-card" style={{ marginTop: 16 }}>
-        <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
+      {/* Suggestions list */}
+      <div className="notes-card" style={{ marginTop: 20 }}>
+        <Stack horizontal horizontalAlign="space-between">
           <Text className="section-title">Community suggestions</Text>
-          <span style={{ color: "#a6b7c6", fontSize: 12 }}>{sorted.length} total</span>
+          <span style={{ color: "#a6b7c6", fontSize: 12 }}>
+            {sorted.length} total
+          </span>
         </Stack>
 
-        {sorted.length === 0 ? (
-          <div className="note-empty">No suggestions yet. Be the first to post one.</div>
-        ) : (
+        {loading && <div className="note-empty">Loading…</div>}
+
+        {!loading && sorted.length === 0 && (
+          <div className="note-empty">No suggestions yet.</div>
+        )}
+
+        {sorted.length > 0 && (
           <div className="notes-list">
             {sorted.map((s) => {
               const open = expanded === s.id;
+
               return (
                 <div key={s.id} className="note-item">
-                  <div className="note-header" style={{ alignItems: "center" }}>
-                    <div
-                      className="note-meta"
-                      style={{ display: "flex", alignItems: "center", gap: 8 }}
-                    >
+                  <div className="note-header">
+                    <div className="note-meta" style={{ display: "flex", gap: 8 }}>
                       <span
                         className="wf-inprogress-badge"
                         style={{
-                          color: "#50b3ff",
-                          border: "1px solid rgba(80,179,255,0.28)",
                           borderRadius: 8,
                           padding: "2px 8px",
                           fontWeight: 700,
                           fontSize: 12,
+                          color: "#50b3ff",
+                          border: "1px solid rgba(80,179,255,0.28)",
                         }}
                       >
                         {s.type}
                       </span>
 
-                      <span className="note-alias" style={{ color: "#e6f1ff" }}>
-                        {s.summary}
-                      </span>
+                      <Text className="note-alias">{s.summary}</Text>
 
                       <span className="note-dot">·</span>
-                      <span className="note-time">{new Date(s.ts).toLocaleString()}</span>
+                      <span className="note-time">
+                        {new Date(s.ts).toLocaleString()}
+                      </span>
 
                       {!s.anonymous && (s.authorAlias || s.authorEmail) && (
                         <>
                           <span className="note-dot">·</span>
-                          <span className="note-email">{s.authorAlias || s.authorEmail}</span>
+                          <span className="note-email">
+                            {s.authorAlias || s.authorEmail}
+                          </span>
                         </>
                       )}
                     </div>
 
-                    <div className="note-controls">
-                      <button
-                        className="note-btn"
-                        onClick={() => setExpanded(open ? null : s.id)}
-                        title={open ? "Collapse" : "Expand"}
-                      >
-                        {open ? "Hide" : "Show"}
-                      </button>
-                    </div>
+                    <button
+                      className="note-btn"
+                      onClick={() => setExpanded(open ? null : s.id)}
+                    >
+                      {open ? "Hide" : "Show"}
+                    </button>
                   </div>
 
                   {open && (
                     <div className="note-body">
-                      <div className="note-text" style={{ whiteSpace: "pre-wrap" }}>
-                        {s.description}
-                      </div>
+                      <div style={{ whiteSpace: "pre-wrap" }}>{s.description}</div>
                     </div>
                   )}
                 </div>

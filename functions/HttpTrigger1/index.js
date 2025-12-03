@@ -4,18 +4,13 @@ const crypto = require("crypto");
 
 // --------------------- HELPERS ---------------------
 function getTableClient(tableName) {
-    const allowConnString = process.env.TABLES_ALLOW_CONNECTION_STRING;
-    const connStr = process.env.TABLE_CONNECTION;
-
-    if (allowConnString === '1' && connStr) {
-        return TableClient.fromConnectionString(connStr, tableName);
-    }
-
     const url = process.env.TABLES_ACCOUNT_URL;
     if (!url) throw new Error("TABLES_ACCOUNT_URL missing");
 
     const credential = new DefaultAzureCredential();
-    return new TableClient(url, tableName, credential);
+    const client = new TableClient(url, tableName, credential);
+
+    return client;
 }
 
 function map(raw) {

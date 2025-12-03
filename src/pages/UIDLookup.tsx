@@ -3063,7 +3063,7 @@ export default function UIDLookup() {
         const isEmpty = !payload.aDevice && !payload.aOpt && !payload.zDevice && !payload.zOpt;
         if (isEmpty && rowObj.rowKey) {
           try {
-            await deleteNoteApi(partition, rowObj.rowKey, NOTES_ENDPOINT, 'Troubleshooting');
+            await deleteNoteApi(partition, rowObj.rowKey, NOTES_ENDPOINT);
           } catch (e) { /* best-effort */ }
           // remove local copy
           const next = { ...(comments || {}) };

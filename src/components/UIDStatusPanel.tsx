@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { API_BASE } from "../api/config";
+import { getStatusForUid } from "../api/items";
 
 type Status = "Not Started" | "In progress" | "Completed";
 
@@ -89,16 +90,25 @@ const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
       } catch {}
 
       try {
-        const resp = await fetch(`${API_BASE}/status?uid=${encodeURIComponent(uid)}`);
-        if (resp.ok) {
-          const s = await resp.json();
-          if (s) {
-            local = {
-              configPush: s.configPush ?? local.configPush,
-              circuitsQc: s.circuitsQc ?? local.circuitsQc,
-              expectedDeliveryDate: s.expectedDeliveryDate ?? local.expectedDeliveryDate,
-            };
-          }
+        const items = await getStatusForUid(uid, "HttpTrigger1");
+        if (items && items.length) {
+          // Prefer most recent
+          const sorted = items.slice().sort((a: any, b: any) => {
+            const ta = Date.parse(a?.savedAt || a?.timestamp || a?.Timestamp || "") || 0;
+            const tb = Date.parse(b?.savedAt || b?.timestamp || b?.Timestamp || "") || 0;
+            return tb - ta;
+          });
+          const s = sorted[0];
+
+          // s may have direct fields or a JSON description
+          let parsedDesc: any = null;
+          try { parsedDesc = s.description ? JSON.parse(s.description) : null; } catch {}
+
+          local = {
+            configPush: s.configPush ?? parsedDesc?.configPush ?? local.configPush,
+            circuitsQc: s.circuitsQc ?? parsedDesc?.circuitsQc ?? local.circuitsQc,
+            expectedDeliveryDate: s.expectedDeliveryDate ?? parsedDesc?.expectedDeliveryDate ?? local.expectedDeliveryDate,
+          };
         }
       } catch {}
 
@@ -131,18 +141,21 @@ const UIDStatusPanel: React.FC<Props> = ({ uid, data, style, bare }) => {
 
     const timer = setTimeout(async () => {
       try {
+        // POST to the function endpoint `HttpTrigger1` with category 'Status'.
+        // The function expects `title` for generic category saves, so include a title and
+        // store the status payload in `description` as JSON for later parsing.
         const payload = {
+          category: "Status",
           uid,
-          configPush: state.configPush,
-          circuitsQc: state.circuitsQc,
-          expectedDeliveryDate: state.expectedDeliveryDate,
+          title: "Status",
+          description: JSON.stringify({ configPush: state.configPush, circuitsQc: state.circuitsQc, expectedDeliveryDate: state.expectedDeliveryDate }),
         };
 
-        const method = "POST"; // The API should internally handle upsert
-        await fetch(`${API_BASE}/status`, {
-          method,
+        await fetch(`${API_BASE}/HttpTrigger1`, {
+          method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
+          body: JSON.stringify(payload),
+          credentials: "include",
         });
       } catch (e) {
         console.warn("[UIDStatusPanel] Failed to save status:", e);

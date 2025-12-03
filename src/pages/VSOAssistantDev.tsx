@@ -19,7 +19,6 @@ import {
   TextField,
   Text,
   DatePicker,
-  initializeIcons,
 } from "@fluentui/react";
 import "../Theme.css";
 import datacenterOptions from "../data/datacenterOptions";
@@ -51,7 +50,7 @@ interface MaintenanceWindow {
 }
 
 const VSOAssistantDev: React.FC = () => {
-  useEffect(() => { try { initializeIcons(); } catch {} }, []);
+  // Fluent UI icons are initialized once in `src/index.tsx`
 
   // Search state
   const [facilityCodeA, setFacilityCodeA] = useState<string>("");

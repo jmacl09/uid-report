@@ -118,8 +118,8 @@ const TrafficChart: React.FC<Props> = ({ data, height = 340, colorMap }) => {
   };
 
   return (
-    <div className="traffic-chart-card" style={{ width: "100%", height }}>
-      <ResponsiveContainer width="100%" height="100%">
+    <div className="traffic-chart-card" style={{ width: "100%", height, minHeight: 120 }}>
+      <ResponsiveContainer width="100%" height={height}>
         <LineChart data={chartData} margin={{ top: 12, right: 24, left: 8, bottom: 8 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
           <XAxis

@@ -159,14 +159,28 @@ const VSOCalendar: React.FC<Props> = ({
         if (cancelled) return;
 
         try {
+          const safeIso = (d: any) => {
+            try {
+              if (!d) return null;
+              const dt = d instanceof Date ? d : new Date(d);
+              if (isNaN(dt.getTime())) return null;
+              return dt.toISOString();
+            } catch {
+              return null;
+            }
+          };
+
+          const startIso = safeIso(ev.start);
+          const endIso = safeIso(ev.end);
+
           const description = [
             ev.summary || ev.maintenanceReason || "",
             ev.subject || "",
             ev.notificationType || "",
             ev.location || "",
             ev.spans?.length ? `Spans: ${ev.spans.join(", ")}` : "",
-            ev.start ? `Start: ${ev.start.toISOString()}` : "",
-            ev.end ? `End: ${ev.end.toISOString()}` : "",
+            startIso ? `Start: ${startIso}` : "",
+            endIso ? `End: ${endIso}` : "",
           ]
             .filter(Boolean)
             .join("\n");

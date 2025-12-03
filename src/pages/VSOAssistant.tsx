@@ -20,7 +20,6 @@ import {
   TextField,
   Text,
   DatePicker,
-  initializeIcons,
   TooltipHost,
 } from "@fluentui/react";
 import "../Theme.css";
@@ -67,10 +66,7 @@ interface MaintenanceWindow {
 
 const VSOAssistant: React.FC = () => {
   const navigate = useNavigate();
-  // Ensure Fluent UI icon font is available for this page
-  useEffect(() => {
-    try { initializeIcons(); } catch {}
-  }, []);
+  // Fluent UI icons are initialized at app startup in `src/index.tsx`
 
   useTelemetry('VSOAssistant');
   const isLightTheme = typeof document !== 'undefined' && (document.documentElement.classList.contains('light-theme') || document.body.classList.contains('light-theme'));

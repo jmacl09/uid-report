@@ -16,4 +16,6 @@
     "HttpTrigger1",
     "LogicAppProxy"
   ]
+  ,
+  "functionTimeout": "00:10:00"
 }

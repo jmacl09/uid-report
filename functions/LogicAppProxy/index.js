@@ -125,8 +125,11 @@ module.exports = async function (context, req) {
 
             context.log("Calling VSO Logic App (POST):", url);
 
+            // Allow the client to wait indefinitely for the Logic App response
+            // (no client-side timeout). Note the Functions host may still impose
+            // a server-side limit configured in host.json or by the hosting plan.
             const logicResponse = await axios.post(url, body, {
-                timeout: 500000
+                timeout: 0
             });
 
             context.res = {

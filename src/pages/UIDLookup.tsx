@@ -856,16 +856,7 @@ export default function UIDLookup() {
     // Optimistic local append using functional state to avoid stale closures
     setNotes(prev => [n, ...prev]);
     setNoteText('');
-    // Also add to any saved projects that contain this UID
-    setProjects(prev => prev.map(p => {
-      const src = p?.data?.sourceUids || [];
-      if (!src.includes(uidKey)) return p;
-      const map = { ...(p.notes || {}) } as Record<string, Note[]>;
-      const existing = map[uidKey] || [];
-      // de-dup by id
-      if (!existing.find(x => x.id === n.id)) map[uidKey] = [n, ...existing];
-      return { ...p, notes: map };
-    }));
+    // Do not persist notes into `projects` (avoids localStorage writes).
     // Fire-and-forget server save of this comment to the Projects table via Function app
     // Title kept compact; description holds full note text
     try {
@@ -2991,17 +2982,11 @@ export default function UIDLookup() {
 
     // Per-table persisted troubleshooting comments (keyed by current UID + row content)
     const storageKey = `troubleshootComments:${(contextUid || lastSearched) || 'global'}`;
-    const [comments, setComments] = useState<Record<string, any>>(() => {
-      try {
-        if (!isLinkSummary) return {};
-        return JSON.parse(localStorage.getItem(storageKey) || '{}');
-      } catch { return {}; }
-    });
+    const [comments, setComments] = useState<Record<string, any>>(() => ({}));
     // Fetch troubleshooting notes from backend when Link Summary table loads for a UID
     useEffect(() => {
       let cancelled = false;
       async function loadTroubleshooting() {
-        if (!isLinkSummary) return;
         const uidToFetch = contextUid || lastSearched;
         if (!uidToFetch) return;
         try {
@@ -3018,12 +3003,8 @@ export default function UIDLookup() {
               loaded[linkKey] = { ...desc, rowKey: n.rowKey || n.RowKey, savedAt: n.savedAt || n.Timestamp };
             }
           }
-          // Merge loaded notes with any local comments (local wins if edited after fetch)
-          setComments(prev => {
-            const merged = { ...loaded, ...prev };
-            try { localStorage.setItem(storageKey, JSON.stringify(merged)); } catch {}
-            return merged;
-          });
+          // Set loaded troubleshooting notes for this UID (server authoritative)
+          setComments(loaded);
         } catch (e) {
           // eslint-disable-next-line no-console
           console.warn('[Troubleshooting] Failed to load notes', e);
@@ -3039,7 +3020,7 @@ export default function UIDLookup() {
       } catch { setComments({}); }
     }, [storageKey, isLinkSummary]);
     const saveComments = (c: Record<string, any>) => {
-      try { localStorage.setItem(storageKey, JSON.stringify(c || {})); } catch {}
+      // Keep comments in-memory only; do not persist to localStorage.
       setComments(c || {});
     };
     // Persist a single row's comments to the Troubleshooting table when in UID or Project context

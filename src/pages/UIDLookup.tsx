@@ -3262,6 +3262,10 @@ export default function UIDLookup() {
               const highlight = highlightUid && String(uidVal ?? '') === highlightUid;
               const rowKey = `${title}::${(contextUid || lastSearched) || 'global'}::${i}`;
               const rowComments = (comments && comments[rowKey]) || {};
+              // Determine the index of the Speed/Optical speed column so we can
+              // show a single trouble-note icon immediately after that column.
+              const speedColIndex = displayHeaders.findIndex((h: string) => /speed|optical/i.test(String(h || '')));
+              const hasTroubleshoot = Boolean(rowComments && (rowComments.aDevice || rowComments.aOpt || rowComments.zDevice || rowComments.zOpt));
 
               return (
                 <React.Fragment key={i}>
@@ -3370,13 +3374,22 @@ export default function UIDLookup() {
                         if (link) return (<td key={j}><a className="uid-click" href={String(link)} target="_blank" rel="noopener noreferrer">{val}</a>{title !== 'GDCO Tickets' && (<button className="open-btn" onClick={() => window.open(String(link), '_blank')}>Open</button>)}</td>);
                       }
 
-                      // Default cell — show notes icon for monitored columns
-                      const monitored = isLinkSummary && (key === 'A Device' || key === 'A Optical Device' || key === 'Z Device' || key === 'Z Optical Device');
-                      const hasNote = Boolean(rowComments && (rowComments.aDevice || rowComments.aOpt || rowComments.zDevice || rowComments.zOpt));
+                      // Default cell — normally show the value. For Link Summary
+                      // rows, add a single note icon immediately after the Speed
+                      // column when any of the four troubleshoot inputs has content.
+                      if (isLinkSummary && j === speedColIndex) {
+                        return (
+                          <td key={j} title={String(val ?? '')}>
+                            {val}
+                            {hasTroubleshoot ? (<span title="Troubleshoot notes present" style={{ marginLeft: 6, color: '#ffd166', fontSize: 12 }}>📝</span>) : null}
+                          </td>
+                        );
+                      }
+
+                      // default fallback for all other cells
                       return (
                         <td key={j} title={String(val ?? '')}>
                           {val}
-                          {monitored && hasNote ? (<span title="Troubleshoot notes present" style={{ marginLeft: 6, color: '#ffd166', fontSize: 12 }}>📝</span>) : null}
                         </td>
                       );
                     })}

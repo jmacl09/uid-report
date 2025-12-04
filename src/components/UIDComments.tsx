@@ -18,7 +18,20 @@ const storageKeyFor = (uid: string) => `uid-comments:${uid}`;
 
 const UIDComments: React.FC<Props> = ({ uid }) => {
   const [comment, setComment] = useState("");
-  const [owner, setOwner] = useState("Josh Maclean");
+  const [owner, setOwner] = useState("");
+  const [currentEmail, setCurrentEmail] = useState<string>(() => {
+    try { return localStorage.getItem('loggedInEmail') || ''; } catch { return ''; }
+  });
+
+  const getAlias = (email?: string | null) => {
+    const e = (email || '').trim();
+    if (!e) return '';
+    const at = e.indexOf('@');
+    return at > 0 ? e.slice(0, at) : e;
+  };
+
+  // Admin who can delete any comment
+  const ADMIN_EMAIL = 'joshmaclean@microsoft.com';
 
   const [saving, setSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
@@ -33,6 +46,24 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
   const persistItems = (data: CommentItem[]) => {
     try { localStorage.setItem(storageKeyFor(uid), JSON.stringify(data)); } catch {}
   };
+
+  useEffect(() => {
+    // initialize owner from logged-in alias when component mounts
+    const alias = getAlias(currentEmail);
+    if (alias) setOwner(alias);
+
+    const handler = (ev: Event) => {
+      try {
+        const detail = (ev as CustomEvent).detail || localStorage.getItem('loggedInEmail') || '';
+        setCurrentEmail(detail);
+        const a = getAlias(detail as string);
+        if (a) setOwner(a);
+      } catch {}
+    };
+
+    window.addEventListener('loggedInEmailChanged', handler as EventListener);
+    return () => window.removeEventListener('loggedInEmailChanged', handler as EventListener);
+  }, []);
 
   /** Load from backend */
   const refresh = async () => {
@@ -86,9 +117,18 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
     setSaving(true);
     setError(null);
 
+    // Only allow saving if a user is signed in
+    const email = currentEmail || (typeof window !== 'undefined' ? localStorage.getItem('loggedInEmail') || '' : '');
+    if (!email) {
+      setError('You must be signed in to post comments.');
+      setSaving(false);
+      return;
+    }
+
+    const alias = getAlias(email) || '';
     const newComment: CommentItem = {
       description: comment.trim(),
-      owner: owner.trim() || "Unknown",
+      owner: alias || email || "Unknown",
       savedAt: new Date().toISOString(),
       category: "Comments",
       title: "General comment",
@@ -259,25 +299,22 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
           onChange={(e) => setComment(e.target.value)}
           onKeyDown={handleKeyDown}
           rows={3}
-          placeholder="Add a comment about this UID"
-          disabled={saving}
+          placeholder={currentEmail ? "Add a comment about this UID" : "Sign in to add comments"}
+          disabled={saving || !currentEmail}
           style={{ width: '100%', marginTop: 4, resize: 'vertical', fontFamily: 'inherit', fontSize: 14 }}
         />
       </label>
 
-      <label>
-        <span style={{ fontWeight: 600 }}>Owner:&nbsp;</span>
-        <input
-          type="text"
-          value={owner}
-          onChange={(e) => setOwner(e.target.value)}
-          disabled={saving}
-          style={{ fontSize: 14 }}
-        />
-      </label>
+      <div style={{ marginBottom: 6 }}>
+        {currentEmail ? (
+          <span>Posting as <b style={{ color: '#c9ffd8' }}>{getAlias(currentEmail)}</b></span>
+        ) : (
+          <span style={{ color: '#a6b7c6' }}>Sign in to post comments.</span>
+        )}
+      </div>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <button onClick={handleSave} disabled={saving || !comment.trim()}>
+        <button onClick={handleSave} disabled={saving || !comment.trim() || !currentEmail}>
           {saving ? "Saving…" : "Save Comment"}
         </button>
 
@@ -300,6 +337,13 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
               const isDeleting = deletingKey === localKey;
               const editDisabled =
                 !it.rowKey || (editingRowKey && editingRowKey !== it.rowKey) || editSaving || isDeleting;
+
+              const email = currentEmail || (typeof window !== 'undefined' ? localStorage.getItem('loggedInEmail') || '' : '');
+              const alias = getAlias(email);
+              const ownerLower = (it.owner || '').toString().toLowerCase();
+              const isOwner = email && (ownerLower === alias.toLowerCase() || ownerLower === email.toLowerCase());
+              const isAdmin = email && email.toLowerCase() === ADMIN_EMAIL;
+              const canManage = !!(isOwner || isAdmin);
 
               return (
                 <li key={localKey} style={{ listStyle: 'disc' }}>
@@ -335,12 +379,19 @@ const UIDComments: React.FC<Props> = ({ uid }) => {
                     )}
 
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => startEdit(it)} disabled={editDisabled}>
-                        Edit
-                      </button>
-                      <button onClick={() => handleDelete(it, idx)} disabled={isDeleting}>
-                        {isDeleting ? "Deleting…" : "Delete"}
-                      </button>
+                      {canManage && (
+                        <>
+                          <button onClick={() => startEdit(it)} disabled={editDisabled}>
+                            Edit
+                          </button>
+                          <button onClick={() => handleDelete(it, idx)} disabled={isDeleting}>
+                            {isDeleting ? "Deleting…" : "Delete"}
+                          </button>
+                        </>
+                      )}
+                      {!canManage && (
+                        <span style={{ fontSize: 12, color: '#888' }}>No actions available</span>
+                      )}
                     </div>
 
                   </div>

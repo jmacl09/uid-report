@@ -20,6 +20,7 @@ import {
 
 import SettingsPage from "./pages/Settings";
 import SuggestionsPage from "./pages/SuggestionsPage";   // ⭐ Correct import
+import Logs from "./pages/Logs";
 
 import logo from "./assets/optical360-logo.png";
 import "./Theme.css";
@@ -68,24 +69,50 @@ const UserStatus: React.FC = () => {
 /* -------------------------------------------------------------
    NAVIGATION SIDEBAR
 ------------------------------------------------------------- */
-const navLinks = [
-  {
-    links: [
-      { name: "Home", key: "home", icon: "Home", url: "/" },
-      { name: "UID Assistant", key: "uidAssistant", icon: "Search", url: "/uid" },
-      { name: "VSO Assistant", key: "vsoAssistant", icon: "Robot", url: "/vso" },
-      { name: "Fiber Span Utilization", key: "fiberSpanUtil", icon: "Chart", url: "/fiber-span-utilization" },
-      { name: "DCAT Assistant", key: "dcatAssistant", icon: "CalculatorAddition", url: "/dcat" },
-      { name: "Wirecheck Automation", key: "wirecheck", icon: "Plug", url: "/wirecheck" },
-      { name: "Suggestions", key: "suggestions", icon: "Megaphone", url: "/suggestions" },
-      { name: "Settings", key: "settings", icon: "Settings", url: "/settings" }
-    ]
-  }
-];
-
 const SidebarNav: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [email, setEmail] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    try {
+      const stored = localStorage.getItem("loggedInEmail");
+      if (stored) setEmail(stored);
+    } catch {}
+
+    const handler = (ev: any) => {
+      try {
+        const detail = ev?.detail || localStorage.getItem("loggedInEmail") || "";
+        setEmail(detail || null);
+      } catch {}
+    };
+
+    window.addEventListener("loggedInEmailChanged", handler as EventListener);
+    return () => window.removeEventListener("loggedInEmailChanged", handler as EventListener);
+  }, []);
+
+  const isAdmin = email && email.toLowerCase() === "joshmaclean@microsoft.com";
+
+  const navLinks = React.useMemo(
+    () => [
+      {
+        links: [
+          { name: "Home", key: "home", icon: "Home", url: "/" },
+          { name: "UID Assistant", key: "uidAssistant", icon: "Search", url: "/uid" },
+          { name: "VSO Assistant", key: "vsoAssistant", icon: "Robot", url: "/vso" },
+          { name: "Fiber Span Utilization", key: "fiberSpanUtil", icon: "Chart", url: "/fiber-span-utilization" },
+          { name: "DCAT Assistant", key: "dcatAssistant", icon: "CalculatorAddition", url: "/dcat" },
+          { name: "Wirecheck Automation", key: "wirecheck", icon: "Plug", url: "/wirecheck" },
+          { name: "Suggestions", key: "suggestions", icon: "Megaphone", url: "/suggestions" },
+          { name: "Settings", key: "settings", icon: "Settings", url: "/settings" },
+          ...(isAdmin
+            ? [{ name: "Logs", key: "logs", icon: "History", url: "/logs" } as const]
+            : [])
+        ]
+      }
+    ],
+    [isAdmin]
+  );
 
   return (
     <div className="sidebar dark-nav">
@@ -121,6 +148,7 @@ const SidebarNav: React.FC = () => {
           location.pathname.startsWith("/wirecheck") ? "wirecheck" :
           location.pathname.startsWith("/suggestions") ? "suggestions" :
           location.pathname.startsWith("/settings") ? "settings" :
+          location.pathname.startsWith("/logs") ? "logs" :
           undefined
         }
       />
@@ -237,6 +265,7 @@ function App() {
             <Route path="/wirecheck" element={<WirecheckAutomation />} />
             <Route path="/suggestions" element={<SuggestionsPage />} /> {/* ⭐ Now correct */}
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/logs" element={<Logs />} />
           </Routes>
         </div>
       </div>

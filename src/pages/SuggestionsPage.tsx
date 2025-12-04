@@ -10,6 +10,45 @@ import {
 } from "@fluentui/react";
 import { API_BASE } from "../api/config";
 
+// Theme-friendly input/button styles for dark mode
+const INPUT_BG = "#0f1112";
+const INPUT_BORDER = "1px solid rgba(255,255,255,0.04)";
+const INPUT_TEXT = "#e6eef6";
+
+const textFieldStyles = {
+  fieldGroup: {
+    background: INPUT_BG,
+    border: INPUT_BORDER,
+    selectors: {
+      ':hover': { border: '1px solid rgba(80,179,255,0.12)' },
+    },
+  },
+  field: { color: INPUT_TEXT },
+  label: { color: '#9fb2c9' },
+};
+
+const dropdownStyles = {
+  dropdown: { background: INPUT_BG, color: INPUT_TEXT, border: INPUT_BORDER },
+  title: { background: 'transparent', color: INPUT_TEXT },
+  caretDown: { color: INPUT_TEXT },
+  label: { color: '#9fb2c9' },
+};
+
+const buttonStyles = {
+  root: {
+    background: 'linear-gradient(180deg, rgba(80,179,255,0.06), rgba(80,179,255,0.04))',
+    color: '#d6f5ff',
+    border: '1px solid rgba(80,179,255,0.14)',
+  },
+  rootDisabled: {
+    background: 'rgba(255,255,255,0.02)',
+    color: 'rgba(255,255,255,0.5)',
+    border: '1px solid rgba(255,255,255,0.02)',
+  },
+};
+
+const checkboxStyles = { label: { color: '#b5c7d8' } };
+
 /* ---------------------------------------------------------
    Suggestion Model
 --------------------------------------------------------- */
@@ -199,6 +238,7 @@ const SuggestionsPage: React.FC = () => {
                 options={typeOptions}
                 selectedKey={type}
                 onChange={(_, opt) => setType(String(opt?.key || "Improvement"))}
+                styles={dropdownStyles}
               />
             </div>
 
@@ -208,6 +248,7 @@ const SuggestionsPage: React.FC = () => {
                 placeholder="Short title"
                 value={summary}
                 onChange={(_, v) => setSummary(v || "")}
+                styles={textFieldStyles}
               />
             </div>
           </div>
@@ -219,6 +260,7 @@ const SuggestionsPage: React.FC = () => {
             placeholder="Describe your idea…"
             value={description}
             onChange={(_, v) => setDescription(v || "")}
+            styles={textFieldStyles}
           />
 
           {/* Single real submit button */}
@@ -227,12 +269,14 @@ const SuggestionsPage: React.FC = () => {
               label="Post anonymously"
               checked={anonymous}
               onChange={(_, c) => setAnonymous(!!c)}
+              styles={checkboxStyles}
             />
 
             <PrimaryButton
               text="Submit suggestion"
               disabled={!summary.trim() || !description.trim()}
               onClick={submit}
+              styles={buttonStyles}
             />
           </div>
         </div>

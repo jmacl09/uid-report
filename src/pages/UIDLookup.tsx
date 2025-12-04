@@ -3066,7 +3066,13 @@ export default function UIDLookup() {
       }
       loadTroubleshooting();
       return () => { cancelled = true; };
-    }, [isLinkSummary, contextUid, storageKey, rows, title, activeProjectId, lastSearched]);
+    // Note: `activeProjectId` and `lastSearched` are read inside the effect
+    // when computing the expected partition, but changing them does not
+    // require re-running this loader directly (we trigger reloads via
+    // `contextUid`, `storageKey`, or table `rows`/`title`). Omitting them
+    // prevents spurious eslint warnings about outer-scope values here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isLinkSummary, contextUid, storageKey, rows, title]);
     // comments are kept in-memory only; do not read/write localStorage here
     const saveComments = (c: Record<string, any>) => {
       // Keep comments in-memory only; do not persist to localStorage.

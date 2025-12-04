@@ -29,6 +29,11 @@ function chooseTable(category) {
             return process.env.TABLES_TABLE_NOTES || "Notes";
         case "comments":
             return process.env.TABLES_TABLE_COMMENTS || "Comments";
+
+        /* ⭐ ADD THIS — ActivityLog integration without breaking anything ⭐ */
+        case "activitylog":
+            return process.env.TABLE_NAME_LOG || "ActivityLog";
+
         default:
             return process.env.TABLES_TABLE_DEFAULT || "Projects";
     }
@@ -96,7 +101,7 @@ module.exports = async function (context, req) {
         return;
     }
 
-    // Dedicated logging API
+    // Dedicated logging API (unchanged)
     if ((req.method === "GET" || req.method === "POST") && req.url && req.url.includes("/api/log")) {
         try {
             const { client } = getLogTableClient();

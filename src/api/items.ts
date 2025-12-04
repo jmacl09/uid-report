@@ -74,6 +74,10 @@ export async function getAllSuggestions(endpoint?: string) {
   return safeFetchList(buildUrl(endpoint, { category: "Suggestions" }));
 }
 
+export async function getAllProjects(endpoint?: string) {
+  return safeFetchList(buildUrl(endpoint, { category: "Projects" }));
+}
+
 /* ------------------------------------------------------------------
    SAVE NOTE
 ------------------------------------------------------------------- */

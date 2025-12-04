@@ -211,8 +211,16 @@ const VSOCalendar: React.FC<Props> = ({
             map[ev.id] = new Date().toISOString();
             saveSavedMap(map);
           }
-        } catch (err) {
-          console.warn("[VSOCalendar] Save failed:", err);
+        } catch (err: any) {
+          // Backend sometimes returns 400 for minor/missing fields while the UI still works.
+          // Avoid polluting the console with repeated warnings for 400 responses,
+          // but surface other errors as warnings.
+          const msg = String(err?.message || err || "");
+          if (msg.includes("Save failed 400") || msg.includes("400 (Bad Request)")) {
+            console.debug("[VSOCalendar] Save returned 400 (ignored):", msg);
+          } else {
+            console.warn("[VSOCalendar] Save failed:", err);
+          }
         }
       }
     };

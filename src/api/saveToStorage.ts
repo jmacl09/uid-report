@@ -58,6 +58,8 @@ export async function saveToStorage(input: SaveInput): Promise<any> {
 
   if (input.extras) body.extras = input.extras;
 
+  // If caller provided a uid, include it in the payload for backends that require it
+  if (input.uid) body.uid = input.uid;
   if (category === "Troubleshooting") {
     if (!input.uid) throw new Error("Troubleshooting requires UID");
     body.uid = input.uid;

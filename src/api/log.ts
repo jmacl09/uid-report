@@ -7,7 +7,13 @@ export interface LogPayload {
 }
 
 export async function logAction(email: string, action: string, metadata?: any): Promise<void> {
-  if (!email || !action) return;
+  if (!action) return;
+
+  const safeEmail =
+    email ||
+    localStorage.getItem("loggedInEmail") ||
+    sessionStorage.getItem("loggedInEmail") ||
+    "UnknownUser";
 
   try {
     await apiFetch("/api/log", {
@@ -15,9 +21,11 @@ export async function logAction(email: string, action: string, metadata?: any): 
       headers: {
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ email, action, metadata } as LogPayload)
+      body: JSON.stringify({
+        email: safeEmail,
+        action,
+        metadata
+      } as LogPayload)
     });
-  } catch {
-    // Swallow logging errors so UX is never blocked
-  }
+  } catch {}
 }

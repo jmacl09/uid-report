@@ -50,12 +50,7 @@ function getAlias(email?: string) {
   return at > 0 ? e.slice(0, at) : e;
 }
 
-/* ---------------------------------------------------------
-   MAIN COMPONENT
---------------------------------------------------------- */
 const SuggestionsPage: React.FC = () => {
-  console.log("🔥 SuggestionsPage mounted");
-
   const [items, setItems] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState("Improvement");
@@ -66,12 +61,8 @@ const SuggestionsPage: React.FC = () => {
   const email = getEmail();
   const alias = getAlias(email);
 
-  /* ---------------------------------------------------------
-     Load suggestions
-  --------------------------------------------------------- */
+  /* LOAD */
   useEffect(() => {
-    console.log("📥 Loading suggestions...");
-
     async function load() {
       setLoading(true);
       try {
@@ -79,11 +70,11 @@ const SuggestionsPage: React.FC = () => {
         const json = await res.json();
         const rows = Array.isArray(json) ? json : json.items || [];
 
-        const mapped: Suggestion[] = rows.map((e: any): Suggestion => {
+        const mapped: Suggestion[] = rows.map((e: any) => {
           const owner = (e.owner || "").toString();
           const anon = owner.toLowerCase() === "anonymous";
 
-          return { 
+          return {
             id: e.rowKey,
             ts: Date.parse(e.savedAt || new Date().toISOString()),
             type: e.type || "Other",
@@ -95,10 +86,8 @@ const SuggestionsPage: React.FC = () => {
           };
         });
 
-        mapped.sort((a: Suggestion, b: Suggestion) => b.ts - a.ts);
+        mapped.sort((a, b) => b.ts - a.ts);
         setItems(mapped);
-      } catch (err) {
-        console.error("❌ Suggestions load error:", err);
       } finally {
         setLoading(false);
       }
@@ -107,54 +96,34 @@ const SuggestionsPage: React.FC = () => {
     load();
   }, []);
 
-  /* ---------------------------------------------------------
-     Auto POST test to prove POST works
-  --------------------------------------------------------- */
+  /* AUTO POST */
   useEffect(() => {
-    console.log("🔥 autoTestPost effect running...");
-
-    async function autoTestPost() {
-      try {
-        const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            category: "Suggestions",
-            title: "AutoTest",
-            summary: "AutoTest summary",
-            description: "Posted on mount",
-            type: "Auto",
-            owner: "AutoTester",
-          }),
-        });
-
-        const out = await res.json();
-        console.log("🔥 autoTestPost result:", out);
-      } catch (err) {
-        console.error("🔥 autoTestPost error:", err);
-      }
+    async function post() {
+      await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: "Suggestions",
+          title: "AutoTest",
+          summary: "AutoTest summary",
+          description: "Posted on mount",
+          type: "Auto",
+          owner: "AutoTester",
+        }),
+      });
     }
-
-    autoTestPost();
+    post();
   }, []);
 
-  /* ---------------------------------------------------------
-     Submit suggestion
-  --------------------------------------------------------- */
+  /* SUBMIT */
   const submit = async () => {
-    console.log("🔥 submit() CALLED");
-
     const s = summary.trim();
     const d = description.trim();
-    if (!s || !d) {
-      console.log("❌ Missing summary or description");
-      return;
-    }
+    if (!s || !d) return;
 
     const owner = anonymous ? "Anonymous" : alias || email || "Unknown";
     const now = Date.now();
 
-    // optimistic UI
     setItems(prev => [
       {
         id: `temp-${now}`,
@@ -173,64 +142,47 @@ const SuggestionsPage: React.FC = () => {
     setDescription("");
     setAnonymous(false);
 
-    try {
-      console.log("📤 Sending POST:", {
+    await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
         category: "Suggestions",
         title: s,
         summary: s,
         description: d,
         type,
         owner,
-      });
+      }),
+    });
 
-      await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category: "Suggestions",
-          title: s,
-          summary: s,
-          description: d,
-          type,
-          owner,
-        }),
-      });
+    const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`);
+    const json = await res.json();
+    const rows = Array.isArray(json) ? json : json.items || [];
 
-      console.log("📥 Reloading suggestions...");
-      const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`);
-      const json = await res.json();
-      const rows = Array.isArray(json) ? json : json.items || [];
+    const mapped: Suggestion[] = rows.map((e: any) => {
+      const owner = (e.owner || "").toString();
+      const anon = owner.toLowerCase() === "anonymous";
 
-      const mapped: Suggestion[] = rows.map((e: any): Suggestion => {
-        const owner = (e.owner || "").toString();
-        const anon = owner.toLowerCase() === "anonymous";
+      return {
+        id: e.rowKey,
+        ts: Date.parse(e.savedAt || new Date().toISOString()),
+        type: e.type || "Other",
+        summary: e.summary || e.title || "",
+        description: e.description || "",
+        anonymous: anon,
+        authorEmail: anon ? undefined : owner,
+        authorAlias: anon ? undefined : owner,
+      };
+    });
 
-          return { 
-          id: e.rowKey,
-          ts: Date.parse(e.savedAt || new Date().toISOString()),
-          type: e.type || "Other",
-          summary: e.summary || e.title || "",
-          description: e.description || "",
-          anonymous: anon,
-          authorEmail: anon ? undefined : owner,
-          authorAlias: anon ? undefined : owner,
-        };
-      });
-
-        mapped.sort((a: Suggestion, b: Suggestion) => b.ts - a.ts);
-      setItems(mapped);
-    } catch (err) {
-      console.error("❌ submit() error:", err);
-    }
+    mapped.sort((a, b) => b.ts - a.ts);
+    setItems(mapped);
   };
 
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const sorted = useMemo(() => [...items].sort((a: Suggestion, b: Suggestion) => b.ts - a.ts), [items]);
+  const sorted = useMemo(() => [...items].sort((a, b) => b.ts - a.ts), [items]);
 
-  /* ---------------------------------------------------------
-     RENDER UI
-  --------------------------------------------------------- */
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
       <div className="vso-form-container glow" style={{ width: "100%" }}>
@@ -239,7 +191,10 @@ const SuggestionsPage: React.FC = () => {
           <span className="title-sub">Share ideas, fixes, and improvements</span>
         </div>
 
-        {/* Form */}
+        {/* TEST MARKER */}
+        <div style={{ fontSize: 72, color: "red", textAlign: "center" }}>+</div>
+
+        {/* FORM */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ width: 220 }}>
@@ -270,20 +225,16 @@ const SuggestionsPage: React.FC = () => {
             onChange={(_, v) => setDescription(v || "")}
           />
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <Checkbox
-              label="Post anonymously"
-              checked={anonymous}
-              onChange={(_, c) => setAnonymous(!!c)}
-            />
+          <Checkbox
+            label="Post anonymously"
+            checked={anonymous}
+            onChange={(_, c) => setAnonymous(!!c)}
+          />
 
-            {/* TEST BUTTON 1 */}
-            <PrimaryButton
-              text="Test Console Log"
-              onClick={() => console.log("🔥 BUTTON 1 CLICKED")}
-            />
+          {/* ⭐⭐⭐ FIX — BUTTONS IN THEIR OWN BLOCK ⭐⭐⭐ */}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
+            <PrimaryButton text="Test Console Log" onClick={() => console.log("🔥 BUTTON 1 CLICKED")} />
 
-            {/* TEST BUTTON 2 */}
             <PrimaryButton
               text="Test Alert"
               onClick={() => {
@@ -292,21 +243,19 @@ const SuggestionsPage: React.FC = () => {
               }}
             />
 
-            {/* TEST BUTTON 3 */}
             <PrimaryButton
               text="Test submit()"
               disabled={!summary.trim() || !description.trim()}
               onClick={() => {
-                console.log("🔥 BUTTON 3 CLICKED → submit()");
+                console.log("🔥 BUTTON 3 CLICKED");
                 submit();
               }}
             />
 
-            {/* TEST BUTTON 4 */}
             <PrimaryButton
               text="Force POST"
               onClick={async () => {
-                console.log("🔥 BUTTON 4 CLICKED → Force POST");
+                console.log("🔥 BUTTON 4 CLICKED");
                 await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
@@ -325,7 +274,7 @@ const SuggestionsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Suggestions List */}
+      {/* LIST */}
       <div className="notes-card" style={{ marginTop: 20 }}>
         <Stack horizontal horizontalAlign="space-between">
           <Text className="section-title">Community suggestions</Text>
@@ -333,62 +282,28 @@ const SuggestionsPage: React.FC = () => {
         </Stack>
 
         {loading && <div className="note-empty">Loading…</div>}
-
-        {!loading && sorted.length === 0 && (
-          <div className="note-empty">No suggestions yet.</div>
-        )}
+        {!loading && sorted.length === 0 && <div className="note-empty">No suggestions yet.</div>}
 
         {sorted.length > 0 && (
           <div className="notes-list">
-            {sorted.map((s) => {
+            {sorted.map(s => {
               const open = expanded === s.id;
 
               return (
                 <div key={s.id} className="note-item">
                   <div className="note-header">
                     <div className="note-meta" style={{ display: "flex", gap: 8 }}>
-                      <span
-                        className="wf-inprogress-badge"
-                        style={{
-                          borderRadius: 8,
-                          padding: "2px 8px",
-                          fontWeight: 700,
-                          fontSize: 12,
-                          color: "#50b3ff",
-                          border: "1px solid rgba(80,179,255,0.28)",
-                        }}
-                      >
-                        {s.type}
-                      </span>
-
+                      <span className="wf-inprogress-badge" style={{ padding: "2px 8px" }}>{s.type}</span>
                       <Text className="note-alias">{s.summary}</Text>
-
-                      <span className="note-dot">·</span>
                       <span className="note-time">{new Date(s.ts).toLocaleString()}</span>
-
-                      {!s.anonymous && (s.authorAlias || s.authorEmail) && (
-                        <>
-                          <span className="note-dot">·</span>
-                          <span className="note-email">
-                            {s.authorAlias || s.authorEmail}
-                          </span>
-                        </>
-                      )}
                     </div>
 
-                    <button
-                      className="note-btn"
-                      onClick={() => setExpanded(open ? null : s.id)}
-                    >
+                    <button onClick={() => setExpanded(open ? null : s.id)}>
                       {open ? "Hide" : "Show"}
                     </button>
                   </div>
 
-                  {open && (
-                    <div className="note-body">
-                      <div style={{ whiteSpace: "pre-wrap" }}>{s.description}</div>
-                    </div>
-                  )}
+                  {open && <div className="note-body">{s.description}</div>}
                 </div>
               );
             })}

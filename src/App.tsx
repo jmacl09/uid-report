@@ -1,6 +1,13 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, useNavigate, useLocation } from "react-router-dom";
+import {
+  BrowserRouter as Router,
+  Routes,
+  Route,
+  useNavigate,
+  useLocation
+} from "react-router-dom";
 import { Nav } from "@fluentui/react";
+
 import {
   FiberSpanUtilization,
   UIDLookup,
@@ -10,11 +17,13 @@ import {
   WirecheckAutomation,
   Dashboard
 } from "./pages";
-import SettingsPage from "./pages/Settings";
 
-import { Stack, Text, TextField, PrimaryButton, Dropdown, Checkbox } from "@fluentui/react";
+import SettingsPage from "./pages/Settings";
+import SuggestionsPage from "./pages/SuggestionsPage";   // ⭐ Correct import
+
 import logo from "./assets/optical360-logo.png";
 import "./Theme.css";
+// Removed unused Fluent UI controls to satisfy eslint
 
 /* -------------------------------------------------------------
    USER STATUS COMPONENT
@@ -124,329 +133,7 @@ const SidebarNav: React.FC = () => {
 };
 
 /* -------------------------------------------------------------
-   SUGGESTIONS PAGE (FULL, UNCHANGED)
-------------------------------------------------------------- */
-
-type SuggestionItem = {
-  id: string;
-  ts: number;
-  type: string;
-  summary: string;
-  description: string;
-  status?: "new" | "inprogress" | "completed";
-  anonymous?: boolean;
-  authorEmail?: string;
-  authorAlias?: string;
-};
-
-const SUGGESTIONS_KEY = "uidSuggestions";
-
-const getEmail = () => {
-  try {
-    return localStorage.getItem("loggedInEmail") || "";
-  } catch {
-    return "";
-  }
-};
-
-const getAlias = (email?: string | null) => {
-  const e = (email || "").trim();
-  if (!e) return "";
-  const at = e.indexOf("@");
-  return at > 0 ? e.slice(0, at) : e;
-};
-
-const SuggestionsPageInline: React.FC = () => {
-  const [items, setItems] = React.useState<SuggestionItem[]>(() => {
-    try {
-      const raw = localStorage.getItem(SUGGESTIONS_KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      return Array.isArray(arr) ? arr : [];
-    } catch {
-      return [];
-    }
-  });
-
-  const [type, setType] = React.useState<string>("Improvement");
-  const [summary, setSummary] = React.useState<string>("");
-  const [description, setDescription] = React.useState<string>("");
-  const [anonymous, setAnonymous] = React.useState<boolean>(false);
-
-  React.useEffect(() => {
-    try {
-      localStorage.setItem(SUGGESTIONS_KEY, JSON.stringify(items));
-    } catch {}
-  }, [items]);
-
-  const email = getEmail();
-  const alias = getAlias(email);
-
-  const submit = () => {
-    const s = summary.trim();
-    const d = description.trim();
-    if (!s || !d) return;
-
-    const next: SuggestionItem = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      ts: Date.now(),
-      type,
-      summary: s,
-      description: d,
-      status: "new",
-      anonymous,
-      authorEmail: anonymous ? undefined : email || undefined,
-      authorAlias: anonymous ? undefined : alias || undefined
-    };
-
-    setItems([next, ...items]);
-    setSummary("");
-    setDescription("");
-    setAnonymous(false);
-  };
-
-  const [expanded, setExpanded] = React.useState<string | null>(null);
-  const sorted = React.useMemo(() => [...items].sort((a, b) => b.ts - a.ts), [items]);
-
-  return (
-    <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <div className="vso-form-container glow" style={{ width: "100%" }}>
-        <div className="banner-title">
-          <span className="title-text">Suggestions</span>
-          <span className="title-sub">Share ideas, fixes, and improvements</span>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <div style={{ width: 260 }}>
-              <Dropdown
-                label="Type"
-                options={[
-                  { key: "Feature", text: "Feature" },
-                  { key: "Improvement", text: "Improvement" },
-                  { key: "Bug", text: "Bug" },
-                  { key: "UI/UX", text: "UI/UX" },
-                  { key: "Data", text: "Data" },
-                  { key: "Other", text: "Other" }
-                ]}
-                selectedKey={type}
-                onChange={(_, opt) => setType(String(opt?.key || "Improvement"))}
-                styles={{
-                  dropdown: { width: 260 },
-                  title: {
-                    background: "#141414",
-                    color: "#fff",
-                    border: "1px solid #333",
-                    borderRadius: 8,
-                    height: 42
-                  },
-                  caretDown: { color: "#cfe3ff" },
-                  callout: { background: "#141414", border: "1px solid #333" },
-                  dropdownItems: { background: "#141414" },
-                  dropdownItem: {
-                    background: "#141414",
-                    color: "#fff",
-                    selectors: { ":hover": { background: "#1a1a1a" } }
-                  },
-                  dropdownItemSelected: { background: "#1f1f1f", color: "#fff" },
-                  dropdownOptionText: { color: "#fff" }
-                }}
-              />
-            </div>
-
-            <div style={{ flex: 1 }}>
-              <TextField
-                label="Name / short summary"
-                placeholder="e.g., Align export columns with CIS order"
-                value={summary}
-                onChange={(_, v) => setSummary(v || "")}
-                styles={{
-                  root: { width: "100%" },
-                  fieldGroup: {
-                    background: "#141414",
-                    border: "1px solid #333",
-                    borderRadius: 8,
-                    height: 42
-                  },
-                  field: {
-                    color: "#fff",
-                    selectors: { "::placeholder": { color: "#8ea6bf", opacity: 1 } }
-                  }
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{ width: "100%" }}>
-            <Text style={{ color: "#cfe3ff", fontWeight: 600, marginBottom: 4, display: "block" }}>
-              Description
-            </Text>
-            <textarea
-              rows={6}
-              placeholder="Describe the idea, why it helps, and any details"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              style={{
-                width: "100%",
-                background: "#141414",
-                color: "#fff",
-                border: "1px solid #333",
-                borderRadius: 8,
-                padding: "10px 12px",
-                lineHeight: "20px",
-                boxSizing: "border-box",
-                resize: "vertical",
-                minHeight: 120
-              }}
-            />
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Checkbox
-                ariaLabel="Post anonymously"
-                checked={anonymous}
-                onChange={(_, c) => setAnonymous(!!c)}
-                boxSide="start"
-                styles={{
-                  root: { color: "#e6f1ff", display: "inline-flex", alignItems: "center" },
-                  checkbox: { borderColor: "#5a6b7c", background: "#141414", width: 18, height: 18 },
-                  checkmark: { color: "#00c853" }
-                }}
-              />
-              <span style={{ color: "#e6f1ff", fontWeight: 600 }}>Post anonymously</span>
-            </div>
-
-            <PrimaryButton
-              text="Submit suggestion"
-              onClick={submit}
-              disabled={!summary.trim() || !description.trim()}
-              className="search-btn"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="notes-card" style={{ marginTop: 16 }}>
-        <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
-          <Text className="section-title">Community suggestions</Text>
-          <span style={{ color: "#a6b7c6", fontSize: 12 }}>{sorted.length} total</span>
-        </Stack>
-
-        {sorted.length === 0 ? (
-          <div className="note-empty">No suggestions yet. Be the first to post one.</div>
-        ) : (
-          <div className="notes-list">
-            {sorted.map((s) => {
-              const open = expanded === s.id;
-              const status = s.status || "new";
-              const statusClass =
-                status === "completed"
-                  ? "good"
-                  : status === "inprogress"
-                  ? "warning"
-                  : "accent";
-
-              return (
-                <div key={s.id} className="note-item">
-                  <div className="note-header" style={{ alignItems: "center" }}>
-                    <div className="note-meta" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <span
-                        className="wf-inprogress-badge"
-                        style={{
-                          color: "#50b3ff",
-                          border: "1px solid rgba(80,179,255,0.28)",
-                          borderRadius: 8,
-                          padding: "2px 8px",
-                          fontWeight: 700,
-                          fontSize: 12
-                        }}
-                      >
-                        {s.type}
-                      </span>
-
-                      <span className="note-alias" style={{ color: "#e6f1ff" }}>{s.summary}</span>
-                      <span className="note-dot">·</span>
-                      <span className="note-time">{new Date(s.ts).toLocaleString()}</span>
-
-                      <span
-                        className={`status-label ${statusClass}`}
-                        title={`Status: ${status.replace(/\b\w/g, (c) => c.toUpperCase())}`}
-                      >
-                        {status === "inprogress" ? "In Progress" : status === "completed" ? "Completed" : "New"}
-                      </span>
-
-                      {!s.anonymous && (s.authorAlias || s.authorEmail) && (
-                        <>
-                          <span className="note-dot">·</span>
-                          <span className="note-email">{s.authorAlias || s.authorEmail}</span>
-                        </>
-                      )}
-                    </div>
-
-                    <div className="note-controls">
-                      <Dropdown
-                        ariaLabel="Change status"
-                        selectedKey={status}
-                        options={[
-                          { key: "new", text: "New" },
-                          { key: "inprogress", text: "In Progress" },
-                          { key: "completed", text: "Completed" }
-                        ]}
-                        styles={{
-                          dropdown: { width: 160 },
-                          title: {
-                            background: "#141414",
-                            color: "#fff",
-                            border: "1px solid #333",
-                            borderRadius: 8,
-                            height: 32
-                          },
-                          caretDown: { color: "#cfe3ff" },
-                          callout: { background: "#141414", border: "1px solid #333" },
-                          dropdownItems: { background: "#141414" },
-                          dropdownItem: {
-                            background: "#141414",
-                            color: "#fff",
-                            selectors: { ":hover": { background: "#1a1a1a" } }
-                          },
-                          dropdownItemSelected: { background: "#1f1f1f", color: "#fff" },
-                          dropdownOptionText: { color: "#fff" }
-                        }}
-                        onChange={(_, opt) => {
-                          const val = String(opt?.key || "new") as "new" | "inprogress" | "completed";
-                          setItems((prev) => prev.map((it) => (it.id === s.id ? { ...it, status: val } : it)));
-                        }}
-                      />
-
-                      <button
-                        className="note-btn"
-                        onClick={() => setExpanded(open ? null : s.id)}
-                        title={open ? "Collapse" : "Expand"}
-                      >
-                        {open ? "Hide" : "Show"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {open && (
-                    <div className="note-body">
-                      <div className="note-text" style={{ whiteSpace: "pre-wrap" }}>
-                        {s.description}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-/* -------------------------------------------------------------
-   ROOT APP COMPONENT — FIXED AUTH HANDLING
+   ROOT APP COMPONENT
 ------------------------------------------------------------- */
 
 function App() {
@@ -454,9 +141,7 @@ function App() {
     const isLocal = window.location.hostname === "localhost";
 
     const fetchAuth = async () => {
-      if (isLocal) {
-        return; // <-- SKIP calling /.auth/me locally
-      }
+      if (isLocal) return;
 
       try {
         const res = await fetch("/.auth/me", { credentials: "include" });
@@ -497,21 +182,18 @@ function App() {
 
     fetchAuth();
 
-    const refresh = () => fetchAuth();
-
     if (!isLocal) {
+      const refresh = () => fetchAuth();
       window.addEventListener("focus", refresh);
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") refresh();
       });
-    }
 
-    return () => {
-      if (!isLocal) {
+      return () => {
         window.removeEventListener("focus", refresh);
         document.removeEventListener("visibilitychange", () => {});
-      }
-    };
+      };
+    }
   }, []);
 
   return (
@@ -529,11 +211,13 @@ function App() {
             boxSizing: "border-box"
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <div style={{ display: "flex", justifyContent: "center" }}>
             <div className="global-banner" role="status" aria-live="polite">
               <div className="global-banner-inner">
                 <strong>Site Migration In Progress</strong>
-                <span className="global-banner-text"> — During this transition some features may be temporarily unavailable or behave unexpectedly.</span>
+                <span className="global-banner-text">
+                  {" "}— During this transition some features may be temporarily unavailable or behave unexpectedly.
+                </span>
               </div>
             </div>
           </div>
@@ -542,6 +226,7 @@ function App() {
             <UserStatus />
           </div>
 
+          {/* ⭐ FIXED ROUTES — now using your real SuggestionsPage.tsx */}
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/uid" element={<UIDLookup />} />
@@ -550,7 +235,7 @@ function App() {
             <Route path="/vso2" element={<VSOAssistantDev />} />
             <Route path="/dcat" element={<DCATAssistant />} />
             <Route path="/wirecheck" element={<WirecheckAutomation />} />
-            <Route path="/suggestions" element={<SuggestionsPageInline />} />
+            <Route path="/suggestions" element={<SuggestionsPage />} /> {/* ⭐ Now correct */}
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </div>

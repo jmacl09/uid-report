@@ -10,48 +10,84 @@ import {
 } from "@fluentui/react";
 import { API_BASE } from "../api/config";
 
-// Theme-friendly input/button styles for dark mode
+// Dark theme input/button styles
 const INPUT_BG = "#0f1112";
-const INPUT_BORDER = "1px solid rgba(255,255,255,0.04)";
+const INPUT_BORDER = "1px solid rgba(255,255,255,0.05)";
 const INPUT_TEXT = "#e6eef6";
 
+// -------------------- TEXT FIELD STYLES --------------------
 const textFieldStyles = {
   fieldGroup: {
     background: INPUT_BG,
     border: INPUT_BORDER,
     selectors: {
-      ':hover': { border: '1px solid rgba(80,179,255,0.12)' },
+      ":hover": { border: "1px solid rgba(80,179,255,0.18)" },
     },
   },
-  field: { color: INPUT_TEXT },
-  label: { color: '#9fb2c9' },
+  field: { 
+    color: INPUT_TEXT,
+    paddingTop: "10px",
+    paddingBottom: "8px",
+  },
+  label: { color: "#9fb2c9" },
 };
-
+// -------------------- DROPDOWN STYLES --------------------
 const dropdownStyles = {
-  dropdown: { background: INPUT_BG, color: INPUT_TEXT, border: INPUT_BORDER },
-  title: { background: 'transparent', color: INPUT_TEXT },
+  root: { width: "100%" },
+  dropdown: {
+    background: INPUT_BG,
+    border: INPUT_BORDER,
+    color: INPUT_TEXT,
+    selectors: {
+      ":hover": { border: "1px solid rgba(80,179,255,0.18)" },
+    },
+  },
+  title: {
+    background: INPUT_BG,
+    color: INPUT_TEXT,
+    border: "none",
+  },
   caretDown: { color: INPUT_TEXT },
-  label: { color: '#9fb2c9' },
+  label: { color: "#9fb2c9" },
+  callout: {
+    background: INPUT_BG,
+    border: INPUT_BORDER,
+  },
+  dropdownItem: {
+    background: INPUT_BG,
+    color: INPUT_TEXT,
+    selectors: {
+      ":hover": { background: "#1a1d1f", color: "#d4e6ff" },
+    },
+  },
+  dropdownItemSelected: {
+    background: "#1e2427",
+    color: "#50b3ff",
+  },
 };
 
+// -------------------- BUTTON STYLES --------------------
 const buttonStyles = {
   root: {
-    background: 'linear-gradient(180deg, rgba(80,179,255,0.06), rgba(80,179,255,0.04))',
-    color: '#d6f5ff',
-    border: '1px solid rgba(80,179,255,0.14)',
+    background:
+      "linear-gradient(180deg, rgba(80,179,255,0.06), rgba(80,179,255,0.04))",
+    color: "#d6f5ff",
+    border: "1px solid rgba(80,179,255,0.14)",
   },
   rootDisabled: {
-    background: 'rgba(255,255,255,0.02)',
-    color: 'rgba(255,255,255,0.5)',
-    border: '1px solid rgba(255,255,255,0.02)',
+    background: "rgba(255,255,255,0.02)",
+    color: "rgba(255,255,255,0.5)",
+    border: "1px solid rgba(255,255,255,0.02)",
   },
 };
 
-const checkboxStyles = { label: { color: '#b5c7d8' } };
+const checkboxStyles = {
+  label: { color: "#ffffff" },
+};
 
-/* ---------------------------------------------------------
-   Suggestion Model
---------------------------------------------------------- */
+// ---------------------------------------------------------
+// Suggestion Model
+// ---------------------------------------------------------
 type Suggestion = {
   id: string;
   ts: number;
@@ -63,9 +99,9 @@ type Suggestion = {
   authorAlias?: string;
 };
 
-/* ---------------------------------------------------------
-   Dropdown Options
---------------------------------------------------------- */
+// ---------------------------------------------------------
+// Dropdown Options
+// ---------------------------------------------------------
 const typeOptions: IDropdownOption[] = [
   { key: "Feature", text: "Feature" },
   { key: "Improvement", text: "Improvement" },
@@ -89,12 +125,13 @@ function getAlias(email?: string) {
   return at > 0 ? e.slice(0, at) : e;
 }
 
-/* ---------------------------------------------------------
-   MAIN COMPONENT
---------------------------------------------------------- */
+// ---------------------------------------------------------
+// MAIN COMPONENT
+// ---------------------------------------------------------
 const SuggestionsPage: React.FC = () => {
   const [items, setItems] = useState<Suggestion[]>([]);
   const [loading, setLoading] = useState(false);
+
   const [type, setType] = useState("Improvement");
   const [summary, setSummary] = useState("");
   const [description, setDescription] = useState("");
@@ -103,9 +140,9 @@ const SuggestionsPage: React.FC = () => {
   const email = getEmail();
   const alias = getAlias(email);
 
-  /* ---------------------------------------------------------
-     Load suggestions from DB
-  --------------------------------------------------------- */
+  // ---------------------------------------------------------
+  // Load suggestions
+  // ---------------------------------------------------------
   useEffect(() => {
     async function load() {
       setLoading(true);
@@ -142,9 +179,9 @@ const SuggestionsPage: React.FC = () => {
     load();
   }, []);
 
-  /* ---------------------------------------------------------
-     Submit suggestion (DB save)
-  --------------------------------------------------------- */
+  // ---------------------------------------------------------
+  // Submit suggestion
+  // ---------------------------------------------------------
   const submit = async () => {
     const s = summary.trim();
     const d = description.trim();
@@ -153,8 +190,8 @@ const SuggestionsPage: React.FC = () => {
     const owner = anonymous ? "Anonymous" : alias || email || "Unknown";
     const now = Date.now();
 
-    // optimistic UI (instant add)
-    setItems(prev => [
+    // Optimistic UI
+    setItems((prev) => [
       {
         id: `temp-${now}`,
         ts: now,
@@ -186,7 +223,7 @@ const SuggestionsPage: React.FC = () => {
         }),
       });
 
-      // reload from DB to replace temp items with real saved ones
+      // Reload final DB data
       const res = await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`);
       const json = await res.json();
       const rows = Array.isArray(json) ? json : json.items || [];
@@ -215,24 +252,25 @@ const SuggestionsPage: React.FC = () => {
   };
 
   const [expanded, setExpanded] = useState<string | null>(null);
-
   const sorted = useMemo(() => [...items].sort((a, b) => b.ts - a.ts), [items]);
 
-  /* ---------------------------------------------------------
-     RENDER UI
-  --------------------------------------------------------- */
+  // ---------------------------------------------------------
+  // RENDER
+  // ---------------------------------------------------------
   return (
     <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <div className="vso-form-container glow" style={{ width: "100%" }}>
+      <div className="vso-form-container glow suggestions-form" style={{ width: "100%" }}>
         <div className="banner-title">
           <span className="title-text">Suggestions</span>
           <span className="title-sub">Share ideas, fixes, and improvements</span>
         </div>
 
-        {/* Form */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
-          <div style={{ display: "flex", gap: 10 }}>
-            <div style={{ width: 220 }}>
+        {/* FORM */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 20 }}>
+
+          {/* TYPE + SUMMARY */}
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <div style={{ width: 220, display: "flex", flexDirection: "column", justifyContent: "flex-start" }}>
               <Dropdown
                 label="Type"
                 options={typeOptions}
@@ -245,7 +283,7 @@ const SuggestionsPage: React.FC = () => {
             <div style={{ flex: 1 }}>
               <TextField
                 label="Summary"
-                placeholder="Short title"
+                placeholder="Enter a brief summary of your suggestion…"
                 value={summary}
                 onChange={(_, v) => setSummary(v || "")}
                 styles={textFieldStyles}
@@ -253,18 +291,26 @@ const SuggestionsPage: React.FC = () => {
             </div>
           </div>
 
+          {/* DESCRIPTION */}
           <TextField
             label="Description"
             multiline
             rows={4}
-            placeholder="Describe your idea…"
+            placeholder=""
             value={description}
             onChange={(_, v) => setDescription(v || "")}
             styles={textFieldStyles}
           />
 
-          {/* Single real submit button */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          {/* CHECKBOX + BUTTON */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginTop: 4,
+            }}
+          >
             <Checkbox
               label="Post anonymously"
               checked={anonymous}
@@ -282,8 +328,8 @@ const SuggestionsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Suggestions List */}
-      <div className="notes-card" style={{ marginTop: 20 }}>
+      {/* LIST */}
+      <div className="notes-card" style={{ marginTop: 24 }}>
         <Stack horizontal horizontalAlign="space-between">
           <Text className="section-title">Community suggestions</Text>
           <span style={{ color: "#a6b7c6", fontSize: 12 }}>{sorted.length} total</span>
@@ -302,9 +348,8 @@ const SuggestionsPage: React.FC = () => {
               return (
                 <div key={s.id} className="note-item">
                   <div className="note-header">
-                    <div className="note-meta" style={{ display: "flex", gap: 8 }}>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                       <span
-                        className="wf-inprogress-badge"
                         style={{
                           borderRadius: 8,
                           padding: "2px 8px",
@@ -320,7 +365,9 @@ const SuggestionsPage: React.FC = () => {
                       <Text className="note-alias">{s.summary}</Text>
 
                       <span className="note-dot">·</span>
-                      <span className="note-time">{new Date(s.ts).toLocaleString()}</span>
+                      <span className="note-time">
+                        {new Date(s.ts).toLocaleString()}
+                      </span>
 
                       {!s.anonymous && (s.authorAlias || s.authorEmail) && (
                         <>

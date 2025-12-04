@@ -2127,8 +2127,20 @@ button.accent-cta:hover {
   background: linear-gradient(180deg, #f3f6fb, #eef6ff);
 }
 
-/* === Suggestions Page (strong light-theme overrides) === */
-/* Ensure vivid blue labels for Description and Post anonymously regardless of component inline styles */
+/* === Suggestions Page Scoped Overrides === */
+/* Base container should not shrink and must be full width */
+.suggestions-form {
+  width: 100%;
+}
+
+/* Compact the "Type" row and other field rows */
+.suggestions-form .ms-Grid-row,
+.suggestions-form .ms-Stack,
+.suggestions-form .ms-Grid-col {
+  margin-bottom: 4px;
+}
+
+/* Light theme – scoped only to Suggestions page */
 .light-theme .suggestions-form label,
 .light-theme .suggestions-form .ms-Label,
 .light-theme .suggestions-form .ms-TextField-label,
@@ -2137,7 +2149,20 @@ button.accent-cta:hover {
   font-weight: 600 !important;
 }
 
-/* Checkbox box (unchecked) styling */
+.light-theme .suggestions-form .ms-TextField-field::placeholder {
+  color: #6484a3 !important;
+  opacity: 1 !important;
+}
+
+/* Make the multiline description placeholder sit nicely inside the box */
+.suggestions-form .ms-TextField-field {
+  padding-top: 14px !important;
+  padding-bottom: 10px !important;
+  line-height: 1.2 !important;
+  box-sizing: border-box !important;
+  font-size: 14px !important;
+}
+
 .light-theme .suggestions-form .ms-Checkbox .ms-Checkbox-checkbox {
   border-color: var(--vso-label-color) !important;
   background: #ffffff !important;
@@ -2145,24 +2170,22 @@ button.accent-cta:hover {
   transition: background 120ms ease, border-color 120ms ease;
 }
 
-/* Hover focus for better affordance */
 .light-theme .suggestions-form .ms-Checkbox:hover .ms-Checkbox-checkbox,
 .light-theme .suggestions-form .ms-Checkbox:focus .ms-Checkbox-checkbox {
   border-color: var(--vso-label-color) !important;
-  background: #f0f8ff !important; /* subtle blue tint */
+  background: #f0f8ff !important;
 }
 
-/* Checked state: solid blue fill, white checkmark */
 .light-theme .suggestions-form .ms-Checkbox.is-checked .ms-Checkbox-checkbox {
   background: var(--vso-label-color) !important;
   border-color: var(--vso-label-color) !important;
 }
+
 .light-theme .suggestions-form .ms-Checkbox.is-checked .ms-Checkbox-checkmark {
   color: #ffffff !important;
   font-weight: 700 !important;
 }
 
-/* Ensure the text beside the checkbox also uses vivid blue */
 .light-theme .suggestions-form .ms-Checkbox.is-checked .ms-Checkbox-text,
 .light-theme .suggestions-form .ms-Checkbox .ms-Checkbox-text {
   color: var(--accent) !important;
@@ -2171,17 +2194,118 @@ button.accent-cta:hover {
   text-shadow: 0 0 4px rgba(0,120,212,0.18);
 }
 
-/* Strengthen textarea/input labels for Description field container */
-.light-theme .suggestions-form .ms-TextField label,
-.light-theme .suggestions-form .ms-TextField-label {
-  color: var(--vso-label-color) !important;
-  font-weight: 600 !important;
+/* Vertical spacing for dropdowns and text fields */
+.suggestions-form .ms-Dropdown,
+.suggestions-form .ms-TextField {
+  margin-bottom: 0;
 }
 
-/* Optional: reinforce placeholder readability inside Description field */
-.light-theme .suggestions-form .ms-TextField-field::placeholder {
-  color: #6484a3 !important;
-  opacity: 1 !important;
+/* Remove extra gap directly under the visible dropdown box */
+.suggestions-form .ms-Dropdown,
+.suggestions-form .ms-Dropdown .ms-Dropdown-title {
+  padding-bottom: 0;
+}
+
+.suggestions-form .ms-Dropdown-container,
+.suggestions-form .ms-Dropdown-caretDownWrapper {
+  margin-bottom: 0;
+}
+
+/* Ensure multiline textareas have enough height so placeholder isn't clipped */
+.suggestions-form .ms-TextField--multiline .ms-TextField-field,
+.suggestions-form .ms-TextField[aria-multiline="true"] .ms-TextField-field {
+  min-height: 110px !important;
+  padding-top: 14px !important;
+  padding-bottom: 12px !important;
+  box-sizing: border-box !important;
+}
+
+/* Placeholder vertical alignment safety for input and textarea */
+.suggestions-form .ms-TextField-field::placeholder {
+  line-height: 1.2 !important;
+  transform: translateY(6px) !important;
+}
+
+/* Target the native textarea/input inside Fluent wrappers to ensure padding applies */
+.suggestions-form .ms-TextField-field textarea,
+.suggestions-form .ms-TextField-field input {
+  padding-top: 16px !important;
+  padding-bottom: 12px !important;
+  line-height: 20px !important;
+  font-size: 14px !important;
+  box-sizing: border-box !important;
+  height: auto !important;
+  overflow: auto !important;
+  display: block !important;
+}
+
+/* Lower native placeholder inside textarea/input slightly for better vertical centering */
+.suggestions-form .ms-TextField-field textarea::placeholder,
+.suggestions-form .ms-TextField-field input::placeholder {
+  transform: translateY(6px) !important;
+  opacity: 0.95 !important;
+}
+
+/* If any Fluent wrapper adds an inner height/gap, collapse it only for Suggestions form */
+.suggestions-form .ms-TextField-wrapper,
+.suggestions-form .ms-TextField-inner {
+  padding-bottom: 0 !important;
+}
+
+/* Dropdown list surface to avoid white/dark bar underneath */
+.suggestions-form .ms-Dropdown-itemsWrapper {
+  background: #0f1112;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+/* Dark theme – match React dark styles for Suggestions page */
+.dark-theme .suggestions-form {
+  background: #0f1112;
+  color: #e6eef6;
+}
+
+.dark-theme .suggestions-form .ms-Label,
+.dark-theme .suggestions-form label,
+.dark-theme .suggestions-form .ms-TextField-label {
+  color: #e6eef6;
+}
+
+.dark-theme .suggestions-form .ms-TextField-field,
+.dark-theme .suggestions-form .ms-TextField-field::placeholder {
+  background: #0f1112;
+  color: #e6eef6;
+}
+
+.dark-theme .suggestions-form .ms-Dropdown,
+.dark-theme .suggestions-form .ms-Dropdown-title {
+  background: #0f1112;
+  color: #e6eef6;
+  border-color: rgba(255,255,255,0.05);
+}
+
+.dark-theme .suggestions-form .ms-Dropdown:hover .ms-Dropdown-title,
+.dark-theme .suggestions-form .ms-Dropdown-title:hover {
+  border-color: rgba(80,179,255,0.18);
+}
+
+.dark-theme .suggestions-form .ms-Dropdown-itemsWrapper {
+  background: #0f1112;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+/* Checkbox text alignment and color in dark theme */
+.dark-theme .suggestions-form .ms-Checkbox-text {
+  color: #d6e2f2;
+  opacity: 1;
+}
+
+.dark-theme .suggestions-form .ms-Checkbox .ms-Checkbox-checkbox {
+  background: #0f1112;
+  border-color: rgba(255,255,255,0.05);
+}
+
+.dark-theme .suggestions-form .ms-Checkbox.is-checked .ms-Checkbox-checkbox {
+  border-color: rgba(80,179,255,0.18);
 }
 .light-theme html,
 .light-theme body,

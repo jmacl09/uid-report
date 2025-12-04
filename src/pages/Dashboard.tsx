@@ -1,9 +1,16 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Stack, Text, Image } from "@fluentui/react";
 import "../Theme.css";
 import logo from "../assets/optical360-logo.png"; // ✅ add this
+import { logAction } from "../api/log";
 
 const Dashboard: React.FC = () => {
+  const email = localStorage.getItem("loggedInEmail");
+
+  useEffect(() => {
+    logAction(email || "", "View Dashboard");
+  }, []);
+
   return (
     <Stack
       horizontalAlign="center"

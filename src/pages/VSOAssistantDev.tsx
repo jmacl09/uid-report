@@ -26,6 +26,7 @@ import { getRackElevationUrl } from "../data/MappedREs";
 import VSOCalendar, { VsoCalendarEvent } from "../components/VSOCalendar";
 import { getCalendarEntries } from "../api/items";
 import { API_BASE } from "../api/config";
+import { logAction } from "../api/log";
 
 interface SpanData {
   SpanID: string;
@@ -93,6 +94,17 @@ const VSOAssistantDev: React.FC = () => {
   // Calendar state
   const [vsoEvents, setVsoEvents] = useState<VsoCalendarEvent[]>([]);
   const [calendarDate, setCalendarDate] = useState<Date | null>(null);
+
+  useEffect(() => {
+    const email = (() => {
+      try {
+        return localStorage.getItem("loggedInEmail") || "";
+      } catch {
+        return "";
+      }
+    })();
+    logAction(email, "View VSO Assistant Dev");
+  }, []);
 
   // Load persisted calendar entries from server so everyone sees the same calendar
   useEffect(() => {
@@ -272,6 +284,19 @@ const VSOAssistantDev: React.FC = () => {
 
   // Stage 1: search spans via backend
   const handleSubmit = async () => {
+    const email = (() => {
+      try {
+        return localStorage.getItem("loggedInEmail") || "";
+      } catch {
+        return "";
+      }
+    })();
+    logAction(email, "Submit VSO Dev Search", {
+      facilityCodeA,
+      diversity,
+      spliceRackA,
+    });
+
     if (!facilityCodeA) { alert("Please select a valid Data Center first."); return; }
     setLoading(true); setError(null); setResult([]); setSearchDone(false);
     try {
@@ -319,6 +344,19 @@ const VSOAssistantDev: React.FC = () => {
   };
 
   const handleSend = async () => {
+    const email = (() => {
+      try {
+        return localStorage.getItem("loggedInEmail") || "";
+      } catch {
+        return "";
+      }
+    })();
+    logAction(email, "Send VSO Dev Maintenance Email", {
+      facilityCodeA,
+      spans: spansComma,
+      notificationType,
+    });
+
     setShowValidation(true);
     if (!validateCompose()) { window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     setSendError(null); setSendSuccess(null); setSendLoading(true);

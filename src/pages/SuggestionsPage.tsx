@@ -9,6 +9,7 @@ import {
   Checkbox,
 } from "@fluentui/react";
 import { API_BASE } from "../api/config";
+import { logAction } from "../api/log";
 
 // Dark theme input/button styles
 const INPUT_BG = "#0f1112";
@@ -140,6 +141,10 @@ const SuggestionsPage: React.FC = () => {
   const email = getEmail();
   const alias = getAlias(email);
 
+  useEffect(() => {
+    logAction(email || "", "View Suggestions");
+  }, []);
+
   // ---------------------------------------------------------
   // Load suggestions
   // ---------------------------------------------------------
@@ -208,6 +213,12 @@ const SuggestionsPage: React.FC = () => {
     setSummary("");
     setDescription("");
     setAnonymous(false);
+
+    logAction(email || "", "Submit Suggestion", {
+      type,
+      anonymous,
+      owner,
+    });
 
     try {
       await fetch(`${API_BASE}/HttpTrigger1?category=suggestions`, {

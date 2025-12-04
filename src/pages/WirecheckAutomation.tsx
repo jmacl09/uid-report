@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { PrimaryButton, Dialog, DialogType, DialogFooter, DefaultButton, MessageBar, MessageBarType } from '@fluentui/react';
 import '../Theme.css';
 import wireImage from '../assets/image.png';
+import { logAction } from "../api/log";
 
 const WirecheckAutomation: React.FC = () => {
   const [description] = useState<string>(() => {
@@ -29,7 +30,14 @@ const WirecheckAutomation: React.FC = () => {
   const [installOpen, setInstallOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    // ensure theme classes applied if existing settings present
+    const email = (() => {
+      try {
+        return localStorage.getItem('loggedInEmail') || '';
+      } catch {
+        return '';
+      }
+    })();
+    logAction(email, 'View Wirecheck Automation');
   }, []);
 
   const [showCopied, setShowCopied] = useState<boolean>(false);

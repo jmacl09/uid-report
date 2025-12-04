@@ -27,6 +27,7 @@ import { saveAs } from 'file-saver';
 import deriveLineForC0 from "../data/mappedlines";
 import useTelemetry from "../hooks/useTelemetry";
 import { apiFetch } from "../api/http";
+import { logAction } from "../api/log";
 
 // MGFX A/Z with derived Line column (and without SKU column)
 const mgfxHeaders = [
@@ -287,7 +288,16 @@ export default function UIDLookup() {
       return Array.isArray(arr) ? arr.filter(Boolean) : [];
     } catch { return []; }
   });
-  useEffect(() => { try { localStorage.setItem(COLLAPSED_SECTIONS_KEY, JSON.stringify(collapsedSections)); } catch {} }, [collapsedSections]);
+  useEffect(() => {
+    try {
+      const email = localStorage.getItem("loggedInEmail") || "";
+      logAction(email, "View UID Lookup");
+    } catch {
+      logAction("", "View UID Lookup");
+    }
+
+    try { localStorage.setItem(COLLAPSED_SECTIONS_KEY, JSON.stringify(collapsedSections)); } catch {}
+  }, [collapsedSections]);
   useEffect(() => {
     try {
       if (viewerSection) localStorage.setItem(VIEWER_SECTION_KEY, viewerSection);

@@ -5,6 +5,7 @@ import TrafficChart from "../components/TrafficChart";
 import { getSpanUtilization } from "../api/fetchLogicApp";
 import ThemedProgressBar from "../components/ThemedProgressBar";
 import "../Theme.css";
+import { logAction } from "../api/log";
 
 const FiberSpanUtilization: React.FC = () => {
   const [span, setSpan] = useState<string>("");
@@ -25,7 +26,26 @@ const FiberSpanUtilization: React.FC = () => {
   const [progressComplete, setProgressComplete] = useState<boolean>(false);
   const [timeframeDays, setTimeframeDays] = useState<number>(7); // 7D default
 
+  useEffect(() => {
+    const email = (() => {
+      try {
+        return localStorage.getItem("loggedInEmail") || "";
+      } catch {
+        return "";
+      }
+    })();
+    logAction(email, "View Fiber Span Utilization");
+  }, []);
+
   const handleSubmit = async (spanValue?: string, days?: number) => {
+    const email = (() => {
+      try {
+        return localStorage.getItem("loggedInEmail") || "";
+      } catch {
+        return "";
+      }
+    })();
+
     setSubmitted(true);
     setError(null);
     // spansData removed
@@ -46,6 +66,11 @@ const FiberSpanUtilization: React.FC = () => {
       setError("Span is required.");
       return;
     }
+
+    logAction(email, "Get Utilization", {
+      spans: target,
+      timeframeDays: days ?? timeframeDays,
+    });
     // show themed progress bar similar to UIDLookup
     setProgressVisible(true);
     setProgressComplete(false);

@@ -32,6 +32,7 @@ import { computeScopeStage } from "./utils/scope";
 import { saveToStorage } from "../api/saveToStorage";
 import useTelemetry from "../hooks/useTelemetry";
 import { apiFetch } from "../api/http";
+import { logAction } from "../api/log";
 
 interface SpanData {
   SpanID: string;
@@ -69,6 +70,14 @@ const VSOAssistant: React.FC = () => {
   // Fluent UI icons are initialized at app startup in `src/index.tsx`
 
   useTelemetry('VSOAssistant');
+  useEffect(() => {
+    try {
+      const email = localStorage.getItem("loggedInEmail") || "";
+      logAction(email, "View VSO Assistant");
+    } catch {
+      logAction("", "View VSO Assistant");
+    }
+  }, []);
   const isLightTheme = typeof document !== 'undefined' && (document.documentElement.classList.contains('light-theme') || document.body.classList.contains('light-theme'));
   const labelStyles = (size: number, weight: number, mb?: number) => ({ root: { color: isLightTheme ? 'var(--accent)' : '#ccc', fontSize: size, fontWeight: `${weight}`, marginBottom: mb ?? 0 } });
   const [facilityCodeA, setFacilityCodeA] = useState<string>("");
@@ -572,7 +581,23 @@ const VSOAssistant: React.FC = () => {
   // reset both-no-results flag for a fresh search unless we've already exhausted both
   if (!(computedNext.A && computedNext.Z)) setTriedBothNoResults(false);
 
-  setLoading(true);
+  const email = (() => {
+      try {
+        return localStorage.getItem("loggedInEmail") || "";
+      } catch {
+        return "";
+      }
+    })();
+    logAction(email, "Submit VSO Search", {
+      facilityCodeA,
+      facilityCodeZ,
+      diversity,
+      spliceRackA,
+      spliceRackZ,
+      currentTab,
+    });
+
+    setLoading(true);
     setError(null);
     setResult([]);
     setSearchDone(false);

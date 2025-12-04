@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { logAction } from "../api/log";
 
 type Stage = "VSO_Details" | "Email_Template" | "Card_3";
 
@@ -38,12 +39,37 @@ export default function VSO2() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<VsoDetailsResponse | null>(null);
 
+  useEffect(() => {
+    const email = (() => {
+      try {
+        return localStorage.getItem("loggedInEmail") || "";
+      } catch {
+        return "";
+      }
+    })();
+    logAction(email, "View VSO 2");
+  }, []);
+
   const canSubmit = useMemo(
     () => !!stage && (stage !== "VSO_Details" || !!facility),
     [stage, facility]
   );
 
   const submit = async () => {
+    const email = (() => {
+      try {
+        return localStorage.getItem("loggedInEmail") || "";
+      } catch {
+        return "";
+      }
+    })();
+    logAction(email, "Submit VSO2 Request", {
+      facility,
+      diversity,
+      spliceRack,
+      stage,
+    });
+
     setLoading(true);
     setError(null);
     setData(null);

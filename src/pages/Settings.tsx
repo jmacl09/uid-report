@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Dropdown, IDropdownOption } from '@fluentui/react';
 import '../Theme.css';
+import { logAction } from "../api/log";
 
 const themeOptions: IDropdownOption[] = [
   { key: 'dark', text: 'Dark' },
@@ -21,6 +22,17 @@ const SettingsPage: React.FC = () => {
       return localStorage.getItem(key) || localStorage.getItem('appTheme') || 'dark';
     } catch { return 'dark'; }
   });
+
+  useEffect(() => {
+    const emailValue = (() => {
+      try {
+        return localStorage.getItem('loggedInEmail') || '';
+      } catch {
+        return '';
+      }
+    })();
+    logAction(emailValue, 'View Settings');
+  }, []);
 
   useEffect(() => {
     try {
@@ -51,6 +63,14 @@ const SettingsPage: React.FC = () => {
       localStorage.setItem(key, t);
       // also keep legacy key in sync
       localStorage.setItem('appTheme', t);
+      const emailValue = (() => {
+        try {
+          return email || localStorage.getItem('loggedInEmail') || '';
+        } catch {
+          return email || '';
+        }
+      })();
+      logAction(emailValue, 'Change Theme', { theme: t });
     } catch (e) {}
   };
 

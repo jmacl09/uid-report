@@ -3,6 +3,7 @@ import { apiFetch } from "./http";
 export interface LogPayload {
   email: string;
   action: string;
+  category: string;
   metadata?: any;
 }
 
@@ -24,6 +25,7 @@ export async function logAction(email: string, action: string, metadata?: any): 
       body: JSON.stringify({
         email: safeEmail,
         action,
+        category: "ActivityLog",
         metadata
       } as LogPayload)
     });

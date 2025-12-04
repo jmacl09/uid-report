@@ -3066,7 +3066,7 @@ export default function UIDLookup() {
       }
       loadTroubleshooting();
       return () => { cancelled = true; };
-    }, [isLinkSummary, contextUid, storageKey]);
+    }, [isLinkSummary, contextUid, storageKey, rows, title, activeProjectId, lastSearched]);
     // comments are kept in-memory only; do not read/write localStorage here
     const saveComments = (c: Record<string, any>) => {
       // Keep comments in-memory only; do not persist to localStorage.

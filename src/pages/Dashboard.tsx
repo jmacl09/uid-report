@@ -5,10 +5,15 @@ import logo from "../assets/optical360-logo.png"; // ✅ add this
 import { logAction } from "../api/log";
 
 const Dashboard: React.FC = () => {
-  const email = localStorage.getItem("loggedInEmail");
-
   useEffect(() => {
-    logAction(email || "", "View Dashboard");
+    const email = (() => {
+      try {
+        return localStorage.getItem("loggedInEmail") || "";
+      } catch {
+        return "";
+      }
+    })();
+    logAction(email, "View Dashboard");
   }, []);
 
   return (

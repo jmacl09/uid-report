@@ -142,7 +142,8 @@ const SuggestionsPage: React.FC = () => {
   const alias = getAlias(email);
 
   useEffect(() => {
-    logAction(email || "", "View Suggestions");
+    const resolvedEmail = getEmail();
+    logAction(resolvedEmail || "", "View Suggestions");
   }, []);
 
   // ---------------------------------------------------------

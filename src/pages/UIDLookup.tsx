@@ -852,7 +852,7 @@ export default function UIDLookup() {
     if (!text) return;
     const email = getEmail();
     const alias = getAlias(email);
-    const n: Note = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, uid: uidKey, authorEmail: email || undefined, authorAlias: alias || undefined, text, ts: Date.now() };
+    const n: Note & { _temp?: boolean } = { id: `${Date.now()}-${Math.random().toString(36).slice(2,8)}`, uid: uidKey, authorEmail: email || undefined, authorAlias: alias || undefined, text, ts: Date.now(), _temp: true };
     // Optimistic local append using functional state to avoid stale closures
     setNotes(prev => [n, ...prev]);
     setNoteText('');
@@ -874,13 +874,25 @@ export default function UIDLookup() {
           const entity = (parsed?.entity || parsed?.Entity) as NoteEntity | undefined;
           if (entity) {
             savedNote = mapEntityToNote(uidKey, entity);
-            // Replace the optimistic entry with the canonical server entity
+            // Replace the optimistic entry with the canonical server entity.
+            // Match by temporary flag and identical text (within a small time window) to avoid duplicates.
             setNotes(prev => {
-              const idx = prev.findIndex(entry => entry.id === n.id);
-              if (idx === -1) return prev;
-              const next = [...prev];
-              next[idx] = savedNote as Note;
-              return next;
+              const idx = prev.findIndex(entry => (entry as any)._temp && entry.text === savedNote!.text && Math.abs((entry.ts || 0) - (savedNote!.ts || 0)) < 5000);
+              if (idx !== -1) {
+                const next = [...prev];
+                next[idx] = savedNote as Note;
+                return next;
+              }
+              // Fallback: if optimistic not found, try to find by id
+              const idIdx = prev.findIndex(entry => entry.id === n.id);
+              if (idIdx !== -1) {
+                const next = [...prev];
+                next[idIdx] = savedNote as Note;
+                return next;
+              }
+              // Otherwise, prepend server item if not present
+              if (!prev.find(p => p.id === savedNote!.id)) return [savedNote as Note, ...prev];
+              return prev;
             });
           }
         } catch {
@@ -895,7 +907,14 @@ export default function UIDLookup() {
           const mapped: Note[] = items.map(e => mapEntityToNote(uidKey, e)).sort((a,b)=>b.ts-a.ts);
           setNotes(prev => {
             const remoteIds = new Set(mapped.map(item => item.id));
-            const leftovers = prev.filter(item => !remoteIds.has(item.id));
+            const leftovers = prev.filter(item => {
+              // Remove temporary optimistic entries if a matching server note exists (match by text and near-timestamp)
+              if ((item as any)._temp) {
+                const match = mapped.find(m => m.text === item.text && Math.abs((m.ts || 0) - (item.ts || 0)) < 5000);
+                if (match) return false;
+              }
+              return !remoteIds.has(item.id);
+            });
             const next = [...mapped, ...leftovers];
             return next;
           });
@@ -2995,12 +3014,14 @@ export default function UIDLookup() {
           // notes: array of NoteEntity, each with description (JSON string of {aDevice, aOpt, zDevice, zOpt}), rowKey, etc.
           const loaded: Record<string, any> = {};
           for (const n of notes) {
-            let desc = {};
+            let desc: any = {};
             try { desc = n.description ? JSON.parse(n.description) : {}; } catch {}
-            // Use LinkKey if present, else fallback to rowKey
-            const linkKey = n.LinkKey || n.linkKey || n.rowKey || n.RowKey;
+            // Prefer an explicit LinkKey stored in the entity or inside the description payload.
+            const linkKey = n.LinkKey || n.linkKey || desc?.LinkKey || desc?.linkKey || n.rowKey || n.RowKey;
             if (linkKey) {
-              loaded[linkKey] = { ...desc, rowKey: n.rowKey || n.RowKey, savedAt: n.savedAt || n.Timestamp };
+              // Expose parsed description fields and original rowKey/timestamp for the UI
+              const fields = { ...(typeof desc === 'object' ? desc : {}), rowKey: n.rowKey || n.RowKey, savedAt: n.savedAt || n.Timestamp };
+              loaded[linkKey] = fields;
             }
           }
           // Set loaded troubleshooting notes for this UID (server authoritative)
@@ -3013,12 +3034,7 @@ export default function UIDLookup() {
       loadTroubleshooting();
       return () => { cancelled = true; };
     }, [isLinkSummary, contextUid, storageKey]);
-    useEffect(() => {
-      try {
-        if (!isLinkSummary) { setComments({}); return; }
-        setComments(JSON.parse(localStorage.getItem(storageKey) || '{}'));
-      } catch { setComments({}); }
-    }, [storageKey, isLinkSummary]);
+    // comments are kept in-memory only; do not read/write localStorage here
     const saveComments = (c: Record<string, any>) => {
       // Keep comments in-memory only; do not persist to localStorage.
       setComments(c || {});
@@ -3053,12 +3069,15 @@ export default function UIDLookup() {
           return;
         }
 
+        // Embed the LinkKey into the saved description so the Function/Table returns it
+        const descriptionWithLink = JSON.stringify({ ...payload, LinkKey: rowKey });
+
         const resText = await saveToStorage({
           endpoint: NOTES_ENDPOINT,
           category: 'Troubleshooting',
           uid: serverUid,
           title: 'Troubleshooting',
-          description: JSON.stringify(payload),
+          description: descriptionWithLink,
           owner: alias || '',
           rowKey: rowObj.rowKey,
           extras: {

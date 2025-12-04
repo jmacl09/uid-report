@@ -196,18 +196,20 @@ const VSOCalendar: React.FC<Props> = ({
             owner,
             timestamp: ev.start || new Date(),
           });
-
+          // saveToStorage already returns a structured SaveResponse; do not JSON.parse it.
           try {
-            const parsed = JSON.parse(res || "{}");
+            const response: any = res;
             const entity =
-              parsed?.entity || parsed?.Entity || parsed || {};
+              response?.entity || response?.Entity || null;
             const rk =
-              entity.RowKey ||
-              entity.rowKey ||
+              entity?.RowKey ||
+              entity?.rowKey ||
               new Date().toISOString();
             map[ev.id] = rk;
             saveSavedMap(map);
           } catch {
+            // Even if we can't read the entity, consider this event persisted
+            // so we don't spam the Calendar table with duplicates.
             map[ev.id] = new Date().toISOString();
             saveSavedMap(map);
           }

@@ -215,51 +215,64 @@ export default function UIDLookup() {
     notes?: Record<string, Note[]>; // notes keyed by UID
     urgent?: boolean; // optional urgent tag
   };
-  // Projects are sourced from server AND a local cache. Projects created via the
-  // UI are stored locally so users can save projects without any server-side
-  // persistence. Server-side Projects (when present) are still fetched and
-  // merged on load, but creation is local-only per current requirements.
-  const LOCAL_PROJECTS_KEY = 'uidLocalProjects';
-  const [projects, setProjects] = useState<Project[]>(() => {
-    try {
-      const raw = localStorage.getItem(LOCAL_PROJECTS_KEY);
-      const arr = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(arr)) return [];
-      // Normalize any legacy or double-serialized entries so p.data is an object
-      const norm = arr.map((p: any) => {
-        try {
-          const copy = { ...(p || {}) } as any;
-          if (typeof copy.data === 'string') {
-            try { copy.data = JSON.parse(copy.data); } catch { copy.data = {}; }
-          }
-          if (!copy.data || typeof copy.data !== 'object') copy.data = {};
-          // ensure common arrays exist to avoid empty UI when opening projects
-          copy.data.OLSLinks = Array.isArray(copy.data.OLSLinks) ? copy.data.OLSLinks : (Array.isArray(copy.data.LinkSummary) ? copy.data.LinkSummary : []);
-          copy.data.AssociatedUIDs = Array.isArray(copy.data.AssociatedUIDs) ? copy.data.AssociatedUIDs : [];
-          copy.data.MGFXA = Array.isArray(copy.data.MGFXA) ? copy.data.MGFXA : [];
-          copy.data.MGFXZ = Array.isArray(copy.data.MGFXZ) ? copy.data.MGFXZ : [];
-          copy.data.GDCOTickets = Array.isArray(copy.data.GDCOTickets) ? copy.data.GDCOTickets : (Array.isArray(copy.data.ReleatedTickets) ? copy.data.ReleatedTickets : []);
-          if (!Array.isArray(copy.data.sourceUids)) copy.data.sourceUids = (Array.isArray(copy.data.sourceUids) ? copy.data.sourceUids : ([]));
-          return copy as Project;
-        } catch {
-          return { id: String(p?.id || `${Date.now()}`), name: p?.name || 'Project', createdAt: Date.now(), data: {} } as Project;
-        }
-      });
-      return norm as Project[];
-    } catch {
-      return [];
-    }
-  });
+  // Projects are sourced from server. Persist projects to the server-side
+  // "Projects" table rather than localStorage. Server-side Projects are
+  // fetched and merged on load; project creation/updates are saved via
+  // `saveToStorage` below.
+  const [projects, setProjects] = useState<Project[]>(() => []);
 
-  // Persist only local-created projects (those without a __serverEntity marker)
-  // into localStorage so they survive reloads. Server-origin projects are not
-  // overwritten here and will be merged on startup when the app fetches them.
-  useEffect(() => {
+  const getEmailLocal = () => {
+    try { return localStorage.getItem('loggedInEmail') || ''; } catch { return ''; }
+  };
+
+  const saveProjectRemote = async (p: Project) => {
     try {
-      const localOnly = (projects || []).filter(p => !(p as any).__serverEntity);
-      localStorage.setItem(LOCAL_PROJECTS_KEY, JSON.stringify(localOnly || []));
-    } catch {}
-  }, [projects]);
+      const alias = getAlias(getEmailLocal());
+      const payload = {
+        endpoint: NOTES_ENDPOINT,
+        category: 'Projects' as any,
+        uid: Array.isArray(p.data?.sourceUids) && p.data.sourceUids.length ? String(p.data.sourceUids[0]) : (lastSearched || undefined),
+        title: p.name || 'Project',
+        description: JSON.stringify(p),
+        owner: alias || getEmailLocal() || '',
+        rowKey: (p as any).__serverEntity ? ((p as any).__serverEntity.rowKey || (p as any).__serverEntity.RowKey) : undefined,
+      } as any;
+      const res = await saveToStorage(payload);
+      // Normalise response: parsed object with entity property
+      const entity = (res && (res.entity || res.Entity)) || null;
+      if (entity) {
+        // update project with server entity metadata and canonical rowKey id
+        setProjects(prev => prev.map(pp => {
+          if (pp.id !== p.id) return pp;
+          const updated = { ...pp } as any;
+          updated.__serverEntity = entity;
+          // Use server RowKey as canonical id when available
+          const rk = entity.RowKey || entity.rowKey || null;
+          if (rk) {
+            updated.id = String(rk);
+          }
+          return updated as Project;
+        }));
+      }
+      return res;
+    } catch (e) {
+      console.warn('[Projects] save failed', e);
+      return null;
+    }
+  };
+
+  const deleteProjectRemote = async (p: Project) => {
+    try {
+      const entity = (p as any).__serverEntity || null;
+      if (entity && (entity.rowKey || entity.RowKey)) {
+        const pk = entity.partitionKey || (`UID_${lastSearched || ''}`);
+        const rk = entity.rowKey || entity.RowKey;
+        await deleteNoteApi(pk, rk, 'Projects');
+      }
+    } catch (e) {
+      console.warn('[Projects] remote delete failed', e);
+    }
+  };
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [projectFilter, setProjectFilter] = useState<string>("");
   const COLLAPSED_SECTIONS_KEY = 'uidCollapsedSections';
@@ -1525,6 +1538,13 @@ export default function UIDLookup() {
       return { ...pp, data: merged, notes: { ...(pp.notes || {}) }, __serverEntity: undefined, __localModified: true } as any;
     }));
     setActiveProjectId(targetId);
+    // Persist merged project to server
+    (async () => {
+      // give state a tick so updated project is visible when saveProjectRemote reads it
+      await new Promise(r => setTimeout(r, 10));
+      const updated = projects.find(pp => pp.id === targetId);
+      if (updated) void saveProjectRemote(updated);
+    })();
   };
 
   // Initiate a Create Project flow which will sequentially open each Associated UID
@@ -1559,10 +1579,20 @@ export default function UIDLookup() {
   };
   // removed unused assignSection
   const togglePin = (id: string) => {
-    setProjects(prev => prev.map(x => x.id === id ? { ...x, pinned: !x.pinned } : x));
+    setProjects(prev => {
+      const next = prev.map(x => x.id === id ? { ...x, pinned: !x.pinned } : x);
+      const updated = next.find(x => x.id === id);
+      if (updated) void saveProjectRemote(updated);
+      return next;
+    });
   };
   const toggleUrgent = (id: string) => {
-    setProjects(prev => prev.map(x => x.id === id ? { ...x, urgent: !x.urgent } : x));
+    setProjects(prev => {
+      const next = prev.map(x => x.id === id ? { ...x, urgent: !x.urgent } : x);
+      const updated = next.find(x => x.id === id);
+      if (updated) void saveProjectRemote(updated);
+      return next;
+    });
   };
   // addSection removed (unused) to satisfy lint rules
   const closeModal = () => { setModalType(null); setModalProjectId(null); setModalValue(''); };
@@ -1579,6 +1609,12 @@ export default function UIDLookup() {
         return { ...pp, data: merged, notes: { ...(pp.notes || {}) }, __serverEntity: undefined, __localModified: true } as any;
       }));
       setActiveProjectId(targetId);
+      // Persist merged project to server
+      (async () => {
+        await new Promise(r => setTimeout(r, 10));
+        const updated = projects.find(pp => pp.id === targetId);
+        if (updated) await saveProjectRemote(updated);
+      })();
       closeModal();
       return;
     }
@@ -1689,6 +1725,17 @@ export default function UIDLookup() {
         };
         setProjects(prev => prev.map(p => p.id === provisionalId ? updatedProj : p));
         setActiveProjectId(id);
+        // Persist new project to server
+        (async () => {
+          const res = await saveProjectRemote(updatedProj);
+          try {
+            const entity = (res && (res.entity || res.Entity)) || null;
+            if (entity) {
+              const rk = entity.RowKey || entity.rowKey || null;
+              if (rk) setActiveProjectId(String(rk));
+            }
+          } catch {}
+        })();
         // set failed uids state and show final success message then clear overlay after a short delay
         setCreateFromAssocFailedUids(failedList);
   setCreateFromAssocMessage(`Project created (${uids.length - failedList.length} succeeded${failedList.length ? `, ${failedList.length} failed` : ''})`);
@@ -1745,6 +1792,17 @@ export default function UIDLookup() {
       // that watches `projects` (LOCAL_PROJECTS_KEY). This keeps the Projects
       // side menu fully functional while avoiding server writes.
       setActiveProjectId(id);
+      // Persist new project to server
+      (async () => {
+        const res = await saveProjectRemote(proj);
+        try {
+          const entity = (res && (res.entity || res.Entity)) || null;
+          if (entity) {
+            const rk = entity.RowKey || entity.rowKey || null;
+            if (rk) setActiveProjectId(String(rk));
+          }
+        } catch {}
+      })();
       // reset create-project state
       setCreateSectionChoice('');
       setCreateNewSection('');
@@ -1754,24 +1812,44 @@ export default function UIDLookup() {
     }
     if (modalType === 'rename' && modalProjectId) {
       if (!value) { closeModal(); return; }
-      setProjects(prev => prev.map(x => x.id === modalProjectId ? { ...x, name: value } : x));
+      setProjects(prev => {
+        const next = prev.map(x => x.id === modalProjectId ? { ...x, name: value } : x);
+        const updated = next.find(x => x.id === modalProjectId);
+        if (updated) void saveProjectRemote(updated);
+        return next;
+      });
     } else if (modalType === 'owners' && modalProjectId) {
       const owners = value
         .split(/\n|,/) // comma or newline
         .map(s => s.trim())
         .filter(Boolean);
-      setProjects(prev => prev.map(x => x.id === modalProjectId ? { ...x, owners } : x));
+      setProjects(prev => {
+        const next = prev.map(x => x.id === modalProjectId ? { ...x, owners } : x);
+        const updated = next.find(x => x.id === modalProjectId);
+        if (updated) void saveProjectRemote(updated);
+        return next;
+      });
     } else if (modalType === 'section' && modalProjectId) {
       const section = value;
       if (section && !sections.includes(section)) setSections([...sections, section]);
-      setProjects(prev => prev.map(x => x.id === modalProjectId ? { ...x, section: section || undefined } : x));
+      setProjects(prev => {
+        const next = prev.map(x => x.id === modalProjectId ? { ...x, section: section || undefined } : x);
+        const updated = next.find(x => x.id === modalProjectId);
+        if (updated) void saveProjectRemote(updated);
+        return next;
+      });
     } else if (modalType === 'new-section') {
       if (value && !sections.includes(value)) setSections([...sections, value]);
     } else if (modalType === 'delete-section' && modalSection) {
       // Remove section and unassign projects
       const s = modalSection;
       setSections(prev => prev.filter(x => x !== s));
-      setProjects(prev => prev.map(p => p.section === s ? { ...p, section: undefined } : p));
+      setProjects(prev => {
+        const next = prev.map(p => p.section === s ? { ...p, section: undefined } : p);
+        // persist affected projects
+        next.filter(p => p.section === undefined).forEach(p => { if (p) void saveProjectRemote(p); });
+        return next;
+      });
     } else if (modalType === 'rename-section' && modalSection) {
       const oldName = modalSection;
       const newName = value;
@@ -1782,13 +1860,27 @@ export default function UIDLookup() {
         if (!list.includes(newName)) list.push(newName);
         return list;
       });
-      setProjects(prev => prev.map(p => p.section === oldName ? { ...p, section: newName } : p));
+      setProjects(prev => {
+        const next = prev.map(p => p.section === oldName ? { ...p, section: newName } : p);
+        next.forEach(p => { if (p.section === newName) void saveProjectRemote(p); });
+        return next;
+      });
     } else if (modalType === 'move-section' && dropTargetSection && dropProjectId) {
       const target = dropTargetSection;
       if (target && !sections.includes(target)) setSections([...sections, target]);
-      setProjects(prev => prev.map(p => p.id === dropProjectId ? { ...p, section: target || undefined } : p));
+      setProjects(prev => {
+        const next = prev.map(p => p.id === dropProjectId ? { ...p, section: target || undefined } : p);
+        const updated = next.find(p => p.id === dropProjectId);
+        if (updated) void saveProjectRemote(updated);
+        return next;
+      });
     } else if (modalType === 'delete-project' && modalProjectId) {
       const id = modalProjectId;
+      // attempt remote delete if this project has a server entity
+      try {
+        const target = projects.find(p => p.id === id);
+        if (target) await deleteProjectRemote(target);
+      } catch (e) { /* best-effort */ }
       setProjects(prev => prev.filter(p => p.id !== id));
       if (activeProjectId === id) setActiveProjectId(null);
     }
@@ -3324,11 +3416,10 @@ export default function UIDLookup() {
                                 >
                                   Open
                                 </button>
-                                {isWirecheckCol ? (
-                                  <CopyIconInline onCopy={() => { try { navigator.clipboard.writeText(String(link)); } catch {} }} message="Link copied" />
-                                ) : (
-                                  <CopyIconInline onCopy={() => { try { navigator.clipboard.writeText(String(link)); } catch {} }} message="Link copied" />
-                                )}
+                                <CopyIconInline onCopy={() => { try { navigator.clipboard.writeText(String(link)); } catch {} }} message="Link copied" />
+                                {isWirecheckCol && hasTroubleshoot ? (
+                                  <span title="Troubleshoot notes present" style={{ marginLeft: 6, color: '#ffd166', fontSize: 12 }}>📝</span>
+                                ) : null}
                               </>
                             ) : null}
                           </td>
@@ -3377,15 +3468,6 @@ export default function UIDLookup() {
                       // Default cell — normally show the value. For Link Summary
                       // rows, add a single note icon immediately after the Speed
                       // column when any of the four troubleshoot inputs has content.
-                      if (isLinkSummary && j === speedColIndex) {
-                        return (
-                          <td key={j} title={String(val ?? '')}>
-                            {val}
-                            {hasTroubleshoot ? (<span title="Troubleshoot notes present" style={{ marginLeft: 6, color: '#ffd166', fontSize: 12 }}>📝</span>) : null}
-                          </td>
-                        );
-                      }
-
                       // default fallback for all other cells
                       return (
                         <td key={j} title={String(val ?? '')}>

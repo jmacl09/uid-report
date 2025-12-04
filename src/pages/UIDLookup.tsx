@@ -3354,9 +3354,7 @@ export default function UIDLookup() {
               const highlight = highlightUid && String(uidVal ?? '') === highlightUid;
               const rowKey = `${title}::${(contextUid || lastSearched) || 'global'}::${i}`;
               const rowComments = (comments && comments[rowKey]) || {};
-              // Determine the index of the Speed/Optical speed column so we can
-              // show a single trouble-note icon immediately after that column.
-              const speedColIndex = displayHeaders.findIndex((h: string) => /speed|optical/i.test(String(h || '')));
+              // (Previously determined index for Speed/Optical column — not used)
               const hasTroubleshoot = Boolean(rowComments && (rowComments.aDevice || rowComments.aOpt || rowComments.zDevice || rowComments.zOpt));
 
               return (

@@ -29,11 +29,6 @@ function chooseTable(category) {
             return process.env.TABLES_TABLE_NOTES || "Notes";
         case "comments":
             return process.env.TABLES_TABLE_COMMENTS || "Comments";
-
-        /* ⭐ NEW: ActivityLog support ⭐ */
-        case "activitylog":
-            return process.env.TABLE_NAME_LOG || "ActivityLog";
-
         default:
             return process.env.TABLES_TABLE_DEFAULT || "Projects";
     }
@@ -49,6 +44,7 @@ function getTableClient(tableName) {
     // Managed Identity
     if (accountUrl.startsWith("https://")) {
         if (!DefaultAzureCredential) throw new Error("Missing @azure/identity");
+
         const cred = new DefaultAzureCredential();
         const client = new TableClient(accountUrl, tableName, cred);
         return { client, ensureTable: async () => {} };
@@ -61,6 +57,11 @@ function getTableClient(tableName) {
 
     const client = TableClient.fromConnectionString(conn, tableName);
     return { client, ensureTable: async () => {} };
+}
+
+function getLogTableClient() {
+    const tableName = process.env.TABLE_NAME_LOG || "ActivityLog";
+    return getTableClient(tableName);
 }
 
 /* =========================================================================
@@ -95,6 +96,80 @@ module.exports = async function (context, req) {
         return;
     }
 
+    // Dedicated logging API
+    if ((req.method === "GET" || req.method === "POST") && req.url && req.url.includes("/api/log")) {
+        try {
+            const { client } = getLogTableClient();
+
+            if (req.method === "POST") {
+                const body = req.body || {};
+                const email = typeof body.email === "string" ? body.email.trim() : "";
+                const action = typeof body.action === "string" ? body.action.trim() : "";
+                const metadata = body.metadata ?? null;
+
+                if (!email || !action) {
+                    context.res = { status: 400, headers: cors, body: { ok: false, error: "Missing email or action" } };
+                    return;
+                }
+
+                const now = new Date().toISOString();
+                const rowKey = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+                const entity = {
+                    partitionKey: "UserLog",
+                    rowKey,
+                    email,
+                    action,
+                    timestamp: now,
+                    metadata: metadata != null ? JSON.stringify(metadata) : ""
+                };
+
+                await client.createEntity(entity);
+
+                context.res = { status: 200, headers: cors, body: { ok: true } };
+                return;
+            }
+
+            // GET logs
+            const url = new URL(req.url);
+            const limitParam = url.searchParams.get("limit");
+            const dateFrom = url.searchParams.get("dateFrom");
+            const dateTo = url.searchParams.get("dateTo");
+
+            let filter = `PartitionKey eq 'UserLog'`;
+            if (dateFrom) {
+                filter += ` and timestamp ge datetime'${dateFrom}'`;
+            }
+            if (dateTo) {
+                filter += ` and timestamp le datetime'${dateTo}'`;
+            }
+
+            const items = [];
+            for await (const e of client.listEntities({ queryOptions: { filter } })) {
+                items.push(e);
+            }
+
+            items.sort((a, b) => {
+                const ta = a.timestamp || a.Timestamp || "";
+                const tb = b.timestamp || b.Timestamp || "";
+                return ta > tb ? -1 : ta < tb ? 1 : 0;
+            });
+
+            const limit = limitParam ? parseInt(limitParam, 10) : NaN;
+            const sliced = Number.isFinite(limit) && limit > 0 ? items.slice(0, limit) : items;
+
+            context.res = {
+                status: 200,
+                headers: { ...cors, "Content-Type": "application/json" },
+                body: { ok: true, items: sliced }
+            };
+            return;
+        } catch (err) {
+            context.res = { status: 500, headers: cors, body: { ok: false, error: err.message } };
+            return;
+        }
+    }
+
     /* =============== GET =================== */
     if (req.method === "GET") {
         try {
@@ -102,11 +177,11 @@ module.exports = async function (context, req) {
             const uid = url.searchParams.get("uid");
             const category = url.searchParams.get("category") || null;
 
-            const tableName = chooseTable(category);
-            const { client } = getTableClient(tableName);
-
-            // GET all if no UID is supplied
+            // GET all (Projects, Suggestions)
             if (!uid) {
+                const tableName = chooseTable(category);
+                const { client } = getTableClient(tableName);
+
                 const items = [];
                 for await (const e of client.listEntities()) {
                     items.push(mapEntity(e));
@@ -116,7 +191,10 @@ module.exports = async function (context, req) {
                 return;
             }
 
-            // GET filtered by UID
+            // GET only UID = filtered
+            const tableName = chooseTable(category);
+            const { client } = getTableClient(tableName);
+
             const filter = [`PartitionKey eq 'UID_${uid}'`];
             if (category) filter.push(`category eq '${category}'`);
 
@@ -176,25 +254,17 @@ module.exports = async function (context, req) {
         return;
     }
 
-    // UID-required categories
     if (["notes", "comments", "projects", "status", "troubleshooting"].includes(cat) && !uid) {
         context.res = { status: 400, headers: cors, body: { ok: false, error: "Missing UID" } };
         return;
     }
-
-    /* =========================================================================
-       SPECIAL HANDLING: ActivityLog DOES NOT USE UID
-       ========================================================================= */
-    let partitionKey = cat === "activitylog" 
-        ? "UserActivity"      // cleaner PK for logging entries
-        : (cat === "suggestions" ? "Suggestions" : `UID_${uid}`);
 
     /* Build entity */
     const now = new Date().toISOString();
     const rowKey = body.rowKey || now;
 
     const entity = {
-        partitionKey,
+        partitionKey: cat === "suggestions" ? "Suggestions" : `UID_${uid}`,
         rowKey,
         category,
         title,

@@ -940,7 +940,11 @@ export default function UIDLookup() {
     setDeletingNoteId(id);
     try {
       if (target._rk) {
-        await deleteNoteApi(pk, target._rk, NOTES_ENDPOINT);
+        // deleteNote expects (partitionKey, rowKey, category="Notes").
+        // Passing NOTES_ENDPOINT ("HttpTrigger1") was incorrect and caused saved
+        // entities to be created/marked with category="HttpTrigger1".
+        // Omit the third argument to use the default "Notes" category.
+        await deleteNoteApi(pk, target._rk);
       }
       // Refresh notes from server after successful delete
       const items = await getNotesForUid(uidKey, NOTES_ENDPOINT);
@@ -3002,34 +3006,63 @@ export default function UIDLookup() {
     // Per-table persisted troubleshooting comments (keyed by current UID + row content)
     const storageKey = `troubleshootComments:${(contextUid || lastSearched) || 'global'}`;
     const [comments, setComments] = useState<Record<string, any>>(() => ({}));
+    // Temporary in-memory edits for troubleshooting inputs. These are NOT persisted
+    // to localStorage and are only used to show the user's current edit until the
+    // server confirms the save. Keyed by the table row composite key.
+    const [editingComments, setEditingComments] = useState<Record<string, any>>(() => ({}));
     // Fetch troubleshooting notes from backend when Link Summary table loads for a UID
     useEffect(() => {
       let cancelled = false;
       async function loadTroubleshooting() {
-        const uidToFetch = contextUid || lastSearched;
-        if (!uidToFetch) return;
-        try {
-          const notes = await import('../api/items').then(m => m.getTroubleshootingForUid(uidToFetch));
-          if (cancelled) return;
-          // notes: array of NoteEntity, each with description (JSON string of {aDevice, aOpt, zDevice, zOpt}), rowKey, etc.
-          const loaded: Record<string, any> = {};
-          for (const n of notes) {
-            let desc: any = {};
-            try { desc = n.description ? JSON.parse(n.description) : {}; } catch {}
-            // Prefer an explicit LinkKey stored in the entity or inside the description payload.
-            const linkKey = n.LinkKey || n.linkKey || desc?.LinkKey || desc?.linkKey || n.rowKey || n.RowKey;
-            if (linkKey) {
-              // Expose parsed description fields and original rowKey/timestamp for the UI
-              const fields = { ...(typeof desc === 'object' ? desc : {}), rowKey: n.rowKey || n.RowKey, savedAt: n.savedAt || n.Timestamp };
-              loaded[linkKey] = fields;
+          const uidToFetch = contextUid || lastSearched;
+          if (!uidToFetch) return;
+          try {
+            const notes = await import('../api/items').then(m => m.getTroubleshootingForUid(uidToFetch));
+            if (cancelled) return;
+            // notes: array of NoteEntity, each with description (JSON string of {aDevice, aOpt, zDevice, zOpt}), rowKey, etc.
+            const loaded: Record<string, any> = {};
+            // Only accept storage-table rows for this context (avoid stray entries from other partitions)
+            const expectedPartition = contextUid ? `UID_${String(contextUid)}` : (activeProjectId ? `PROJECT_${String(activeProjectId)}` : `UID_${String(lastSearched)}`);
+            const filtered = (notes || []).filter((n: any) => String(n?.partitionKey || '').toUpperCase() === String(expectedPartition).toUpperCase());
+            for (const n of filtered) {
+              let desc: any = {};
+              try { desc = n.description ? JSON.parse(n.description) : {}; } catch {}
+              // Prefer an explicit LinkKey stored in the entity or inside the description payload.
+              let linkKey = desc?.LinkKey || desc?.linkKey || n.LinkKey || n.linkKey || null;
+              // If no LinkKey was stored (legacy rows), attempt to map this entry to a row
+              // in the current table by matching device/optical fields. This lets older
+              // storage rows be applied to the correct row index without relying on RowKey.
+              if (!linkKey) {
+                const targetIdx = (rows || []).findIndex((r: any) => {
+                  try {
+                    const aDev = String((r['A Device'] || r['ADevice'] || r['A Device '] || '') || '').trim();
+                    const aOpt = String((r['A Optical Device'] || r['A Optical Device '] || r['A Optical'] || '') || '').trim();
+                    const zDev = String((r['Z Device'] || r['ZDevice'] || '') || '').trim();
+                    const zOpt = String((r['Z Optical Device'] || r['Z Optical Device '] || r['Z Optical'] || '') || '').trim();
+                    const matchA = desc?.aDevice ? desc.aDevice.toString().trim() === aDev : false;
+                    const matchAOpt = desc?.aOpt ? desc.aOpt.toString().trim() === aOpt : false;
+                    const matchZ = desc?.zDevice ? desc.zDevice.toString().trim() === zDev : false;
+                    const matchZOpt = desc?.zOpt ? desc.zOpt.toString().trim() === zOpt : false;
+                    // consider a match if any of the device/optical fields line up
+                    return matchA || matchAOpt || matchZ || matchZOpt;
+                  } catch { return false; }
+                });
+                if (targetIdx >= 0) {
+                  linkKey = `${title}::${(contextUid || lastSearched) || 'global'}::${targetIdx}`;
+                }
+              }
+              if (linkKey) {
+                // Expose parsed description fields and original rowKey/timestamp for the UI
+                const fields = { ...(typeof desc === 'object' ? desc : {}), rowKey: n.rowKey || n.RowKey, savedAt: n.savedAt || n.Timestamp };
+                loaded[linkKey] = fields;
+              }
             }
+            // Set loaded troubleshooting notes for this UID (server authoritative)
+            setComments(loaded);
+          } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn('[Troubleshooting] Failed to load notes', e);
           }
-          // Set loaded troubleshooting notes for this UID (server authoritative)
-          setComments(loaded);
-        } catch (e) {
-          // eslint-disable-next-line no-console
-          console.warn('[Troubleshooting] Failed to load notes', e);
-        }
       }
       loadTroubleshooting();
       return () => { cancelled = true; };
@@ -3038,6 +3071,14 @@ export default function UIDLookup() {
     const saveComments = (c: Record<string, any>) => {
       // Keep comments in-memory only; do not persist to localStorage.
       setComments(c || {});
+    };
+
+    const handleTroubleshootInputChange = (rowKey: string, field: string, value: string) => {
+      // Update transient editing buffer so user sees what they're typing immediately
+      const nextRow = { ...(editingComments[rowKey] || comments[rowKey] || {}), [field]: value };
+      setEditingComments(prev => ({ ...(prev || {}), [rowKey]: nextRow }));
+      // Fire-and-forget save to server; persistSingle will update `comments` when server responds
+      void persistSingle(rowKey, nextRow);
     };
     // Persist a single row's comments to the Troubleshooting table when in UID or Project context
     const persistSingle = async (rowKey: string, rowObj: any) => {
@@ -3060,12 +3101,15 @@ export default function UIDLookup() {
         const isEmpty = !payload.aDevice && !payload.aOpt && !payload.zDevice && !payload.zOpt;
         if (isEmpty && rowObj.rowKey) {
           try {
-            await deleteNoteApi(partition, rowObj.rowKey, NOTES_ENDPOINT);
+            // This delete is for Troubleshooting rows — pass the correct category.
+            await deleteNoteApi(partition, rowObj.rowKey, 'Troubleshooting');
           } catch (e) { /* best-effort */ }
-          // remove local copy
+          // remove server-backed copy from comments (do not persist locally)
           const next = { ...(comments || {}) };
           delete next[rowKey];
           saveComments(next);
+          // clear any transient editing buffer for this row
+          setEditingComments(prev => { const cp = { ...(prev || {}) }; delete cp[rowKey]; return cp; });
           return;
         }
 
@@ -3097,8 +3141,10 @@ export default function UIDLookup() {
           const next = { ...(comments || {}) };
           next[rowKey] = { ...(next[rowKey] || {}), ...(rowObj || {}), rowKey: rk, savedAt: ts };
           saveComments(next);
+          // clear any transient editing buffer for this row now that server saved
+          setEditingComments(prev => { const cp = { ...(prev || {}) }; delete cp[rowKey]; return cp; });
         } catch (e) {
-          // ignore parse errors but keep local
+          // ignore parse errors but keep transient edit so user doesn't lose typed value
         }
       } catch (e) {
         // eslint-disable-next-line no-console
@@ -3208,7 +3254,7 @@ export default function UIDLookup() {
               const uidKey = keys.find((k) => k.toLowerCase() === 'uid');
               const uidVal = uidKey ? row[uidKey] : undefined;
               const highlight = highlightUid && String(uidVal ?? '') === highlightUid;
-              const rowKey = JSON.stringify(keys.map(k => row[k] ?? ''));
+              const rowKey = `${title}::${(contextUid || lastSearched) || 'global'}::${i}`;
               const rowComments = (comments && comments[rowKey]) || {};
 
               return (
@@ -3342,8 +3388,8 @@ export default function UIDLookup() {
                               <td key={`a-dev-${idx}`} colSpan={2}>
                                 <input
                                   className="troubleshoot-input"
-                                  value={rowComments.aDevice || ''}
-                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), aDevice: ev.target.value }; saveComments(next); void persistSingle(rowKey, next[rowKey]); }}
+                                  value={(editingComments[rowKey]?.aDevice ?? comments[rowKey]?.aDevice) || ''}
+                                  onChange={(ev) => handleTroubleshootInputChange(rowKey, 'aDevice', ev.target.value)}
                                   onKeyDown={(e) => { if ((e as any).key === 'Enter') try { (e.target as HTMLInputElement).blur(); } catch {} }}
                                   style={{ width: '100%', padding: '4px 6px', borderRadius: 2, border: '1px solid rgba(166,183,198,0.10)', background: 'transparent', color: '#d0e7ff', fontSize: 13, lineHeight: '16px' }}
                                 />
@@ -3357,8 +3403,8 @@ export default function UIDLookup() {
                               <td key={`a-opt-${idx}`} colSpan={2}>
                                 <input
                                   className="troubleshoot-input"
-                                  value={rowComments.aOpt || ''}
-                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), aOpt: ev.target.value }; saveComments(next); void persistSingle(rowKey, next[rowKey]); }}
+                                  value={(editingComments[rowKey]?.aOpt ?? comments[rowKey]?.aOpt) || ''}
+                                  onChange={(ev) => handleTroubleshootInputChange(rowKey, 'aOpt', ev.target.value)}
                                   onKeyDown={(e) => { if ((e as any).key === 'Enter') try { (e.target as HTMLInputElement).blur(); } catch {} }}
                                   style={{ width: '100%', padding: '4px 6px', borderRadius: 2, border: '1px solid rgba(166,183,198,0.10)', background: 'transparent', color: '#d0e7ff', fontSize: 13, lineHeight: '16px' }}
                                 />
@@ -3372,8 +3418,8 @@ export default function UIDLookup() {
                               <td key={`z-dev-${idx}`} colSpan={2}>
                                 <input
                                   className="troubleshoot-input"
-                                  value={rowComments.zDevice || ''}
-                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), zDevice: ev.target.value }; saveComments(next); void persistSingle(rowKey, next[rowKey]); }}
+                                  value={(editingComments[rowKey]?.zDevice ?? comments[rowKey]?.zDevice) || ''}
+                                  onChange={(ev) => handleTroubleshootInputChange(rowKey, 'zDevice', ev.target.value)}
                                   onKeyDown={(e) => { if ((e as any).key === 'Enter') try { (e.target as HTMLInputElement).blur(); } catch {} }}
                                   style={{ width: '100%', padding: '4px 6px', borderRadius: 2, border: '1px solid rgba(166,183,198,0.10)', background: 'transparent', color: '#d0e7ff', fontSize: 13, lineHeight: '16px' }}
                                 />
@@ -3387,8 +3433,8 @@ export default function UIDLookup() {
                               <td key={`z-opt-${idx}`} colSpan={2}>
                                 <input
                                   className="troubleshoot-input"
-                                  value={rowComments.zOpt || ''}
-                                  onChange={(ev) => { const next = { ...(comments || {}) }; next[rowKey] = { ...(next[rowKey] || {}), zOpt: ev.target.value }; saveComments(next); void persistSingle(rowKey, next[rowKey]); }}
+                                  value={(editingComments[rowKey]?.zOpt ?? comments[rowKey]?.zOpt) || ''}
+                                  onChange={(ev) => handleTroubleshootInputChange(rowKey, 'zOpt', ev.target.value)}
                                   onKeyDown={(e) => { if ((e as any).key === 'Enter') try { (e.target as HTMLInputElement).blur(); } catch {} }}
                                   style={{ width: '100%', padding: '4px 6px', borderRadius: 2, border: '1px solid rgba(166,183,198,0.10)', background: 'transparent', color: '#d0e7ff', fontSize: 13, lineHeight: '16px' }}
                                 />

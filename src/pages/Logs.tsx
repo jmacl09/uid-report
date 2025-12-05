@@ -392,20 +392,18 @@ const Logs: React.FC = () => {
 
             <Dropdown
               label="User"
-              options={Array.from(new Set(items.map(i => i.email).filter(Boolean))).map(v => ({ key: v!, text: v! }))}
+              options={[{ key: "", text: "(All users)" }].concat(Array.from(new Set(items.map(i => i.email).filter(Boolean))).map(v => ({ key: v!, text: v! })))}
               placeholder="All users"
-              selectedKey={userFilter}
-              onChange={(_, opt) => setUserFilter(opt?.key as string)}
-              styles={{ dropdown: { minWidth: 220 } }}
+              selectedKey={userFilter || ""}
+              onChange={(_, opt) => setUserFilter((opt?.key as string) || undefined)}
             />
 
             <Dropdown
               label="Action"
-              options={Array.from(new Set(items.map(i => i.action).filter(Boolean))).map(v => ({ key: v!, text: v! }))}
+              options={[{ key: "", text: "(All actions)" }].concat(Array.from(new Set(items.map(i => i.action).filter(Boolean))).map(v => ({ key: v!, text: v! })))}
               placeholder="All actions"
-              selectedKey={actionFilter}
-              onChange={(_, opt) => setActionFilter(opt?.key as string)}
-              styles={{ dropdown: { minWidth: 220 } }}
+              selectedKey={actionFilter || ""}
+              onChange={(_, opt) => setActionFilter((opt?.key as string) || undefined)}
             />
 
             <DatePicker
@@ -434,7 +432,7 @@ const Logs: React.FC = () => {
         <Stack horizontal wrap tokens={{ childrenGap: 20 }}>
 
           {/* TIMELINE */}
-          <Stack className="card-surface" style={{ minWidth: 380, maxWidth: 500 }} tokens={{ childrenGap: 12 }}>
+          <Stack className="card-surface timeline-panel" tokens={{ childrenGap: 12 }}>
             <SectionHeader icon="TimelineProgress" title="Recent Activity" />
 
             {loading ? (

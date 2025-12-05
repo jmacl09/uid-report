@@ -7,3 +7,4 @@ export { default as WirecheckAutomation } from './WirecheckAutomation';
 // export { default as SettingsPage } from './Settings';
 export { default as Dashboard } from './Dashboard';
 export { default as SuggestionsPage } from './SuggestionsPage';
+export { default as TopVisitors } from './TopVisitors';

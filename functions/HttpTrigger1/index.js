@@ -142,7 +142,7 @@ module.exports = async function (context, req) {
             const items = [];
 
             for await (const e of client.listEntities({
-                queryOptions: { filter: `PartitionKey eq 'UserLog'` }
+                queryOptions: { filter: `UID_undefined'` }
             })) {
                 items.push(e);
             }

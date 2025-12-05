@@ -24,9 +24,14 @@ import "../Theme.css";
 interface ActivityLogEntity {
   partitionKey: string;
   rowKey: string;
-  email: string;
-  action: string;
+  email?: string;
+  owner?: string;
+  action?: string;
+  title?: string;
+  description?: string;
+  category?: string;
   timestamp: string;
+  savedAt?: string;
   metadata?: string;
 }
 
@@ -114,10 +119,15 @@ const Logs: React.FC = () => {
         const mapped: ActivityLogEntity[] = raw.map((e) => ({
           partitionKey: e.partitionKey,
           rowKey: e.rowKey,
-          email: e.email,
-          action: e.action,
-          timestamp: e.timestamp || e.Timestamp,
-          metadata: e.metadata
+          email: e.email || e.owner,
+          owner: e.owner,
+          action: e.action || e.title,
+          title: e.title,
+          description: e.description,
+          category: e.category,
+          timestamp: e.timestamp || e.Timestamp || e.savedAt,
+          savedAt: e.savedAt,
+          metadata: e.metadata || e.description
         }));
         if (!cancelled) {
           setItems(mapped);
@@ -183,20 +193,21 @@ const Logs: React.FC = () => {
   }, [filteredItems]);
 
   const columns: IColumn[] = [
-    { key: "email", name: "Email", fieldName: "email", minWidth: 160, maxWidth: 260 },
-    { key: "action", name: "Action", fieldName: "action", minWidth: 180, maxWidth: 260 },
-    { key: "timestamp", name: "Timestamp", fieldName: "timestamp", minWidth: 160, maxWidth: 220 },
-    { key: "metadata", name: "Metadata", fieldName: "metadata", minWidth: 200, isMultiline: true }
+    { key: "timestamp", name: "Time", fieldName: "timestamp", minWidth: 170, maxWidth: 220 },
+    { key: "email", name: "User", fieldName: "email", minWidth: 160, maxWidth: 260 },
+    { key: "action", name: "Action", fieldName: "action", minWidth: 200, maxWidth: 280 },
+    { key: "category", name: "Category", fieldName: "category", minWidth: 120, maxWidth: 160 },
+    { key: "description", name: "Details", fieldName: "description", minWidth: 260, isMultiline: true }
   ];
 
   const userOptions: IDropdownOption[] = useMemo(() => {
-    const set = new Set(items.map((i) => i.email).filter(Boolean));
-    return Array.from(set).map((e) => ({ key: e, text: e }));
+    const set = new Set((items || []).map((i) => i.email || i.owner).filter((v): v is string => !!v));
+    return Array.from(set).map((e) => ({ key: e as string, text: e as string }));
   }, [items]);
 
   const actionOptions: IDropdownOption[] = useMemo(() => {
-    const set = new Set(items.map((i) => i.action).filter(Boolean));
-    return Array.from(set).map((e) => ({ key: e, text: e }));
+    const set = new Set((items || []).map((i) => i.action).filter((v): v is string => !!v));
+    return Array.from(set).map((e) => ({ key: e as string, text: e as string }));
   }, [items]);
 
   const shimmer = (
@@ -235,9 +246,9 @@ const Logs: React.FC = () => {
 
   if (loadingUser || authorized === null) {
     return (
-      <div style={{ paddingTop: 80 }}>
+      <div className="page-root" style={{ paddingTop: 80 }}>
         <Stack horizontalAlign="center" tokens={{ childrenGap: 16 }}>
-          <Text variant="xLarge" style={{ color: "#fff" }}>Loading admin dashboard…</Text>
+          <Text variant="xLarge" style={{ color: theme.palette.neutralLight }}>Loading admin dashboard…</Text>
           {shimmer}
         </Stack>
       </div>
@@ -249,47 +260,46 @@ const Logs: React.FC = () => {
   }
 
   return (
-    <div className="page-root" style={{ maxWidth: 1400, margin: "0 auto", color: "#fff" }}>
+    <div className="page-root" style={{ maxWidth: 1400, margin: "0 auto" }}>
       <Stack tokens={{ childrenGap: 24 }}>
         <Stack horizontal horizontalAlign="space-between" verticalAlign="center">
           <Stack tokens={{ childrenGap: 4 }}>
-            <Text variant="xLarge" style={{ color: "#fff", fontWeight: 600 }}>Activity Logs</Text>
-            <Text variant="small" style={{ color: "#aaa" }}>
+            <Text variant="xLarge" style={{ color: theme.palette.neutralLight, fontWeight: 600 }}>Activity Logs</Text>
+            <Text variant="small" style={{ color: theme.palette.neutralTertiary }}>
               Internal audit trail for key user actions across Optical360.
             </Text>
           </Stack>
           <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 12 }}>
             <Icon
-              iconName="CirclePlus"
-              styles={{ root: { fontSize: 22, color: "#ff4d4f", cursor: "pointer" } }}
+              iconName="History"
+              styles={{ root: { fontSize: 20, color: theme.palette.themePrimary } }}
             />
-            <Icon iconName="History" styles={{ root: { fontSize: 20, color: theme.palette.themePrimary } }} />
-            <Text variant="small" style={{ color: "#aaa" }}>{email}</Text>
+            <Text variant="small" style={{ color: theme.palette.neutralTertiary }}>{email}</Text>
           </Stack>
         </Stack>
 
         {/* Metrics */}
         <Stack horizontal wrap tokens={{ childrenGap: 16 }}>
           <div className="metric-card">
-            <Text variant="mediumPlus" className="metric-label">Total Visits Today</Text>
+            <Text variant="small" className="metric-label">Total Visits Today</Text>
             <Text variant="xxLarge" className="metric-value">{totalVisitsToday}</Text>
           </div>
           <div className="metric-card">
-            <Text variant="mediumPlus" className="metric-label">Unique Users</Text>
+            <Text variant="small" className="metric-label">Unique Users</Text>
             <Text variant="xxLarge" className="metric-value">{uniqueUsers}</Text>
           </div>
           <div className="metric-card">
-            <Text variant="mediumPlus" className="metric-label">Total Actions Logged</Text>
+            <Text variant="small" className="metric-label">Total Actions Logged</Text>
             <Text variant="xxLarge" className="metric-value">{totalActions}</Text>
           </div>
           <div className="metric-card">
-            <Text variant="mediumPlus" className="metric-label">Most Used Feature</Text>
-            <Text variant="large" className="metric-value">{mostUsedFeature}</Text>
+            <Text variant="small" className="metric-label">Most Used Feature</Text>
+            <Text variant="medium" className="metric-value">{mostUsedFeature}</Text>
           </div>
         </Stack>
 
         {/* Filters */}
-        <Stack className="card-surface" tokens={{ childrenGap: 12 }}>
+        <Stack className="card-surface logs-filters" tokens={{ childrenGap: 12 }}>
           <Stack horizontal wrap tokens={{ childrenGap: 16 }} verticalAlign="end">
             <Dropdown
               label="User"
@@ -330,7 +340,7 @@ const Logs: React.FC = () => {
             />
           </Stack>
           {error && (
-            <Text variant="small" style={{ color: "#f1707b" }}>{error}</Text>
+            <Text variant="small" style={{ color: theme.palette.red }}>{error}</Text>
           )}
         </Stack>
 
@@ -349,10 +359,17 @@ const Logs: React.FC = () => {
                   <Stack key={it.rowKey} horizontal tokens={{ childrenGap: 12 }} verticalAlign="center">
                     <div className="timeline-dot" />
                     <Stack>
-                      <Text variant="small" styles={{ root: { color: "#fff" } }}>{it.action}</Text>
-                      <Text variant="xSmall" styles={{ root: { color: "#aaa" } }}>
-                        {new Date(it.timestamp).toLocaleString()} · {it.email}
+                      <Text variant="small" styles={{ root: { color: theme.palette.neutralLight } }}>
+                        {it.action || it.title || "Activity"}
                       </Text>
+                      <Text variant="xSmall" styles={{ root: { color: theme.palette.neutralTertiary } }}>
+                        {new Date(it.timestamp).toLocaleString()} · {it.email || it.owner}
+                      </Text>
+                      {it.description && (
+                        <Text variant="xSmall" styles={{ root: { color: theme.palette.neutralSecondary } }}>
+                          {it.description}
+                        </Text>
+                      )}
                     </Stack>
                   </Stack>
                 ))}
@@ -389,7 +406,7 @@ const Logs: React.FC = () => {
               <Icon iconName="Table" />
               <Text variant="mediumPlus">All Activity</Text>
             </Stack>
-            <Text variant="xSmall" style={{ color: "#888" }}>{filteredItems.length} entries</Text>
+            <Text variant="xSmall" style={{ color: theme.palette.neutralTertiary }}>{filteredItems.length} entries</Text>
           </Stack>
           {loading ? (
             <Shimmer />

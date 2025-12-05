@@ -8,6 +8,19 @@
   },
   "routes": [
     {
+      "route": "/api/uid",
+      "allowedRoles": ["authenticated"],
+      "methods": ["GET"],
+      "rewrite": "/api/LogicAppProxy"
+    },
+
+    {
+      "route": "/logs",
+      "allowedRoles": ["authenticated"],
+      "rewrite": "/index.html"
+    },
+
+    {
       "route": "/api/log",
       "allowedRoles": ["authenticated"],
       "methods": ["GET", "POST", "OPTIONS"],
@@ -19,28 +32,20 @@
       "methods": ["GET", "POST", "OPTIONS"],
       "rewrite": "/api/HttpTrigger1"
     },
-    {
-      "route": "/api/uid",
-      "allowedRoles": ["authenticated"],
-      "methods": ["GET"],
-      "rewrite": "/api/LogicAppProxy"
-    },
+  
+
     {
       "route": "/api/Projects",
-      "allowedRoles": ["anonymous"],
       "methods": ["GET", "POST", "OPTIONS"],
+      "allowedRoles": ["anonymous"],
       "rewrite": "/api/HttpTrigger1"
     },
-    {
-      "route": "/logs",
-      "allowedRoles": ["authenticated"],
-      "rewrite": "/index.html"
-    },
+
     {
       "route": "/api/*",
-      "allowedRoles": ["anonymous"],
-      "rewrite": "/api/HttpTrigger1"
+      "allowedRoles": ["anonymous"]
     },
+
     {
       "route": "/manifest.json",
       "allowedRoles": ["anonymous"]
@@ -49,6 +54,7 @@
       "route": "/favicon.ico",
       "allowedRoles": ["anonymous"]
     },
+
     {
       "route": "/login",
       "rewrite": "/.auth/login/aad"
@@ -57,11 +63,13 @@
       "route": "/logout",
       "redirect": "/.auth/logout"
     },
+
     {
       "route": "/*",
       "allowedRoles": ["authenticated"]
     }
   ],
+
   "auth": {
     "identityProviders": {
       "azureActiveDirectory": {
@@ -70,18 +78,26 @@
           "clientId": "70f3fda5-4fc5-446e-87b0-3adff82fba7b"
         },
         "login": {
-          "scopes": ["openid", "profile", "email"],
-          "loginParameters": ["domain_hint=microsoft.com"]
+          "scopes": [
+            "openid",
+            "profile",
+            "email"
+          ],
+          "loginParameters": [
+            "domain_hint=microsoft.com"
+          ]
         }
       }
     }
   },
+
   "responseOverrides": {
     "401": {
       "statusCode": 302,
       "redirect": "/login"
     }
   },
+
   "globalHeaders": {
     "Access-Control-Allow-Origin": "https://optical360.net, http://localhost:3000",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",

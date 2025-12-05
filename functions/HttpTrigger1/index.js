@@ -95,12 +95,13 @@ module.exports = async function (context, req) {
         return;
     }
 
-    /* =========================================================================
-       FIXED ROUTING — LOG HANDLER (GET + POST)
-       ========================================================================= */
-    const path = req.originalUrl || req.url;
+     /* =========================================================================
+         FIXED ROUTING — LOG HANDLER (GET + POST)
+         ========================================================================= */
+     const urlForLog = new URL(req.url, "http://localhost");
+     const pathname = urlForLog.pathname.toLowerCase();
 
-    if ((req.method === "GET" || req.method === "POST") && path.includes("/api/log")) {
+     if ((req.method === "GET" || req.method === "POST") && pathname.endsWith("/log")) {
         try {
             const { client } = getLogTableClient();
 
@@ -136,8 +137,7 @@ module.exports = async function (context, req) {
             }
 
             /* ------------------ GET (logs, newest first, optional limit) ------------------ */
-            const url = new URL(req.url);
-            const rawLimit = url.searchParams.get("limit");
+            const rawLimit = urlForLog.searchParams.get("limit");
             let limit = Number.parseInt(rawLimit || "", 10);
             if (!Number.isFinite(limit) || limit <= 0) limit = 500;
 

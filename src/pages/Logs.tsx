@@ -15,10 +15,7 @@ import {
   PrimaryButton,
   Icon,
   Separator,
-  useTheme,
-  IDetailsRowProps,
-  DetailsRow,
-  IRenderFunction
+  useTheme
 } from "@fluentui/react";
 import { LineChart, IChartProps } from "@fluentui/react-charting";
 import { logAction } from "../api/log";
@@ -234,24 +231,6 @@ const Logs: React.FC = () => {
   }, [filteredItems]);
 
   const totalActions = filteredItems.length;
-
-  const mostUsedFeature = useMemo(() => {
-    if (!filteredItems.length) return "-";
-    const counts = new Map<string, number>();
-    for (const it of filteredItems) {
-      const key = it.action || "Unknown";
-      counts.set(key, (counts.get(key) || 0) + 1);
-    }
-    let maxKey = "-";
-    let maxVal = 0;
-    counts.forEach((v, k) => {
-      if (v > maxVal) {
-        maxVal = v;
-        maxKey = k;
-      }
-    });
-    return maxKey;
-  }, [filteredItems]);
 
   const columns: IColumn[] = [
     {

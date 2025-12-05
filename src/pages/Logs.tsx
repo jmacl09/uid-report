@@ -8,9 +8,7 @@ import {
   DetailsListLayoutMode,
   SelectionMode,
   Shimmer,
-  ShimmerElementType,
   Dropdown,
-  IDropdownOption,
   DatePicker,
   PrimaryButton,
   Icon,
@@ -105,7 +103,7 @@ const Logs: React.FC = () => {
   const [toDate, setToDate] = useState<Date | null>(null);
 
   const navigate = useNavigate();
-  const theme = useTheme();
+  useTheme();
 
   /* -------------------------------------
      AUTH ↦ ADMIN ONLY

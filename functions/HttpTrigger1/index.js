@@ -96,9 +96,11 @@ module.exports = async function (context, req) {
     }
 
     /* =========================================================================
-       ACTIVITY LOG HANDLING
+       FIXED ROUTING — LOG HANDLER (GET + POST)
        ========================================================================= */
-    if ((req.method === "GET" || req.method === "POST") && req.url.includes("/api/log")) {
+    const path = req.originalUrl || req.url;
+
+    if ((req.method === "GET" || req.method === "POST") && path.includes("/api/log")) {
         try {
             const { client } = getLogTableClient();
 
@@ -142,7 +144,7 @@ module.exports = async function (context, req) {
             const items = [];
 
             for await (const e of client.listEntities({
-                queryOptions: { filter: `UID_undefined'` }
+                queryOptions: { filter: `PartitionKey eq 'UID_undefined'` }
             })) {
                 items.push(e);
             }
@@ -164,7 +166,11 @@ module.exports = async function (context, req) {
             return;
 
         } catch (err) {
-            context.res = { status: 500, headers: cors, body: { ok: false, error: err.message } };
+            context.res = {
+                status: 500,
+                headers: cors,
+                body: { ok: false, error: err.message }
+            };
             return;
         }
     }
@@ -206,7 +212,11 @@ module.exports = async function (context, req) {
             return;
 
         } catch (err) {
-            context.res = { status: 500, headers: cors, body: { ok: false, error: err.message } };
+            context.res = {
+                status: 500,
+                headers: cors,
+                body: { ok: false, error: err.message }
+            };
             return;
         }
     }
@@ -231,7 +241,11 @@ module.exports = async function (context, req) {
             return;
 
         } catch (err) {
-            context.res = { status: 500, headers: cors, body: { ok: false, error: err.message } };
+            context.res = {
+                status: 500,
+                headers: cors,
+                body: { ok: false, error: err.message }
+            };
             return;
         }
     }
@@ -276,5 +290,9 @@ module.exports = async function (context, req) {
 
     await client.upsertEntity(entity, "Merge");
 
-    context.res = { status: 200, headers: cors, body: { ok: true, entity } };
+    context.res = {
+        status: 200,
+        headers: cors,
+        body: { ok: true, entity }
+    };
 };

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Stack,
@@ -33,6 +33,7 @@ interface ActivityLogEntity {
   metadata?: string;
 }
 
+/* ------------------ CET FORMATTER ------------------ */
 const CET_LOCALE = "de-CH";
 const CET_TZ = "Europe/Zurich";
 
@@ -53,6 +54,7 @@ const formatCET = (dateString: string) => {
   }
 };
 
+/* ------------------ DETAILS PARSER ------------------ */
 const parseDetails = (details?: string) => {
   if (!details) return null;
   try {
@@ -65,29 +67,39 @@ const parseDetails = (details?: string) => {
 
 const renderParsedDetails = (obj: any) => {
   if (!obj || typeof obj !== "object") return null;
-  return (
-    <Stack tokens={{ childrenGap: 2 }}>
-      {Object.entries(obj).map(([key, value]) => {
-        let display: string;
-        if (Array.isArray(value)) display = value.length ? value.join(", ") : "None";
-        else if (value === "" || value === null || value === undefined) display = "(empty)";
-        else display = String(value);
 
-        return (
-          <Text variant="xSmall" key={key}>
-            <strong>{key}:</strong> {display}
-          </Text>
-        );
-      })}
-    </Stack>
+  return (
+    <div className="details-box">
+      <div className="details-grid">
+        {Object.entries(obj).map(([key, value]) => {
+          let display: string;
+
+          if (Array.isArray(value)) {
+            display = value.length ? value.join(", ") : "(none)";
+          } else if (value === "" || value === null || value === undefined) {
+            display = "(none)";
+          } else {
+            display = String(value);
+          }
+
+          return (
+            <React.Fragment key={key}>
+              <Text style={{ opacity: 0.8 }}>{key}</Text>
+              <Text>{display}</Text>
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
   );
 };
 
+/* ------------------ ADMIN EMAIL ------------------ */
 const ADMIN_EMAIL = "joshmaclean@microsoft.com";
 
-/* ---------------------------------------------------------
-   COMPONENT START
---------------------------------------------------------- */
+/* ============================================================
+   MAIN LOGS COMPONENT
+============================================================ */
 const Logs: React.FC = () => {
   const [email, setEmail] = useState<string | null>(null);
   const [authorized, setAuthorized] = useState<boolean | null>(null);
@@ -103,15 +115,18 @@ const Logs: React.FC = () => {
   const [toDate, setToDate] = useState<Date | null>(null);
 
   const [liveMode, setLiveMode] = useState<boolean>(false);
+  const [visibleCount, setVisibleCount] = useState(20);
+
   const lastRowKey = useRef<string | null>(null);
 
   const navigate = useNavigate();
 
-  /* -------------------------------------
-     ADMIN AUTH
-  -------------------------------------- */
+  /* ============================================================
+     AUTHENTICATION
+  ============================================================ */
   useEffect(() => {
     let cancelled = false;
+
     const fetchUser = async () => {
       try {
         const res = await fetch("/.auth/me", { credentials: "include" });
@@ -139,20 +154,25 @@ const Logs: React.FC = () => {
         }
       }
     };
+
     fetchUser();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [navigate]);
 
-  /* -------------------------------------
-     LOAD LOG DATA
-  -------------------------------------- */
-  const loadLogs = useCallback(async () => {
+  /* ============================================================
+     LOAD LOGS API CALL
+  ============================================================ */
+  const loadLogs = async () => {
     setLoading(true);
     setError(null);
 
     try {
       const params: string[] = ["limit=500"];
+
       if (fromDate) params.push("dateFrom=" + fromDate.toISOString());
+
       if (toDate) {
         const end = new Date(toDate);
         end.setHours(23, 59, 59, 999);
@@ -176,7 +196,6 @@ const Logs: React.FC = () => {
         metadata: e.metadata || e.description
       }));
 
-      /* Detect new rows for animation */
       if (mapped.length > 0 && mapped[0].rowKey !== lastRowKey.current) {
         lastRowKey.current = mapped[0].rowKey;
       }
@@ -187,25 +206,26 @@ const Logs: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [fromDate, toDate]);
+  };
 
+  /* First load */
   useEffect(() => {
     if (authorized) loadLogs();
-  }, [authorized, loadLogs]);
+  }, [authorized]);
 
-  /* -------------------------------------
+  /* ============================================================
      LIVE MODE AUTO REFRESH
-  -------------------------------------- */
+  ============================================================ */
   useEffect(() => {
     if (!liveMode) return;
 
     const interval = setInterval(() => loadLogs(), 10000);
     return () => clearInterval(interval);
-  }, [liveMode, loadLogs]);
+  }, [liveMode, fromDate, toDate]);
 
-  /* -------------------------------------
-     FILTERED VIEW
-  -------------------------------------- */
+  /* ============================================================
+     FILTERED LIST
+  ============================================================ */
   const filteredItems = useMemo(() => {
     return items.filter((i) => {
       if (userFilter && i.email !== userFilter) return false;
@@ -214,27 +234,29 @@ const Logs: React.FC = () => {
     });
   }, [items, userFilter, actionFilter]);
 
-  /* -------------------------------------
-     METRIC COMPUTATIONS
-  -------------------------------------- */
+  const visibleItems = filteredItems.slice(0, visibleCount);
+
+  /* ============================================================
+     METRICS
+  ============================================================ */
   const totalVisitsToday = useMemo(() => {
-    const d = new Date();
+    const today = new Date();
     return filteredItems.filter((it) => {
       const t = new Date(it.timestamp);
       return (
-        t.getFullYear() === d.getFullYear() &&
-        t.getMonth() === d.getMonth() &&
-        t.getDate() === d.getDate()
+        t.getFullYear() === today.getFullYear() &&
+        t.getMonth() === today.getMonth() &&
+        t.getDate() === today.getDate()
       );
     }).length;
   }, [filteredItems]);
 
-  const uniqueUsers = new Set(filteredItems.map(i => i.email)).size;
+  const uniqueUsers = new Set(filteredItems.map((i) => i.email)).size;
   const totalActions = filteredItems.length;
 
-  /* -------------------------------------
+  /* ============================================================
      TABLE COLUMNS
-  -------------------------------------- */
+  ============================================================ */
   const columns: IColumn[] = [
     {
       key: "timestamp",
@@ -242,7 +264,7 @@ const Logs: React.FC = () => {
       minWidth: 170,
       maxWidth: 220,
       onRender: (item) => (
-        <Text style={{ color: "#f9fafb" }}>{formatCET(item.timestamp)}</Text>
+        <Text style={{ color: "#dce7ff" }}>{formatCET(item.timestamp)}</Text>
       )
     },
     {
@@ -250,7 +272,7 @@ const Logs: React.FC = () => {
       name: "User",
       minWidth: 180,
       onRender: (item) => (
-        <Text style={{ color: "#f9fafb" }}>{item.email || item.owner || "-"}</Text>
+        <Text style={{ color: "#dce7ff" }}>{item.email || item.owner || "-"}</Text>
       )
     },
     {
@@ -258,7 +280,7 @@ const Logs: React.FC = () => {
       name: "Action",
       minWidth: 200,
       onRender: (item) => (
-        <Text style={{ fontWeight: 600, color: "#ffffff" }}>
+        <Text style={{ color: "#ffffff", fontWeight: 600 }}>
           {item.action || item.title}
         </Text>
       )
@@ -266,21 +288,22 @@ const Logs: React.FC = () => {
     {
       key: "details",
       name: "Details",
-      minWidth: 260,
+      minWidth: 300,
       onRender: (item) => {
         const parsed = parseDetails(item.metadata);
-        if (!parsed) return <Text style={{ color: "#e5e7eb" }}>(none)</Text>;
-        if (typeof parsed === "string") return <Text style={{ color: "#e5e7eb" }}>{parsed}</Text>;
+        if (!parsed) return <Text style={{ color: "#98a6c7" }}>Visiting</Text>;
+        if (typeof parsed === "string") return <Text style={{ color: "#98a6c7" }}>{parsed}</Text>;
         return renderParsedDetails(parsed);
       }
     }
   ];
 
-  /* -------------------------------------
+  /* ============================================================
      CHART DATA
-  -------------------------------------- */
+  ============================================================ */
   const chartData: IChartProps = useMemo(() => {
     const buckets = new Map<string, number>();
+
     for (const it of filteredItems) {
       const d = new Date(it.timestamp);
       const key = d.toISOString().substring(0, 10);
@@ -288,7 +311,7 @@ const Logs: React.FC = () => {
     }
 
     const points = Array.from(buckets.entries())
-      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .sort()
       .map(([key, count], idx) => ({
         x: idx + 1,
         y: count,
@@ -308,9 +331,9 @@ const Logs: React.FC = () => {
     };
   }, [filteredItems]);
 
-  /* -------------------------------------
+  /* ============================================================
      RENDER
-  -------------------------------------- */
+  ============================================================ */
 
   if (loadingUser || authorized === null) {
     return (
@@ -326,7 +349,7 @@ const Logs: React.FC = () => {
   if (!authorized) return null;
 
   return (
-    <div className="page-root" style={{ maxWidth: 1680, margin: "0 auto" }}>
+    <div className="page-root">
       <Stack tokens={{ childrenGap: 28 }}>
 
         {/* HEADER */}
@@ -335,61 +358,67 @@ const Logs: React.FC = () => {
             <Text variant="xxLarge" style={{ fontWeight: 700, color: "#ffffff" }}>
               Activity Logs
             </Text>
-            <Text variant="small" style={{ color: "#e5e7eb" }}>
+            <Text variant="small" style={{ color: "#9cb3d8" }}>
               Internal audit trail for all user interactions across Optical360.
             </Text>
           </Stack>
 
           <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 12 }}>
             <Toggle
-              label=""
               checked={liveMode}
-              onChange={(_, v) => setLiveMode(!!v)}
-              onText="LIVE MODE"
+              label=""
+              onText="Live On"
               offText="Live Off"
+              onChange={(_, v) => setLiveMode(!!v)}
               styles={{
-                text: { color: liveMode ? "#4ade80" : "#9ca3af" }
+                text: { color: liveMode ? "#4ade80" : "#8a9bbd" }
               }}
             />
-            {liveMode && (
-              <Text style={{ color: "#4ade80", fontWeight: 600 }}>
-                ● LIVE — Auto-refreshing
-              </Text>
-            )}
-
             <Icon iconName="Contact" styles={{ root: { color: "#3b82f6" } }} />
             <Text style={{ color: "#ffffff" }}>{email}</Text>
           </Stack>
         </Stack>
 
-        {/* METRICS */}
+        {/* METRIC CARDS */}
         <Stack horizontal wrap tokens={{ childrenGap: 16 }}>
           <Metric title="Total Visits Today" value={totalVisitsToday} subtitle="Current day (CET)" />
           <Metric title="Unique Users" value={uniqueUsers} subtitle="Distinct accounts" />
           <Metric title="Total Actions Logged" value={totalActions} subtitle="Filtered results" />
         </Stack>
 
-        {/* FILTER PANEL */}
+        {/* FILTER BAR */}
         <Stack className="card-surface logs-filters" tokens={{ childrenGap: 16 }}>
           <Stack horizontal wrap tokens={{ childrenGap: 20 }} verticalAlign="end">
+
             <Dropdown
               label="User"
-              options={Array.from(new Set(items.map(i => i.email).filter((v): v is string => !!v))).map(v => ({ key: v, text: v }))}
+              options={Array.from(new Set(items.map(i => i.email).filter(Boolean))).map(v => ({ key: v!, text: v! }))}
               placeholder="All users"
               selectedKey={userFilter}
               onChange={(_, opt) => setUserFilter(opt?.key as string)}
               styles={{ dropdown: { minWidth: 220 } }}
             />
+
             <Dropdown
               label="Action"
-              options={Array.from(new Set(items.map(i => i.action).filter((v): v is string => !!v))).map(v => ({ key: v, text: v }))}
+              options={Array.from(new Set(items.map(i => i.action).filter(Boolean))).map(v => ({ key: v!, text: v! }))}
               placeholder="All actions"
               selectedKey={actionFilter}
               onChange={(_, opt) => setActionFilter(opt?.key as string)}
               styles={{ dropdown: { minWidth: 220 } }}
             />
-            <DatePicker label="From" value={fromDate || undefined} onSelectDate={(d) => setFromDate(d || null)} />
-            <DatePicker label="To" value={toDate || undefined} onSelectDate={(d) => setToDate(d || null)} />
+
+            <DatePicker
+              label="From"
+              value={fromDate || undefined}
+              onSelectDate={(d) => setFromDate(d || null)}
+            />
+
+            <DatePicker
+              label="To"
+              value={toDate || undefined}
+              onSelectDate={(d) => setToDate(d || null)}
+            />
 
             <PrimaryButton
               text="Refresh"
@@ -398,21 +427,21 @@ const Logs: React.FC = () => {
             />
           </Stack>
 
-          {error && <Text style={{ color: "#f97373" }}>{error}</Text>}
+          {error && <Text style={{ color: "#e06666" }}>{error}</Text>}
         </Stack>
 
         {/* TIMELINE + CHART */}
         <Stack horizontal wrap tokens={{ childrenGap: 20 }}>
 
           {/* TIMELINE */}
-          <Stack className="card-surface" style={{ minWidth: 360, maxWidth: 480 }} tokens={{ childrenGap: 8 }}>
+          <Stack className="card-surface" style={{ minWidth: 380, maxWidth: 500 }} tokens={{ childrenGap: 12 }}>
             <SectionHeader icon="TimelineProgress" title="Recent Activity" />
 
             {loading ? (
               <Shimmer />
             ) : (
               <Stack className="scroll-panel" tokens={{ childrenGap: 12 }}>
-                {filteredItems.slice(0, 20).map((item) => (
+                {visibleItems.slice(0, 20).map((item) => (
                   <Stack
                     key={item.rowKey}
                     horizontal
@@ -421,7 +450,7 @@ const Logs: React.FC = () => {
                   >
                     <div className="timeline-dot" />
                     <Stack>
-                      <Text variant="xSmall" style={{ color: "#e5e7eb" }}>
+                      <Text variant="xSmall" style={{ color: "#9cb3d8" }}>
                         {formatCET(item.timestamp)}
                       </Text>
 
@@ -429,28 +458,25 @@ const Logs: React.FC = () => {
                         {item.action}
                       </Text>
 
-                      <Text variant="xSmall" style={{ color: "#d1d5db" }}>
+                      <Text variant="xSmall" style={{ color: "#8ba3c7" }}>
                         {item.email}
                       </Text>
 
-                      {/* Pills */}
                       <Stack horizontal tokens={{ childrenGap: 6 }} style={{ marginTop: 4 }}>
                         <Text variant="xSmall" className="pill pill-soft">UID</Text>
                         {item.category && (
-                          <Text variant="xSmall" className="pill pill-outline">
-                            {item.category}
-                          </Text>
+                          <Text variant="xSmall" className="pill pill-outline">{item.category}</Text>
                         )}
                       </Stack>
 
-                      {/* Parsed details */}
+                      {/* DETAILS */}
                       {(() => {
                         const parsed = parseDetails(item.metadata);
                         if (parsed && typeof parsed === "object") {
                           return (
-                            <Stack className="timeline-details animate-pop-slow">
+                            <div className="timeline-details animate-pop">
                               {renderParsedDetails(parsed)}
-                            </Stack>
+                            </div>
                           );
                         }
                         return null;
@@ -463,59 +489,65 @@ const Logs: React.FC = () => {
           </Stack>
 
           {/* CHART */}
-          <Stack className="card-surface" grow tokens={{ childrenGap: 8 }}>
+          <Stack className="card-surface" grow tokens={{ childrenGap: 12 }}>
             <SectionHeader icon="AreaChart" title="Activity Over Time" />
-
-            {loading ? <Shimmer /> : (
-              <LineChart
-                data={chartData}
-                height={260}
-                hideLegend={false}
-                wrapXAxisLables
-              />
-            )}
+            {loading ? <Shimmer /> : <LineChart data={chartData} height={260} hideLegend={false} wrapXAxisLables />}
           </Stack>
         </Stack>
 
-        {/* TABLE */}
+        {/* ALL ACTIVITY TABLE */}
         <Stack className="card-surface" tokens={{ childrenGap: 12 }}>
           <SectionHeader icon="Table" title="All Activity" />
-          <Text variant="xSmall" style={{ color: "#e5e7eb" }}>
-            {filteredItems.length} entries
+          <Text variant="xSmall" style={{ color: "#8ba3c7" }}>
+            Displaying {visibleItems.length} of {filteredItems.length} entries
           </Text>
 
           {loading ? (
             <Shimmer />
           ) : (
-            <DetailsList
-              items={filteredItems}
-              columns={columns}
-              layoutMode={DetailsListLayoutMode.justified}
-              selectionMode={SelectionMode.none}
-              setKey="logsTable"
-            />
+            <>
+              <div className="table-scroll">
+                <DetailsList
+                  items={visibleItems}
+                  columns={columns}
+                  layoutMode={DetailsListLayoutMode.justified}
+                  selectionMode={SelectionMode.none}
+                  setKey="logsTable"
+                />
+              </div>
+
+              {visibleItems.length < filteredItems.length && (
+                <button
+                  className="load-more-btn"
+                  onClick={() => setVisibleCount((prev) => prev + 20)}
+                >
+                  Load more
+                </button>
+              )}
+            </>
           )}
         </Stack>
 
         <Separator />
 
-        <Text variant="xSmall" style={{ color: "#e5e7eb" }}>
-          Activity logging is scoped to Optical360 internal usage and visible only to the platform admin.
+        <Text variant="xSmall" style={{ color: "#8ba3c7" }}>
+          Activity logging is restricted to the Optical360 administrator.
         </Text>
       </Stack>
     </div>
   );
 };
 
-/* --------------------------------------------------
-   REUSABLE COMPONENTS
--------------------------------------------------- */
+/* ============================================================
+   SHARED COMPONENTS
+============================================================ */
+
 const Metric = ({ title, value, subtitle }: { title: string; value: number; subtitle?: string }) => (
   <Stack className="metric-card" tokens={{ childrenGap: 4 }}>
     <Text className="metric-label">{title}</Text>
     <Text variant="xxLarge" className="metric-value">{value}</Text>
     {subtitle && (
-      <Text variant="small" style={{ color: "#d1d5db" }}>
+      <Text variant="small" style={{ color: "#99b2d6" }}>
         {subtitle}
       </Text>
     )}
@@ -524,8 +556,10 @@ const Metric = ({ title, value, subtitle }: { title: string; value: number; subt
 
 const SectionHeader = ({ icon, title }: { icon: string; title: string }) => (
   <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }}>
-    <Icon iconName={icon} styles={{ root: { color: "#3b82f6" } }} />
-    <Text variant="mediumPlus" style={{ fontWeight: 600 }}>{title}</Text>
+    <Icon iconName={icon} styles={{ root: { color: "#3b82f6", fontSize: 18 } }} />
+    <Text variant="mediumPlus" style={{ fontWeight: 600, color: "#dce7ff" }}>
+      {title}
+    </Text>
   </Stack>
 );
 

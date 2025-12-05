@@ -3482,130 +3482,127 @@ button.accent-cta:hover {
   color: #0b1220 !important;
 }
 
-/* === LOGS DASHBOARD (Activity Logs page) — NEXT GEN THEME === */
+/* === LOGS DASHBOARD (Activity Logs page) — CLEAN BLUE THEME === */
 
 .page-root {
-  background: radial-gradient(circle at top, #020617 0%, #0b1020 60%, #020617 100%);
+  background: radial-gradient(circle at top, #020617 0%, #030b17 60%, #020617 100%);
   color: #e5e7eb;
   padding: 24px 32px;
   box-sizing: border-box;
-  animation: fadeIn 0.6s ease forwards;
+  animation: fadeIn 0.4s ease forwards;
+  max-width: 1900px;
 }
 
-/* Smooth fade */
+/* Fade animation */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ------------------------------
-   CARD SURFACES
------------------------------- */
+/* --- CONTAINERS --- */
 .card-surface {
-  background: rgba(2, 6, 23, 0.9);
+  background: rgba(2, 6, 23, 0.92);
   border-radius: 14px;
-  border: 1px solid rgba(31, 41, 55, 0.6);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.55),
-              inset 0 0 10px rgba(56, 189, 248, 0.05);
-  padding: 16px 20px;
+  border: 1px solid rgba(10, 60, 120, 0.5);
+  box-shadow: 0 8px 25px rgba(0, 20, 40, 0.6);
+  padding: 18px 20px;
   backdrop-filter: blur(6px);
-  transition: transform 0.2s ease, box-shadow 0.25s ease;
 }
 
-.card-surface:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.85);
-}
-
-/* ------------------------------
-   METRIC CARDS
------------------------------- */
+/* Metric cards */
 .metric-card {
-  background: linear-gradient(145deg, #020617, #0d1221);
-  border-radius: 14px;
-  border: 1px solid rgba(31, 41, 55, 0.9);
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.7);
+  background: linear-gradient(145deg, #020617, #061022);
+  border-radius: 12px;
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  box-shadow: 0 10px 25px rgba(0, 50, 100, 0.45);
+  padding: 18px;
   min-width: 220px;
-  padding: 16px;
-  position: relative;
-  overflow: hidden;
-}
-
-.metric-card::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 20% -10%, rgba(56, 189, 248, 0.18), transparent 70%);
-  opacity: 0.8;
-  pointer-events: none;
 }
 
 .metric-label {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 11px;
-  color: #9ca3af;
+  color: #8ba3c7;
 }
 
 .metric-value {
-  color: #f3f4f6;
+  color: #e9f2ff;
   font-weight: 700;
 }
 
-/* ------------------------------
-   FILTER PANEL
------------------------------- */
+/* Filters panel */
 .logs-filters {
-  background: rgba(2, 6, 23, 0.95);
-  border: 1px solid rgba(31, 41, 55, 0.75);
-  border-radius: 14px;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.65);
-  padding: 18px 22px;
+  background: rgba(4, 10, 25, 0.85);
+  border: 1px solid rgba(26, 52, 90, 0.7);
+  border-radius: 12px;
 }
 
-/* ------------------------------
-   TIMELINE
------------------------------- */
+/* --- DROPDOWNS --- */
+.ms-Dropdown,
+.ms-Dropdown-title {
+  background-color: #0a1120 !important;
+  border: 1px solid #1e3a5f !important;
+  color: #dbeafe !important;
+}
+
+.ms-Dropdown:hover .ms-Dropdown-title {
+  border-color: #3b82f6 !important;
+}
+
+.ms-Dropdown-item {
+  background: #0a1120 !important;
+  color: #dbeafe !important;
+}
+
+.ms-Dropdown-item:hover {
+  background: #12223a !important;
+}
+
+/* DATE PICKER ICON FIX */
+.ms-DatePicker-event--with-label,
+.ms-DatePicker-event--without-label {
+  color: #60a5fa !important;
+}
+
+/* --- TIMELINE --- */
 .timeline-row {
   padding: 8px 0;
-  border-left: 1px solid rgba(56, 189, 248, 0.2);
+  border-left: 1px solid rgba(56, 189, 248, 0.25);
   padding-left: 14px;
-  position: relative;
-}
-
-.timeline-row:hover {
-  background: rgba(56, 189, 248, 0.05);
-  border-radius: 6px;
 }
 
 .timeline-dot {
-  width: 10px;
-  height: 10px;
+  width: 9px;
+  height: 9px;
   border-radius: 999px;
   background: #3b82f6;
   box-shadow: 0 0 8px #3b82f6;
-  margin-top: 4px;
 }
 
 .timeline-details {
   margin-top: 6px;
   padding: 8px 10px;
   border-radius: 8px;
-  background: rgba(2, 6, 23, 0.65);
-  border: 1px dashed #1f2937;
-  animation: fadeIn 0.3s ease forwards;
+  background: rgba(3, 18, 38, 0.65);
+  border: 1px solid rgba(56, 189, 248, 0.25);
 }
 
-/* ------------------------------
-   Pills for metadata tags
------------------------------- */
+/* Details box in Table */
+.details-box {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(5, 25, 55, 0.65);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+}
+
+/* Pills */
 .pill {
   padding: 2px 8px;
   border-radius: 6px;
   font-weight: 600;
   font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 
 .pill-soft {
@@ -3618,40 +3615,36 @@ button.accent-cta:hover {
   color: #cbd5e1;
 }
 
-/* ------------------------------
-   DetailsList table styling
------------------------------- */
+/* DETAILS LIST TABLE */
 .ms-DetailsList .ms-DetailsRow {
-  background: #020617;
-  border-bottom: 1px solid #111827;
-  transition: background 0.15s ease;
-}
-
-.ms-DetailsList .ms-DetailsRow:nth-child(odd) {
-  background: #030b17;
+  background: #020617 !important;
+  border-bottom: 1px solid #0e1a2b;
 }
 
 .ms-DetailsList .ms-DetailsRow:hover {
-  background: #0f172a !important;
+  background: #0d1628 !important;
 }
 
+/* Column headers */
 .ms-DetailsHeader {
-  background: #020617;
+  background: #020617 !important;
   border-bottom: 1px solid #1f2937;
+}
+
+.ms-DetailsHeader-cell:hover {
+  background: rgba(56, 189, 248, 0.08) !important;
 }
 
 .ms-DetailsHeader-cellTitle {
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  font-size: 11px;
-  color: #9ca3af;
+  font-size: 12px;
+  color: #dce7ff !important;
 }
 
-/* ------------------------------
-   Scrollable timeline panel
------------------------------- */
+/* Scroll panel */
 .scroll-panel {
-  max-height: 460px;
+  max-height: 420px;
   overflow-y: auto;
   padding-right: 6px;
 }
@@ -3665,17 +3658,43 @@ button.accent-cta:hover {
   border-radius: 999px;
 }
 
-.scroll-panel::-webkit-scrollbar-thumb:hover {
-  background: rgba(56, 189, 248, 0.45);
+/* Activity Table Scroll */
+.table-scroll {
+  max-height: 480px;
+  overflow-y: auto;
 }
 
-/* Compact mode */
-.compact-mode .vso-form-container {
-  padding: 18px 22px 20px !important;
+.load-more-btn {
+  margin-top: 10px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid #1e3a8a;
+  background: #0a1120;
+  color: #cfe1ff;
 }
 
-.compact-mode .banner-title {
-  padding: 8px 10px 8px !important;
+.load-more-btn:hover {
+  background: #132342;
+  border-color: #3b82f6;
+}
+
+/* Animation */
+.animate-pop {
+  animation: popIn 0.25s ease;
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: 140px auto;
+  column-gap: 6px;
+  row-gap: 3px;
+  font-size: 11px;
+  color: #dbeafe;
 }
 
 /* === Dialog Polish (Emergency Prompt) === */

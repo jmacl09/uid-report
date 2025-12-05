@@ -255,6 +255,27 @@ const Logs: React.FC = () => {
   const totalActions = filteredItems.length;
 
   /* ============================================================
+     TOP VISITORS (for metric row)
+  ============================================================ */
+  const topVisitors = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    for (const it of filteredItems) {
+      const e = (it.email || it.owner || "").toLowerCase();
+      if (!e) continue;
+      const ts = it.timestamp;
+      if (!ts) continue;
+      const day = new Date(ts).toISOString().substring(0, 10);
+      if (!map.has(e)) map.set(e, new Set());
+      map.get(e)!.add(day);
+    }
+
+    return Array.from(map.entries())
+      .map(([email, days]) => ({ email, daysVisited: days.size }))
+      .sort((a, b) => b.daysVisited - a.daysVisited)
+      .slice(0, 5);
+  }, [filteredItems]);
+
+  /* ============================================================
      TABLE COLUMNS
   ============================================================ */
   const columns: IColumn[] = [
@@ -349,7 +370,7 @@ const Logs: React.FC = () => {
   if (!authorized) return null;
 
   return (
-    <div className="page-root">
+    <div className="page-root logs-page">
       <Stack tokens={{ childrenGap: 28 }}>
 
         {/* HEADER */}
@@ -380,10 +401,30 @@ const Logs: React.FC = () => {
         </Stack>
 
         {/* METRIC CARDS */}
-        <Stack horizontal wrap tokens={{ childrenGap: 16 }}>
-          <Metric title="Total Visits Today" value={totalVisitsToday} subtitle="Current day (CET)" />
-          <Metric title="Unique Users" value={uniqueUsers} subtitle="Distinct accounts" />
-          <Metric title="Total Actions Logged" value={totalActions} subtitle="Filtered results" />
+        <Stack horizontal horizontalAlign="space-between" tokens={{ childrenGap: 16 }}>
+          <Stack horizontal wrap tokens={{ childrenGap: 16 }}>
+            <Metric title="Total Visits Today" value={totalVisitsToday} subtitle="Current day (CET)" />
+            <Metric title="Unique Users" value={uniqueUsers} subtitle="Distinct accounts" />
+            <Metric title="Total Actions Logged" value={totalActions} subtitle="Filtered results" />
+          </Stack>
+
+          <div style={{ display: "flex", alignItems: "flex-start" }}>
+            <div className="metric-card">
+              <Text className="metric-label">Top Visitors</Text>
+              <div style={{ marginTop: 8 }}>
+                {topVisitors.length === 0 ? (
+                  <Text style={{ color: "#9cb3d8" }}>No visitors</Text>
+                ) : (
+                  topVisitors.map((v) => (
+                    <div key={v.email} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                      <Text style={{ color: "#dce7ff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 220 }}>{v.email}</Text>
+                      <Text style={{ color: "#9fb3c6", fontWeight: 700 }}>{v.daysVisited}</Text>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         </Stack>
 
         {/* FILTER BAR */}

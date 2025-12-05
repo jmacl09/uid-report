@@ -219,10 +219,16 @@ html, body, .main, .table-container, .projects-rail-list, .notes-list, .ms-Callo
 
 /* === FIELD SPACING FIX (unified gaps) === */
 .vso-form-container .ms-TextField,
-.vso-form-container .ms-Dropdown,
 .vso-form-container .ms-ComboBox {
   margin-top: 10px;
-  margin-bottom: 20px; /* consistent separation between controls */
+  margin-bottom: 20px; /* consistent separation between most controls */
+}
+
+/* Dropdowns often sit inline with other controls; reduce their bottom gap to avoid
+   an awkward extra vertical space under the select control (keeps layout tight). */
+.vso-form-container .ms-Dropdown {
+  margin-top: 10px;
+  margin-bottom: 6px; /* smaller gap to align visually with neighbouring inputs */
 }
 
 /* Fix cut-off input issue */
@@ -1690,7 +1696,7 @@ button.accent-cta:hover {
   border-radius: 8px !important;
   padding: 10px 12px !important;
   font-size: 14px !important;
-  margin-bottom: 20px;
+  margin-bottom: 6px;
   box-sizing: border-box;
   height: 42px !important;
   display: flex;
@@ -3520,6 +3526,13 @@ button.accent-cta:hover {
   padding: 14px;
 }
 
+/* Ensure metric cards can shrink on small screens and align nicely in a row */
+.metric-card {
+  min-width: 160px;
+  max-width: 320px;
+  box-sizing: border-box;
+}
+
 .metric-label {
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -3545,24 +3558,24 @@ button.accent-cta:hover {
   max-width: 520px;
 }
 
-/* --- DROPDOWNS --- */
-.ms-Dropdown,
-.ms-Dropdown-title {
+/* --- DROPDOWNS (scoped to Logs page only) --- */
+.logs-page .ms-Dropdown,
+.logs-page .ms-Dropdown-title {
   background-color: #0a1120 !important;
   border: 1px solid #1e3a5f !important;
   color: #dbeafe !important;
 }
 
-.ms-Dropdown:hover .ms-Dropdown-title {
+.logs-page .ms-Dropdown:hover .ms-Dropdown-title {
   border-color: #3b82f6 !important;
 }
 
-.ms-Dropdown-item {
+.logs-page .ms-Dropdown-item {
   background: #0a1120 !important;
   color: #dbeafe !important;
 }
 
-.ms-Dropdown-item:hover {
+.logs-page .ms-Dropdown-item:hover {
   background: #12223a !important;
 }
 
@@ -3814,6 +3827,22 @@ button.accent-cta:hover {
 /* Remove the bottom radius from the control so the callout joins seamlessly */
 .vso-form-container .ms-ComboBox,
 .vso-form-container .ms-Dropdown-title {
+  border-bottom-left-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+/* Restore rounded bottom corners for dropdowns by default so the visible
+   control looks flush and neat (prevents the rectangular cut-off appearance).
+   Logs page intentionally keeps 0 radius for seamless callout join; keep that
+   behavior scoped to `.logs-page` below. */
+.vso-form-container .ms-Dropdown-title {
+  border-bottom-left-radius: 8px !important;
+  border-bottom-right-radius: 8px !important;
+}
+
+/* Keep the original zero-bottom-radius behavior only on the Logs page */
+.logs-page .vso-form-container .ms-Dropdown-title,
+.logs-page .ms-Dropdown-title {
   border-bottom-left-radius: 0 !important;
   border-bottom-right-radius: 0 !important;
 }

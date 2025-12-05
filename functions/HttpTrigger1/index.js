@@ -101,9 +101,9 @@ module.exports = async function (context, req) {
      const urlForLog = new URL(req.url, "http://localhost");
      const pathname = urlForLog.pathname.toLowerCase();
 
-     if ((req.method === "GET" || req.method === "POST") && pathname.endsWith("/log")) {
+         if ((req.method === "GET" || req.method === "POST") && pathname.endsWith("/log")) {
         try {
-            const { client } = getLogTableClient();
+             const { client } = getLogTableClient();
 
             /* ------------------ POST (write log) ------------------ */
             if (req.method === "POST") {
@@ -143,10 +143,15 @@ module.exports = async function (context, req) {
 
             const items = [];
 
-            for await (const e of client.listEntities({
-                queryOptions: { filter: `PartitionKey eq 'UID_undefined'` }
-            })) {
-                items.push(e);
+            for await (const e of client.listEntities()) {
+                items.push({
+                    partitionKey: e.partitionKey,
+                    rowKey: e.rowKey,
+                    email: e.owner || e.email || "",
+                    action: e.title || e.action || "",
+                    timestamp: e.savedAt || e.timestamp || e.Timestamp || new Date().toISOString(),
+                    metadata: e.description || e.metadata || ""
+                });
             }
 
             // Sort DESC (newest first)

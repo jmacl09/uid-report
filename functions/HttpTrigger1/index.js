@@ -120,7 +120,7 @@ module.exports = async function (context, req) {
                     : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
                 const entity = {
-                    partitionKey: "UserLog",
+                    partitionKey: "UID_undefined",
                     rowKey,
                     email,
                     action,

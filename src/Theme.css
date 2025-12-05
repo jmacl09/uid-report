@@ -3482,30 +3482,62 @@ button.accent-cta:hover {
   color: #0b1220 !important;
 }
 
-/* === LOGS DASHBOARD (Activity Logs page) === */
+/* === LOGS DASHBOARD (Activity Logs page) — NEXT GEN THEME === */
 
 .page-root {
-  background: radial-gradient(circle at top, #020617 0, #020617 50%, #020617 100%);
+  background: radial-gradient(circle at top, #020617 0%, #0b1020 60%, #020617 100%);
   color: #e5e7eb;
   padding: 24px 32px;
   box-sizing: border-box;
+  animation: fadeIn 0.6s ease forwards;
 }
 
+/* Smooth fade */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ------------------------------
+   CARD SURFACES
+------------------------------ */
 .card-surface {
-  background: #020617;
-  border-radius: 10px;
-  border: 1px solid #1f2937;
-  box-shadow: 0 8px 24px rgba(15,23,42,0.55);
-  padding: 12px 16px;
+  background: rgba(2, 6, 23, 0.9);
+  border-radius: 14px;
+  border: 1px solid rgba(31, 41, 55, 0.6);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.55),
+              inset 0 0 10px rgba(56, 189, 248, 0.05);
+  padding: 16px 20px;
+  backdrop-filter: blur(6px);
+  transition: transform 0.2s ease, box-shadow 0.25s ease;
 }
 
+.card-surface:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.85);
+}
+
+/* ------------------------------
+   METRIC CARDS
+------------------------------ */
 .metric-card {
-  background: radial-gradient(circle at 20% 0%, #020617, #020617);
-  border-radius: 10px;
-  border: 1px solid rgba(31,41,55,0.9);
-  box-shadow: 0 10px 26px rgba(15,23,42,0.7);
+  background: linear-gradient(145deg, #020617, #0d1221);
+  border-radius: 14px;
+  border: 1px solid rgba(31, 41, 55, 0.9);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.7);
   min-width: 220px;
-  flex: 1 1 0;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.metric-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 20% -10%, rgba(56, 189, 248, 0.18), transparent 70%);
+  opacity: 0.8;
+  pointer-events: none;
 }
 
 .metric-label {
@@ -3516,44 +3548,91 @@ button.accent-cta:hover {
 }
 
 .metric-value {
-  color: #e5e7eb;
+  color: #f3f4f6;
+  font-weight: 700;
 }
 
+/* ------------------------------
+   FILTER PANEL
+------------------------------ */
 .logs-filters {
-  background: #020617;
-  border: 1px solid #1f2937;
-  border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(15,23,42,0.7);
+  background: rgba(2, 6, 23, 0.95);
+  border: 1px solid rgba(31, 41, 55, 0.75);
+  border-radius: 14px;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.65);
+  padding: 18px 22px;
+}
+
+/* ------------------------------
+   TIMELINE
+------------------------------ */
+.timeline-row {
+  padding: 8px 0;
+  border-left: 1px solid rgba(56, 189, 248, 0.2);
+  padding-left: 14px;
+  position: relative;
+}
+
+.timeline-row:hover {
+  background: rgba(56, 189, 248, 0.05);
+  border-radius: 6px;
 }
 
 .timeline-dot {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 999px;
   background: #3b82f6;
-  box-shadow: 0 0 0 4px rgba(37,99,235,0.25);
+  box-shadow: 0 0 8px #3b82f6;
+  margin-top: 4px;
 }
 
 .timeline-details {
-  margin-top: 4px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: #020617;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(2, 6, 23, 0.65);
   border: 1px dashed #1f2937;
+  animation: fadeIn 0.3s ease forwards;
 }
 
-/* DetailsList table styling for analytics look */
+/* ------------------------------
+   Pills for metadata tags
+------------------------------ */
+.pill {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.pill-soft {
+  background: rgba(59, 130, 246, 0.2);
+  color: #93c5fd;
+}
+
+.pill-outline {
+  border: 1px solid #334155;
+  color: #cbd5e1;
+}
+
+/* ------------------------------
+   DetailsList table styling
+------------------------------ */
 .ms-DetailsList .ms-DetailsRow {
   background: #020617;
   border-bottom: 1px solid #111827;
+  transition: background 0.15s ease;
 }
 
-.ms-DetailsList .ms-DetailsRow:nth-child(2n) {
-  background: #020617;
+.ms-DetailsList .ms-DetailsRow:nth-child(odd) {
+  background: #030b17;
 }
 
 .ms-DetailsList .ms-DetailsRow:hover {
-  background: #0b1120 !important;
+  background: #0f172a !important;
 }
 
 .ms-DetailsHeader {
@@ -3568,9 +3647,36 @@ button.accent-cta:hover {
   color: #9ca3af;
 }
 
+/* ------------------------------
+   Scrollable timeline panel
+------------------------------ */
+.scroll-panel {
+  max-height: 460px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.scroll-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scroll-panel::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.25);
+  border-radius: 999px;
+}
+
+.scroll-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.45);
+}
+
 /* Compact mode */
-.compact-mode .vso-form-container { padding: 18px 22px 20px !important; }
-.compact-mode .banner-title { padding: 8px 10px 8px !important; }
+.compact-mode .vso-form-container {
+  padding: 18px 22px 20px !important;
+}
+
+.compact-mode .banner-title {
+  padding: 8px 10px 8px !important;
+}
 
 /* === Dialog Polish (Emergency Prompt) === */
 /* Add breathing room for the dialog title and remove any scrollbars/arrows */

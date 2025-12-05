@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Stack,
@@ -12,7 +12,8 @@ import {
   DatePicker,
   PrimaryButton,
   Icon,
-  Separator
+  Separator,
+  Toggle
 } from "@fluentui/react";
 import { LineChart, IChartProps } from "@fluentui/react-charting";
 import { logAction } from "../api/log";
@@ -68,13 +69,10 @@ const renderParsedDetails = (obj: any) => {
     <Stack tokens={{ childrenGap: 2 }}>
       {Object.entries(obj).map(([key, value]) => {
         let display: string;
-        if (Array.isArray(value)) {
-          display = value.length ? value.join(", ") : "None";
-        } else if (value === "" || value === null || value === undefined) {
-          display = "(empty)";
-        } else {
-          display = String(value);
-        }
+        if (Array.isArray(value)) display = value.length ? value.join(", ") : "None";
+        else if (value === "" || value === null || value === undefined) display = "(empty)";
+        else display = String(value);
+
         return (
           <Text variant="xSmall" key={key}>
             <strong>{key}:</strong> {display}
@@ -87,6 +85,9 @@ const renderParsedDetails = (obj: any) => {
 
 const ADMIN_EMAIL = "joshmaclean@microsoft.com";
 
+/* ---------------------------------------------------------
+   COMPONENT START
+--------------------------------------------------------- */
 const Logs: React.FC = () => {
   const [email, setEmail] = useState<string | null>(null);
   const [authorized, setAuthorized] = useState<boolean | null>(null);
@@ -101,10 +102,13 @@ const Logs: React.FC = () => {
   const [fromDate, setFromDate] = useState<Date | null>(null);
   const [toDate, setToDate] = useState<Date | null>(null);
 
+  const [liveMode, setLiveMode] = useState<boolean>(false);
+  const lastRowKey = useRef<string | null>(null);
+
   const navigate = useNavigate();
 
   /* -------------------------------------
-     AUTH ↦ ADMIN ONLY
+     ADMIN AUTH
   -------------------------------------- */
   useEffect(() => {
     let cancelled = false;
@@ -136,61 +140,68 @@ const Logs: React.FC = () => {
       }
     };
     fetchUser();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [navigate]);
 
   /* -------------------------------------
      LOAD LOG DATA
   -------------------------------------- */
-  useEffect(() => {
-    if (!authorized) return;
-    let cancelled = false;
+  const loadLogs = async () => {
+    setLoading(true);
+    setError(null);
 
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-
-      try {
-        const params: string[] = ["limit=500"];
-        if (fromDate) params.push("dateFrom=" + fromDate.toISOString());
-        if (toDate) {
-          const end = new Date(toDate);
-          end.setHours(23, 59, 59, 999);
-          params.push("dateTo=" + end.toISOString());
-        }
-
-        const res = await fetch(`/api/log?${params.join("&")}`);
-        const data = await res.json();
-
-        const mapped = (data.items || []).map((e: any) => ({
-          partitionKey: e.partitionKey,
-          rowKey: e.rowKey,
-          email: e.email || e.owner,
-          owner: e.owner,
-          action: e.action || e.title,
-          title: e.title,
-          description: e.description,
-          category: e.category,
-          timestamp: e.timestamp || e.Timestamp || e.savedAt,
-          savedAt: e.savedAt,
-          metadata: e.metadata || e.description
-        }));
-
-        if (!cancelled) setItems(mapped);
-      } catch (err: any) {
-        if (!cancelled) setError(err.message || "Failed to load logs");
-      } finally {
-        if (!cancelled) setLoading(false);
+    try {
+      const params: string[] = ["limit=500"];
+      if (fromDate) params.push("dateFrom=" + fromDate.toISOString());
+      if (toDate) {
+        const end = new Date(toDate);
+        end.setHours(23, 59, 59, 999);
+        params.push("dateTo=" + end.toISOString());
       }
-    };
 
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [authorized, fromDate, toDate]);
+      const res = await fetch(`/api/log?${params.join("&")}`);
+      const data = await res.json();
+
+      const mapped = (data.items || []).map((e: any) => ({
+        partitionKey: e.partitionKey,
+        rowKey: e.rowKey,
+        email: e.email || e.owner,
+        owner: e.owner,
+        action: e.action || e.title,
+        title: e.title,
+        description: e.description,
+        category: e.category,
+        timestamp: e.timestamp || e.Timestamp || e.savedAt,
+        savedAt: e.savedAt,
+        metadata: e.metadata || e.description
+      }));
+
+      /* Detect new rows for animation */
+      if (mapped.length > 0 && mapped[0].rowKey !== lastRowKey.current) {
+        lastRowKey.current = mapped[0].rowKey;
+      }
+
+      setItems(mapped);
+    } catch (err: any) {
+      setError(err.message || "Failed to load logs");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (authorized) loadLogs();
+  }, [authorized]);
+
+  /* -------------------------------------
+     LIVE MODE AUTO REFRESH
+  -------------------------------------- */
+  useEffect(() => {
+    if (!liveMode) return;
+
+    const interval = setInterval(() => loadLogs(), 10000);
+    return () => clearInterval(interval);
+  }, [liveMode, fromDate, toDate]);
 
   /* -------------------------------------
      FILTERED VIEW
@@ -203,6 +214,9 @@ const Logs: React.FC = () => {
     });
   }, [items, userFilter, actionFilter]);
 
+  /* -------------------------------------
+     METRIC COMPUTATIONS
+  -------------------------------------- */
   const totalVisitsToday = useMemo(() => {
     const d = new Date();
     return filteredItems.filter((it) => {
@@ -215,11 +229,7 @@ const Logs: React.FC = () => {
     }).length;
   }, [filteredItems]);
 
-  const uniqueUsers = useMemo(
-    () => new Set(filteredItems.map((i) => i.email)).size,
-    [filteredItems]
-  );
-
+  const uniqueUsers = new Set(filteredItems.map(i => i.email)).size;
   const totalActions = filteredItems.length;
 
   /* -------------------------------------
@@ -229,7 +239,6 @@ const Logs: React.FC = () => {
     {
       key: "timestamp",
       name: "Time (CET)",
-      fieldName: "timestamp",
       minWidth: 170,
       maxWidth: 220,
       onRender: (item) => (
@@ -239,7 +248,6 @@ const Logs: React.FC = () => {
     {
       key: "user",
       name: "User",
-      fieldName: "email",
       minWidth: 180,
       onRender: (item) => (
         <Text style={{ color: "#f9fafb" }}>{item.email || item.owner || "-"}</Text>
@@ -248,10 +256,9 @@ const Logs: React.FC = () => {
     {
       key: "action",
       name: "Action",
-      fieldName: "action",
       minWidth: 200,
       onRender: (item) => (
-        <Text styles={{ root: { fontWeight: 600, color: "#ffffff" } }}>
+        <Text style={{ fontWeight: 600, color: "#ffffff" }}>
           {item.action || item.title}
         </Text>
       )
@@ -259,7 +266,6 @@ const Logs: React.FC = () => {
     {
       key: "details",
       name: "Details",
-      fieldName: "description",
       minWidth: 260,
       onRender: (item) => {
         const parsed = parseDetails(item.metadata);
@@ -322,7 +328,7 @@ const Logs: React.FC = () => {
   return (
     <div className="page-root" style={{ maxWidth: 1680, margin: "0 auto" }}>
       <Stack tokens={{ childrenGap: 28 }}>
-        
+
         {/* HEADER */}
         <Stack horizontal horizontalAlign="space-between">
           <Stack>
@@ -335,6 +341,22 @@ const Logs: React.FC = () => {
           </Stack>
 
           <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 12 }}>
+            <Toggle
+              label=""
+              checked={liveMode}
+              onChange={(_, v) => setLiveMode(!!v)}
+              onText="LIVE MODE"
+              offText="Live Off"
+              styles={{
+                text: { color: liveMode ? "#4ade80" : "#9ca3af" }
+              }}
+            />
+            {liveMode && (
+              <Text style={{ color: "#4ade80", fontWeight: 600 }}>
+                ● LIVE — Auto-refreshing
+              </Text>
+            )}
+
             <Icon iconName="Contact" styles={{ root: { color: "#3b82f6" } }} />
             <Text style={{ color: "#ffffff" }}>{email}</Text>
           </Stack>
@@ -372,10 +394,7 @@ const Logs: React.FC = () => {
             <PrimaryButton
               text="Refresh"
               iconProps={{ iconName: "Refresh" }}
-              onClick={() => {
-                setFromDate(fromDate ? new Date(fromDate) : null);
-                setToDate(toDate ? new Date(toDate) : null);
-              }}
+              onClick={loadLogs}
             />
           </Stack>
 
@@ -384,7 +403,7 @@ const Logs: React.FC = () => {
 
         {/* TIMELINE + CHART */}
         <Stack horizontal wrap tokens={{ childrenGap: 20 }}>
-          
+
           {/* TIMELINE */}
           <Stack className="card-surface" style={{ minWidth: 360, maxWidth: 480 }} tokens={{ childrenGap: 8 }}>
             <SectionHeader icon="TimelineProgress" title="Recent Activity" />
@@ -392,24 +411,31 @@ const Logs: React.FC = () => {
             {loading ? (
               <Shimmer />
             ) : (
-              <Stack tokens={{ childrenGap: 12 }}>
-                {filteredItems.slice(0, 12).map((item) => (
-                  <Stack key={item.rowKey} horizontal tokens={{ childrenGap: 12 }} className="timeline-row">
+              <Stack className="scroll-panel" tokens={{ childrenGap: 12 }}>
+                {filteredItems.slice(0, 20).map((item) => (
+                  <Stack
+                    key={item.rowKey}
+                    horizontal
+                    tokens={{ childrenGap: 12 }}
+                    className="timeline-row animate-pop"
+                  >
                     <div className="timeline-dot" />
                     <Stack>
                       <Text variant="xSmall" style={{ color: "#e5e7eb" }}>
                         {formatCET(item.timestamp)}
                       </Text>
+
                       <Text variant="small" style={{ fontWeight: 600, color: "#ffffff" }}>
                         {item.action}
                       </Text>
+
                       <Text variant="xSmall" style={{ color: "#d1d5db" }}>
                         {item.email}
                       </Text>
+
+                      {/* Pills */}
                       <Stack horizontal tokens={{ childrenGap: 6 }} style={{ marginTop: 4 }}>
-                        <Text variant="xSmall" className="pill pill-soft">
-                          UID
-                        </Text>
+                        <Text variant="xSmall" className="pill pill-soft">UID</Text>
                         {item.category && (
                           <Text variant="xSmall" className="pill pill-outline">
                             {item.category}
@@ -422,14 +448,13 @@ const Logs: React.FC = () => {
                         const parsed = parseDetails(item.metadata);
                         if (parsed && typeof parsed === "object") {
                           return (
-                            <Stack className="timeline-details">
+                            <Stack className="timeline-details animate-pop-slow">
                               {renderParsedDetails(parsed)}
                             </Stack>
                           );
                         }
                         return null;
                       })()}
-
                     </Stack>
                   </Stack>
                 ))}
@@ -482,11 +507,9 @@ const Logs: React.FC = () => {
   );
 };
 
-
 /* --------------------------------------------------
-   REUSABLE UI COMPONENTS
+   REUSABLE COMPONENTS
 -------------------------------------------------- */
-
 const Metric = ({ title, value, subtitle }: { title: string; value: number; subtitle?: string }) => (
   <Stack className="metric-card" tokens={{ childrenGap: 4 }}>
     <Text className="metric-label">{title}</Text>

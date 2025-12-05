@@ -133,7 +133,12 @@ module.exports = async function (context, req) {
                 return;
             }
 
-            /* ------------------ GET (ALL logs) ------------------ */
+            /* ------------------ GET (logs, newest first, optional limit) ------------------ */
+            const url = new URL(req.url);
+            const rawLimit = url.searchParams.get("limit");
+            let limit = Number.parseInt(rawLimit || "", 10);
+            if (!Number.isFinite(limit) || limit <= 0) limit = 500;
+
             const items = [];
 
             for await (const e of client.listEntities({
@@ -142,17 +147,19 @@ module.exports = async function (context, req) {
                 items.push(e);
             }
 
-            // Sort DESC
+            // Sort DESC (newest first)
             items.sort((a, b) => {
                 const ta = a.timestamp || a.Timestamp || "";
                 const tb = b.timestamp || b.Timestamp || "";
                 return ta > tb ? -1 : ta < tb ? 1 : 0;
             });
 
+            const limited = items.slice(0, limit);
+
             context.res = {
                 status: 200,
                 headers: { ...cors, "Content-Type": "application/json" },
-                body: { ok: true, items }
+                body: { ok: true, items: limited }
             };
             return;
 

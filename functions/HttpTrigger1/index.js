@@ -101,9 +101,9 @@ module.exports = async function (context, req) {
      const urlForLog = new URL(req.url, "http://localhost");
      const pathname = urlForLog.pathname.toLowerCase();
 
-         if ((req.method === "GET" || req.method === "POST") && pathname.endsWith("/log")) {
+             if ((req.method === "GET" || req.method === "POST") && pathname.endsWith("/log")) {
         try {
-             const { client } = getLogTableClient();
+                 const { client } = getLogTableClient();
 
             /* ------------------ POST (write log) ------------------ */
             if (req.method === "POST") {
@@ -136,39 +136,34 @@ module.exports = async function (context, req) {
                 return;
             }
 
-            /* ------------------ GET (logs, newest first, optional limit) ------------------ */
-            const rawLimit = urlForLog.searchParams.get("limit");
-            let limit = Number.parseInt(rawLimit || "", 10);
-            if (!Number.isFinite(limit) || limit <= 0) limit = 500;
+            /* ------------------ GET (logs via generic ActivityLog category) ------------- */
+            if (req.method === "GET") {
+                // Delegate to the generic GET handler semantics but force category=activitylog
+                const rawLimit = urlForLog.searchParams.get("limit");
+                let limit = Number.parseInt(rawLimit || "", 10);
+                if (!Number.isFinite(limit) || limit <= 0) limit = 500;
 
-            const items = [];
+                const items = [];
+                for await (const e of client.listEntities()) {
+                    items.push(mapEntity(e));
+                }
 
-            for await (const e of client.listEntities()) {
-                items.push({
-                    partitionKey: e.partitionKey,
-                    rowKey: e.rowKey,
-                    email: e.owner || e.email || "",
-                    action: e.title || e.action || "",
-                    timestamp: e.savedAt || e.timestamp || e.Timestamp || new Date().toISOString(),
-                    metadata: e.description || e.metadata || ""
+                // Newest first based on savedAt
+                items.sort((a, b) => {
+                    const ta = a.savedAt || "";
+                    const tb = b.savedAt || "";
+                    return ta > tb ? -1 : ta < tb ? 1 : 0;
                 });
+
+                const limited = items.slice(0, limit);
+
+                context.res = {
+                    status: 200,
+                    headers: { ...cors, "Content-Type": "application/json" },
+                    body: { ok: true, items: limited }
+                };
+                return;
             }
-
-            // Sort DESC (newest first)
-            items.sort((a, b) => {
-                const ta = a.timestamp || a.Timestamp || "";
-                const tb = b.timestamp || b.Timestamp || "";
-                return ta > tb ? -1 : ta < tb ? 1 : 0;
-            });
-
-            const limited = items.slice(0, limit);
-
-            context.res = {
-                status: 200,
-                headers: { ...cors, "Content-Type": "application/json" },
-                body: { ok: true, items: limited }
-            };
-            return;
 
         } catch (err) {
             context.res = {

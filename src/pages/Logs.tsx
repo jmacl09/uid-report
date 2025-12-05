@@ -258,7 +258,11 @@ const Logs: React.FC = () => {
               Internal audit trail for key user actions across Optical360.
             </Text>
           </Stack>
-          <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }}>
+          <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 12 }}>
+            <Icon
+              iconName="CirclePlus"
+              styles={{ root: { fontSize: 22, color: "#ff4d4f", cursor: "pointer" } }}
+            />
             <Icon iconName="History" styles={{ root: { fontSize: 20, color: theme.palette.themePrimary } }} />
             <Text variant="small" style={{ color: "#aaa" }}>{email}</Text>
           </Stack>

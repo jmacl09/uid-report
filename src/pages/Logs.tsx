@@ -12,8 +12,7 @@ import {
   DatePicker,
   PrimaryButton,
   Icon,
-  Separator,
-  useTheme
+  Separator
 } from "@fluentui/react";
 import { LineChart, IChartProps } from "@fluentui/react-charting";
 import { logAction } from "../api/log";
@@ -103,7 +102,6 @@ const Logs: React.FC = () => {
   const [toDate, setToDate] = useState<Date | null>(null);
 
   const navigate = useNavigate();
-  useTheme();
 
   /* -------------------------------------
      AUTH ↦ ADMIN ONLY
@@ -234,14 +232,18 @@ const Logs: React.FC = () => {
       fieldName: "timestamp",
       minWidth: 170,
       maxWidth: 220,
-      onRender: (item) => <Text>{formatCET(item.timestamp)}</Text>
+      onRender: (item) => (
+        <Text style={{ color: "#f9fafb" }}>{formatCET(item.timestamp)}</Text>
+      )
     },
     {
       key: "user",
       name: "User",
       fieldName: "email",
       minWidth: 180,
-      onRender: (item) => <Text>{item.email || item.owner || "-"}</Text>
+      onRender: (item) => (
+        <Text style={{ color: "#f9fafb" }}>{item.email || item.owner || "-"}</Text>
+      )
     },
     {
       key: "action",
@@ -249,16 +251,10 @@ const Logs: React.FC = () => {
       fieldName: "action",
       minWidth: 200,
       onRender: (item) => (
-        <Text styles={{ root: { fontWeight: 600, color: "#e5e7eb" } }}>
+        <Text styles={{ root: { fontWeight: 600, color: "#ffffff" } }}>
           {item.action || item.title}
         </Text>
       )
-    },
-    {
-      key: "category",
-      name: "Category",
-      fieldName: "category",
-      minWidth: 140
     },
     {
       key: "details",
@@ -267,8 +263,8 @@ const Logs: React.FC = () => {
       minWidth: 260,
       onRender: (item) => {
         const parsed = parseDetails(item.metadata);
-        if (!parsed) return <Text>(none)</Text>;
-        if (typeof parsed === "string") return <Text>{parsed}</Text>;
+        if (!parsed) return <Text style={{ color: "#e5e7eb" }}>(none)</Text>;
+        if (typeof parsed === "string") return <Text style={{ color: "#e5e7eb" }}>{parsed}</Text>;
         return renderParsedDetails(parsed);
       }
     }
@@ -312,9 +308,9 @@ const Logs: React.FC = () => {
 
   if (loadingUser || authorized === null) {
     return (
-      <div className="page-root">
-        <Stack horizontalAlign="center">
-          <Text variant="xLarge">Loading admin dashboard…</Text>
+      <div className="page-root" style={{ paddingTop: 80 }}>
+        <Stack horizontalAlign="center" tokens={{ childrenGap: 12 }}>
+          <Text variant="xLarge" style={{ color: "#ffffff" }}>Loading admin dashboard…</Text>
           <Shimmer />
         </Stack>
       </div>
@@ -324,31 +320,31 @@ const Logs: React.FC = () => {
   if (!authorized) return null;
 
   return (
-    <div className="page-root" style={{ maxWidth: 1500, margin: "0 auto" }}>
+    <div className="page-root" style={{ maxWidth: 1680, margin: "0 auto" }}>
       <Stack tokens={{ childrenGap: 28 }}>
         
         {/* HEADER */}
         <Stack horizontal horizontalAlign="space-between">
           <Stack>
-            <Text variant="xxLarge" style={{ fontWeight: 700 }}>
+            <Text variant="xxLarge" style={{ fontWeight: 700, color: "#ffffff" }}>
               Activity Logs
             </Text>
-            <Text variant="small" style={{ color: "#9ca3af" }}>
+            <Text variant="small" style={{ color: "#e5e7eb" }}>
               Internal audit trail for all user interactions across Optical360.
             </Text>
           </Stack>
 
           <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 12 }}>
             <Icon iconName="Contact" styles={{ root: { color: "#3b82f6" } }} />
-            <Text>{email}</Text>
+            <Text style={{ color: "#ffffff" }}>{email}</Text>
           </Stack>
         </Stack>
 
         {/* METRICS */}
         <Stack horizontal wrap tokens={{ childrenGap: 16 }}>
-          <Metric title="Total Visits Today" value={totalVisitsToday} />
-          <Metric title="Unique Users" value={uniqueUsers} />
-          <Metric title="Total Actions Logged" value={totalActions} />
+          <Metric title="Total Visits Today" value={totalVisitsToday} subtitle="Current day (CET)" />
+          <Metric title="Unique Users" value={uniqueUsers} subtitle="Distinct accounts" />
+          <Metric title="Total Actions Logged" value={totalActions} subtitle="Filtered results" />
         </Stack>
 
         {/* FILTER PANEL */}
@@ -383,14 +379,14 @@ const Logs: React.FC = () => {
             />
           </Stack>
 
-          {error && <Text style={{ color: "red" }}>{error}</Text>}
+          {error && <Text style={{ color: "#f97373" }}>{error}</Text>}
         </Stack>
 
         {/* TIMELINE + CHART */}
         <Stack horizontal wrap tokens={{ childrenGap: 20 }}>
           
           {/* TIMELINE */}
-          <Stack className="card-surface" style={{ minWidth: 340, maxWidth: 420 }} tokens={{ childrenGap: 8 }}>
+          <Stack className="card-surface" style={{ minWidth: 360, maxWidth: 480 }} tokens={{ childrenGap: 8 }}>
             <SectionHeader icon="TimelineProgress" title="Recent Activity" />
 
             {loading ? (
@@ -398,18 +394,28 @@ const Logs: React.FC = () => {
             ) : (
               <Stack tokens={{ childrenGap: 12 }}>
                 {filteredItems.slice(0, 12).map((item) => (
-                  <Stack key={item.rowKey} horizontal tokens={{ childrenGap: 12 }}>
+                  <Stack key={item.rowKey} horizontal tokens={{ childrenGap: 12 }} className="timeline-row">
                     <div className="timeline-dot" />
                     <Stack>
-                      <Text variant="xSmall" style={{ color: "#9ca3af" }}>
+                      <Text variant="xSmall" style={{ color: "#e5e7eb" }}>
                         {formatCET(item.timestamp)}
                       </Text>
-                      <Text variant="small" style={{ fontWeight: 600 }}>
+                      <Text variant="small" style={{ fontWeight: 600, color: "#ffffff" }}>
                         {item.action}
                       </Text>
-                      <Text variant="xSmall" style={{ color: "#6b7280" }}>
+                      <Text variant="xSmall" style={{ color: "#d1d5db" }}>
                         {item.email}
                       </Text>
+                      <Stack horizontal tokens={{ childrenGap: 6 }} style={{ marginTop: 4 }}>
+                        <Text variant="xSmall" className="pill pill-soft">
+                          UID
+                        </Text>
+                        {item.category && (
+                          <Text variant="xSmall" className="pill pill-outline">
+                            {item.category}
+                          </Text>
+                        )}
+                      </Stack>
 
                       {/* Parsed details */}
                       {(() => {
@@ -449,7 +455,7 @@ const Logs: React.FC = () => {
         {/* TABLE */}
         <Stack className="card-surface" tokens={{ childrenGap: 12 }}>
           <SectionHeader icon="Table" title="All Activity" />
-          <Text variant="xSmall" style={{ color: "#9ca3af" }}>
+          <Text variant="xSmall" style={{ color: "#e5e7eb" }}>
             {filteredItems.length} entries
           </Text>
 
@@ -468,7 +474,7 @@ const Logs: React.FC = () => {
 
         <Separator />
 
-        <Text variant="xSmall" style={{ color: "#9ca3af" }}>
+        <Text variant="xSmall" style={{ color: "#e5e7eb" }}>
           Activity logging is scoped to Optical360 internal usage and visible only to the platform admin.
         </Text>
       </Stack>
@@ -481,10 +487,15 @@ const Logs: React.FC = () => {
    REUSABLE UI COMPONENTS
 -------------------------------------------------- */
 
-const Metric = ({ title, value }: { title: string; value: number }) => (
+const Metric = ({ title, value, subtitle }: { title: string; value: number; subtitle?: string }) => (
   <Stack className="metric-card" tokens={{ childrenGap: 4 }}>
     <Text className="metric-label">{title}</Text>
     <Text variant="xxLarge" className="metric-value">{value}</Text>
+    {subtitle && (
+      <Text variant="small" style={{ color: "#d1d5db" }}>
+        {subtitle}
+      </Text>
+    )}
   </Stack>
 );
 

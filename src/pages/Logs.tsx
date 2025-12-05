@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Stack,
@@ -164,7 +164,7 @@ const Logs: React.FC = () => {
   /* ============================================================
      LOAD LOGS API CALL
   ============================================================ */
-  const loadLogs = async () => {
+  const loadLogs = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -206,12 +206,12 @@ const Logs: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [fromDate, toDate]);
 
   /* First load */
   useEffect(() => {
     if (authorized) loadLogs();
-  }, [authorized]);
+  }, [authorized, loadLogs]);
 
   /* ============================================================
      LIVE MODE AUTO REFRESH
@@ -221,7 +221,7 @@ const Logs: React.FC = () => {
 
     const interval = setInterval(() => loadLogs(), 10000);
     return () => clearInterval(interval);
-  }, [liveMode, fromDate, toDate]);
+  }, [liveMode, loadLogs]);
 
   /* ============================================================
      FILTERED LIST

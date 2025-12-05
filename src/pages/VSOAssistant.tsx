@@ -168,40 +168,42 @@ const VSOAssistant: React.FC = () => {
   const [calendarDate, setCalendarDate] = useState<Date | null>(null);
 
   // Load persisted calendar entries from server so all users see the same events.
+  // Helper to map storage items to VsoCalendarEvent shape
+  const mapItems = (items: any[]): VsoCalendarEvent[] => (items || []).map((it: any) => {
+    const title = it.title || it.Title || '';
+    const desc = it.description || it.Description || '';
+    const savedAt = it.savedAt || it.SavedAt || it.rowKey || it.RowKey || null;
+    // try parse Start:/End: ISO timestamps from description
+    const startMatch = /Start:\s*([\dTZ:+.\u002D]+)\b/i.exec(desc);
+    const endMatch = /End:\s*([\dTZ:+.\u002D]+)\b/i.exec(desc);
+    const parseDate = (s: string | null) => {
+      try { return s ? new Date(s) : null; } catch { return null; }
+    };
+    const start = startMatch ? parseDate(startMatch[1]) : (savedAt ? parseDate(savedAt) : null) || new Date();
+    const _start = start || new Date();
+    const end = endMatch ? parseDate(endMatch[1]) : new Date(_start.getFullYear(), _start.getMonth(), _start.getDate() + 1);
+    const spansMatch = /Spans:\s*([^\n\r]+)/i.exec(desc);
+    const spans = spansMatch ? spansMatch[1].split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+    return {
+      id: it.rowKey || it.RowKey || `${title}-${savedAt || Math.random().toString(36).slice(2,6)}`,
+      title: title,
+      start: start as Date,
+      end: end as Date,
+      // Prefer explicit Status field if present
+      status: (it.Status || it.status || 'Draft') as any,
+      summary: desc ? String(desc).slice(0, 160) : undefined,
+      dcCode: undefined,
+      spans,
+      subject: undefined,
+      notificationType: undefined,
+      location: undefined,
+      maintenanceReason: desc || undefined,
+    } as VsoCalendarEvent;
+  });
+
   useEffect(() => {
     let mounted = true;
     let timer: any = null;
-    const mapItems = (items: any[]): VsoCalendarEvent[] => (items || []).map((it: any) => {
-          const title = it.title || it.Title || '';
-          const desc = it.description || it.Description || '';
-          const savedAt = it.savedAt || it.SavedAt || it.rowKey || it.RowKey || null;
-          // try parse Start:/End: ISO timestamps from description
-          const startMatch = /Start:\s*([\dTZ:+.\u002D]+)\b/i.exec(desc);
-          const endMatch = /End:\s*([\dTZ:+.\u002D]+)\b/i.exec(desc);
-          const parseDate = (s: string | null) => {
-            try { return s ? new Date(s) : null; } catch { return null; }
-          };
-          const start = startMatch ? parseDate(startMatch[1]) : (savedAt ? parseDate(savedAt) : null) || new Date();
-          const _start = start || new Date();
-          const end = endMatch ? parseDate(endMatch[1]) : new Date(_start.getFullYear(), _start.getMonth(), _start.getDate() + 1);
-          const spansMatch = /Spans:\s*([^\n\r]+)/i.exec(desc);
-          const spans = spansMatch ? spansMatch[1].split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-          return {
-            id: it.rowKey || it.RowKey || `${title}-${savedAt || Math.random().toString(36).slice(2,6)}`,
-            title: title,
-            start: start as Date,
-            end: end as Date,
-            // Prefer explicit Status field if present
-            status: (it.Status || it.status || 'Draft') as any,
-            summary: desc ? String(desc).slice(0, 160) : undefined,
-            dcCode: undefined,
-            spans,
-            subject: undefined,
-            notificationType: undefined,
-            location: undefined,
-            maintenanceReason: desc || undefined,
-          } as VsoCalendarEvent;
-    });
 
     const loadOnce = async () => {
       try {
@@ -1522,74 +1524,21 @@ const VSOAssistant: React.FC = () => {
         throw new Error(`HTTP ${resp.status} ${text}`);
       }
 
-      // Add events to calendar (primary + additional windows) as Draft
-      const newEvents: VsoCalendarEvent[] = [];
-      const dcCode = rackDC || facilityCodeA;
-      const spansShort = (() => {
-        if (selectedSpans.length <= 3) return selectedSpans.join(", ");
-        return `${selectedSpans.slice(0, 3).join(", ")} (+${selectedSpans.length - 3} more)`;
-      })();
-      const title = `Fiber Maintenance ${dcCode || ""} - ${spansShort || "Spans"}`.trim();
-      const fullReason = (maintenanceReason || "").trim();
-      const summary = fullReason.slice(0, 160);
-
-      const makeAllDayRange = (d: Date | null) => {
-        if (!d) return null;
-        const start = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-        const end = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1); // exclusive
-        return { start, end };
-      };
-
-      // Primary window
-      const primary = makeAllDayRange(startDate);
-      if (primary) {
-        newEvents.push({
-          id: `vso-${Date.now()}-0-${Math.random().toString(36).slice(2,6)}`,
-          title,
-          start: primary.start,
-          end: primary.end,
-          status: "Draft",
-          summary,
-          maintenanceReason: fullReason,
-          dcCode: dcCode || undefined,
-          spans: [...selectedSpans],
-          startTimeUtc: startTime,
-          endTimeUtc: endTime,
-          subject,
-          notificationType,
-          location,
-          tags: tags && tags.length ? tags : [],
-          impactExpected,
-        } as any);
-      }
-      // Additional windows
-      additionalWindows.forEach((w, i) => {
-        const r = makeAllDayRange(w.startDate);
-        if (!r) return;
-  newEvents.push({
-          id: `vso-${Date.now()}-${i + 1}-${Math.random().toString(36).slice(2,6)}`,
-          title,
-          start: r.start,
-          end: r.end,
-          status: "Draft",
-          summary,
-          maintenanceReason: fullReason,
-          dcCode: dcCode || undefined,
-          spans: [...selectedSpans],
-          startTimeUtc: w.startTime,
-          endTimeUtc: w.endTime,
-          subject,
-          notificationType,
-          location,
-          tags: tags && tags.length ? tags : [],
-          impactExpected,
-  } as any);
-      });
-      setVsoEvents((prev) => ensureUnique([...prev, ...newEvents]));
-      // Focus calendar on the first window's month so users see it after reload
-      if (!calendarDate && (startDate || additionalWindows[0]?.startDate)) {
+      // Refresh calendar entries from the server instead of adding optimistic
+      // local events to avoid duplicate entries (server is the source of truth).
+      try {
+        const items = await getCalendarEntries('VsoCalendar');
+        const mapped = mapItems(items);
+        setVsoEvents((prev) => {
+          const byId = new Map(prev.map((p) => [p.id, p]));
+          for (const s of mapped) byId.set(s.id, s);
+          return ensureUnique(Array.from(byId.values()));
+        });
+        // Focus calendar on the first window's month so users see it after reload
         const d = startDate || additionalWindows[0]?.startDate || null;
-        if (d) setCalendarDate(new Date(d.getFullYear(), d.getMonth(), 1));
+        if (!calendarDate && d) setCalendarDate(new Date(d.getFullYear(), d.getMonth(), 1));
+      } catch (e) {
+        // ignore refresh failures - server poller will pick up changes shortly
       }
 
       setSendSuccess("Request submitted to Logic App successfully.");

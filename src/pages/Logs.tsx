@@ -15,7 +15,10 @@ import {
   PrimaryButton,
   Icon,
   Separator,
-  useTheme
+  useTheme,
+  IDetailsRowProps,
+  DetailsRow,
+  IRenderFunction
 } from "@fluentui/react";
 import { LineChart, IChartProps } from "@fluentui/react-charting";
 import { logAction } from "../api/log";
@@ -34,6 +37,64 @@ interface ActivityLogEntity {
   savedAt?: string;
   metadata?: string;
 }
+
+const CET_LOCALE = "de-CH";
+const CET_TZ = "Europe/Zurich";
+
+const formatCET = (dateString: string) => {
+  if (!dateString) return "-";
+  try {
+    return new Date(dateString).toLocaleString(CET_LOCALE, {
+      timeZone: CET_TZ,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    });
+  } catch {
+    return dateString;
+  }
+};
+
+const parseDetails = (details?: string) => {
+  if (!details) return null;
+  try {
+    const parsed = JSON.parse(details);
+    if (parsed && typeof parsed === "object") {
+      return parsed;
+    }
+    return details;
+  } catch {
+    return details;
+  }
+};
+
+const renderParsedDetails = (obj: any) => {
+  if (!obj || typeof obj !== "object") return null;
+  return (
+    <Stack tokens={{ childrenGap: 2 }}>
+      {Object.entries(obj).map(([key, value]) => {
+        let display: string;
+        if (Array.isArray(value)) {
+          display = value.length === 0 ? "None" : value.join(", ");
+        } else if (value === "") {
+          display = "(empty)";
+        } else if (value === null || value === undefined) {
+          display = "(empty)";
+        } else {
+          display = String(value);
+        }
+        return (
+          <Text variant="xSmall" key={key}>
+            <strong>{key}:</strong> {display}
+          </Text>
+        );
+      })}
+    </Stack>
+  );
+};
 
 const ADMIN_EMAIL = "joshmaclean@microsoft.com";
 
@@ -193,11 +254,66 @@ const Logs: React.FC = () => {
   }, [filteredItems]);
 
   const columns: IColumn[] = [
-    { key: "timestamp", name: "Time", fieldName: "timestamp", minWidth: 170, maxWidth: 220 },
-    { key: "email", name: "User", fieldName: "email", minWidth: 160, maxWidth: 260 },
-    { key: "action", name: "Action", fieldName: "action", minWidth: 200, maxWidth: 280 },
-    { key: "category", name: "Category", fieldName: "category", minWidth: 120, maxWidth: 160 },
-    { key: "description", name: "Details", fieldName: "description", minWidth: 260, isMultiline: true }
+    {
+      key: "timestamp",
+      name: "Time (CET)",
+      fieldName: "timestamp",
+      minWidth: 170,
+      maxWidth: 220,
+      isResizable: true,
+      onRender: (item: ActivityLogEntity) => (
+        <Text variant="small">{formatCET(item.timestamp)}</Text>
+      )
+    },
+    {
+      key: "email",
+      name: "User",
+      fieldName: "email",
+      minWidth: 160,
+      maxWidth: 260,
+      isResizable: true,
+      onRender: (item: ActivityLogEntity) => (
+        <Text variant="small">{item.email || item.owner || "-"}</Text>
+      )
+    },
+    {
+      key: "action",
+      name: "Action",
+      fieldName: "action",
+      minWidth: 200,
+      maxWidth: 280,
+      isResizable: true,
+      onRender: (item: ActivityLogEntity) => (
+        <Text variant="small" styles={{ root: { fontWeight: 500 } }}>
+          {item.action || item.title || "Activity"}
+        </Text>
+      )
+    },
+    {
+      key: "category",
+      name: "Category",
+      fieldName: "category",
+      minWidth: 120,
+      maxWidth: 160,
+      isResizable: true
+    },
+    {
+      key: "details",
+      name: "Details",
+      fieldName: "description",
+      minWidth: 260,
+      isResizable: true,
+      onRender: (item: ActivityLogEntity) => {
+        const parsed = parseDetails(item.metadata || item.description || "");
+        if (!parsed) {
+          return <Text variant="xSmall">(none)</Text>;
+        }
+        if (typeof parsed === "string") {
+          return <Text variant="xSmall">{parsed}</Text>;
+        }
+        return renderParsedDetails(parsed);
+      }
+    }
   ];
 
   const userOptions: IDropdownOption[] = useMemo(() => {
@@ -280,22 +396,21 @@ const Logs: React.FC = () => {
 
         {/* Metrics */}
         <Stack horizontal wrap tokens={{ childrenGap: 16 }}>
-          <div className="metric-card">
-            <Text variant="small" className="metric-label">Total Visits Today</Text>
+          <Stack className="metric-card" tokens={{ childrenGap: 4 }}>
+            <Text variant="xSmall" className="metric-label">Total Visits Today</Text>
             <Text variant="xxLarge" className="metric-value">{totalVisitsToday}</Text>
-          </div>
-          <div className="metric-card">
-            <Text variant="small" className="metric-label">Unique Users</Text>
+            <Text variant="xSmall" styles={{ root: { color: theme.palette.neutralTertiary } }}>For current day (CET)</Text>
+          </Stack>
+          <Stack className="metric-card" tokens={{ childrenGap: 4 }}>
+            <Text variant="xSmall" className="metric-label">Unique Users</Text>
             <Text variant="xxLarge" className="metric-value">{uniqueUsers}</Text>
-          </div>
-          <div className="metric-card">
-            <Text variant="small" className="metric-label">Total Actions Logged</Text>
+            <Text variant="xSmall" styles={{ root: { color: theme.palette.neutralTertiary } }}>Distinct accounts in view</Text>
+          </Stack>
+          <Stack className="metric-card" tokens={{ childrenGap: 4 }}>
+            <Text variant="xSmall" className="metric-label">Total Actions Logged</Text>
             <Text variant="xxLarge" className="metric-value">{totalActions}</Text>
-          </div>
-          <div className="metric-card">
-            <Text variant="small" className="metric-label">Most Used Feature</Text>
-            <Text variant="medium" className="metric-value">{mostUsedFeature}</Text>
-          </div>
+            <Text variant="xSmall" styles={{ root: { color: theme.palette.neutralTertiary } }}>Filtered result set</Text>
+          </Stack>
         </Stack>
 
         {/* Filters */}
@@ -316,6 +431,14 @@ const Logs: React.FC = () => {
               selectedKey={actionFilter}
               onChange={(_, opt) => setActionFilter(opt ? String(opt.key) : undefined)}
               styles={{ dropdown: { minWidth: 260 } }}
+            />
+            <Dropdown
+              label="Category"
+              placeholder="All categories"
+              options={Array.from(new Set((items || []).map(i => i.category).filter((v): v is string => !!v))).map(c => ({ key: c, text: c }))}
+              selectedKey={actionFilter /* placeholder: could add dedicated categoryFilter state */}
+              disabled
+              styles={{ dropdown: { minWidth: 200 } }}
             />
             <DatePicker
               label="From"
@@ -345,8 +468,8 @@ const Logs: React.FC = () => {
         </Stack>
 
         <Stack horizontal wrap tokens={{ childrenGap: 16 }}>
-          {/* Timeline */}
-          <Stack grow className="card-surface" tokens={{ childrenGap: 8 }}>
+          {/* Timeline - left column */}
+          <Stack grow className="card-surface" style={{ minWidth: 300, maxWidth: 420 }} tokens={{ childrenGap: 8 }}>
             <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }}>
               <Icon iconName="TimelineProgress" />
               <Text variant="mediumPlus">Recent Activity</Text>
@@ -359,16 +482,19 @@ const Logs: React.FC = () => {
                   <Stack key={it.rowKey} horizontal tokens={{ childrenGap: 12 }} verticalAlign="center">
                     <div className="timeline-dot" />
                     <Stack>
-                      <Text variant="small" styles={{ root: { color: theme.palette.neutralLight } }}>
+                      <Text variant="xSmall" styles={{ root: { color: theme.palette.neutralTertiary } }}>
+                        {formatCET(it.timestamp)}
+                      </Text>
+                      <Text variant="small" styles={{ root: { color: theme.palette.neutralLight, fontWeight: 500 } }}>
                         {it.action || it.title || "Activity"}
                       </Text>
-                      <Text variant="xSmall" styles={{ root: { color: theme.palette.neutralTertiary } }}>
-                        {new Date(it.timestamp).toLocaleString()} · {it.email || it.owner}
+                      <Text variant="xSmall" styles={{ root: { color: theme.palette.neutralSecondary } }}>
+                        {it.email || it.owner}
                       </Text>
-                      {it.description && (
-                        <Text variant="xSmall" styles={{ root: { color: theme.palette.neutralSecondary } }}>
-                          {it.description}
-                        </Text>
+                      {parseDetails(it.metadata || it.description || "") && typeof parseDetails(it.metadata || it.description || "") !== "string" && (
+                        <Stack className="timeline-details" tokens={{ childrenGap: 2 }}>
+                          {renderParsedDetails(parseDetails(it.metadata || it.description || ""))}
+                        </Stack>
                       )}
                     </Stack>
                   </Stack>
@@ -380,7 +506,7 @@ const Logs: React.FC = () => {
             )}
           </Stack>
 
-          {/* Chart */}
+          {/* Chart - right column */}
           <Stack grow className="card-surface" tokens={{ childrenGap: 8 }}>
             <Stack horizontal verticalAlign="center" tokens={{ childrenGap: 8 }}>
               <Icon iconName="AreaChart" />
@@ -417,12 +543,13 @@ const Logs: React.FC = () => {
               layoutMode={DetailsListLayoutMode.justified}
               selectionMode={SelectionMode.none}
               setKey="logsTable"
+              isHeaderVisible
             />
           )}
         </Stack>
 
         <Separator />
-        <Text variant="xSmall" style={{ color: "#666" }}>
+        <Text variant="xSmall" style={{ color: theme.palette.neutralTertiary }}>
           Activity logging is scoped to internal Optical360 usage only and is visible exclusively to the admin.
         </Text>
       </Stack>

@@ -98,10 +98,16 @@ module.exports = async function (context, req) {
      /* =========================================================================
          FIXED ROUTING — LOG HANDLER (GET + POST)
          ========================================================================= */
-     const urlForLog = new URL(req.url, "http://localhost");
-     const pathname = urlForLog.pathname.toLowerCase();
+    const urlForLog = new URL(req.url, "http://localhost");
+    const pathname = urlForLog.pathname.toLowerCase();
 
-             if ((req.method === "GET" || req.method === "POST") && pathname.endsWith("/log")) {
+    // Also check originalUrl and common proxy headers because Static Web Apps
+    // may rewrite `/api/log` to `/api/HttpTrigger1` before forwarding.
+    const pathFromReq = (req.originalUrl || req.url || "").toString().toLowerCase();
+    const headerOriginal = ((req.headers && (req.headers['x-ms-original-url'] || req.headers['x-original-url'] || req.headers['x-forwarded-path'])) || "").toString().toLowerCase();
+    const isLogRequest = pathname.endsWith("/log") || pathFromReq.includes("/api/log") || headerOriginal.includes("/api/log");
+
+    if ((req.method === "GET" || req.method === "POST") && isLogRequest) {
         try {
                  const { client } = getLogTableClient();
 
@@ -157,10 +163,13 @@ module.exports = async function (context, req) {
 
                 const limited = items.slice(0, limit);
 
+                // Expose the table name used so we can confirm what's being read
+                const tableName = process.env.TABLE_NAME_LOG || "ActivityLog";
+
                 context.res = {
                     status: 200,
                     headers: { ...cors, "Content-Type": "application/json" },
-                    body: { ok: true, items: limited }
+                    body: { ok: true, table: tableName, items: limited }
                 };
                 return;
             }

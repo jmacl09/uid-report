@@ -1429,21 +1429,49 @@ const VSOAssistant: React.FC = () => {
         throw new Error(`HTTP ${resp.status} ${text}`);
       }
 
-      // Refresh calendar entries from the server instead of adding optimistic
-      // local events to avoid duplicate entries (server is the source of truth).
+      // Persist a single calendar entry server-side for this VSO creation
       try {
-        const items = await getCalendarEntries('VsoCalendar');
-        const mapped = mapItems(items);
-        setVsoEvents((prev) => {
-          const byId = new Map(prev.map((p) => [p.id, p]));
-          for (const s of mapped) byId.set(s.id, s);
-          return ensureUnique(Array.from(byId.values()));
+        const uid = 'VsoCalendar';
+        const owner = (() => { try { return localStorage.getItem('loggedInEmail') || 'VSO Assistant'; } catch { return 'VSO Assistant'; } })();
+        const startIso = startDate ? new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()).toISOString() : new Date().toISOString();
+        const endIso = endDate ? new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate() + 1).toISOString() : undefined;
+        const descriptionParts = [
+          (maintenanceReason || '').trim(),
+          subject || '',
+          notificationType || '',
+          location || '',
+          spansComma ? `Spans: ${spansComma}` : '',
+          startIso ? `Start: ${startIso}` : '',
+          endIso ? `End: ${endIso}` : '',
+        ].filter(Boolean);
+
+        await saveToStorage({
+          category: 'Calendar',
+          uid,
+          title: `VSO: ${facilityCodeA || facilityCodeZ || 'Unknown'}`,
+          description: descriptionParts.join('\n'),
+          owner,
+          timestamp: startDate || new Date(),
         });
-        // Focus calendar on the first window's month so users see it after reload
-        const d = startDate || additionalWindows[0]?.startDate || null;
-        if (!calendarDate && d) setCalendarDate(new Date(d.getFullYear(), d.getMonth(), 1));
-      } catch (e) {
-        // ignore refresh failures - server poller will pick up changes shortly
+
+        // Refresh calendar entries from the server so UI shows the newly saved row
+        try {
+          const items = await getCalendarEntries('VsoCalendar');
+          const mapped = mapItems(items);
+          setVsoEvents((prev) => {
+            const byId = new Map(prev.map((p) => [p.id, p]));
+            for (const s of mapped) byId.set(s.id, s);
+            return ensureUnique(Array.from(byId.values()));
+          });
+          const d = startDate || additionalWindows[0]?.startDate || null;
+          if (!calendarDate && d) setCalendarDate(new Date(d.getFullYear(), d.getMonth(), 1));
+        } catch (e) {
+          // ignore refresh failures
+        }
+      } catch (err) {
+        // If saving to storage failed, log and continue — the Logic App may still have created the VSO
+        // eslint-disable-next-line no-console
+        console.warn('Failed to save calendar entry to storage:', err);
       }
 
       setSendSuccess("Request submitted to Logic App successfully.");

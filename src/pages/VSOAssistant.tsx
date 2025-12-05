@@ -254,44 +254,7 @@ const VSOAssistant: React.FC = () => {
       if (stored && stored.length > 3) setUserEmail(stored);
     } catch (e) {}
 
-    // Load persisted calendar events (with backup fallback)
-    try {
-      const raw = localStorage.getItem("vsoEvents");
-      const rawBackup = localStorage.getItem("vsoEventsBackup");
-      const loadList = (txt?: string | null) => {
-        if (!txt) return [] as any[];
-        try { const a = JSON.parse(txt); return Array.isArray(a) ? a : []; } catch { return []; }
-      };
-  const arr = loadList(raw);
-      const arrBackup = loadList(rawBackup);
-      const source = (arr && arr.length ? arr : arrBackup);
-      if (source && source.length) {
-        const parsed: VsoCalendarEvent[] = (source || []).map((e) => {
-          // Prefer date-only reconstruction when available to avoid timezone drift
-          const parseYmd = (ymd?: string, fallback?: string) => {
-            try {
-              if (ymd && /^\d{4}-\d{2}-\d{2}$/.test(ymd)) {
-                const [yy, mm, dd] = ymd.split('-').map((x: string) => parseInt(x, 10));
-                return new Date(yy, (mm || 1) - 1, dd || 1);
-              }
-            } catch {}
-            if (fallback) {
-              const d = new Date(fallback);
-              // Normalize to local midnight to keep it on the intended day
-              return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-            }
-            return new Date();
-          };
-          const start = parseYmd((e as any).startYMD, (e as any).start);
-          const end = parseYmd((e as any).endYMD, (e as any).end);
-          const status = (e as any).status || 'Draft';
-          const id = (e as any).id || `restored-${start?.getTime() || Date.now()}-${Math.random().toString(36).slice(2,6)}`;
-          const title = (e as any).title || 'Fiber Maintenance';
-          return { ...(e as any), id, title, status, start, end } as VsoCalendarEvent;
-        });
-        setVsoEvents(ensureUnique(parsed));
-      }
-    } catch {}
+    // Calendar events are server-backed only. Do not load persisted events from localStorage.
 
     // Restore last viewed calendar month if available
     try {
@@ -335,65 +298,7 @@ const VSOAssistant: React.FC = () => {
     fetchUserEmail();
   }, []); // end login/email/calendar initialization effect
 
-  // Persist calendar events whenever they change (with backup + timestamp)
-  useEffect(() => {
-    try {
-      const serializable = (vsoEvents || []).map(e => {
-        const start = e.start instanceof Date ? e.start : new Date(e.start as any);
-        const end = e.end instanceof Date ? e.end : new Date(e.end as any);
-        const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-        return {
-          id: e.id,
-          title: e.title,
-          status: e.status,
-          start: start.toISOString(),
-          end: end.toISOString(),
-          startYMD: ymd(start),
-          endYMD: ymd(end),
-          summary: (e as any).summary || undefined,
-          dcCode: (e as any).dcCode || undefined,
-          spans: (e as any).spans || [],
-          subject: (e as any).subject || undefined,
-          notificationType: (e as any).notificationType || undefined,
-          location: (e as any).location || undefined,
-          maintenanceReason: (e as any).maintenanceReason || undefined,
-        };
-      });
-      localStorage.setItem("vsoEvents", JSON.stringify(serializable));
-      localStorage.setItem("vsoEventsBackup", JSON.stringify(serializable));
-      localStorage.setItem("vsoEventsLastSaved", String(Date.now()));
-    } catch {}
-  }, [vsoEvents]);
-
-  // Watch for external/local changes to storage and auto-restore if needed
-  useEffect(() => {
-    const onStorage = (ev: StorageEvent) => {
-      if (ev.storageArea !== localStorage) return;
-      if (ev.key !== 'vsoEvents') return;
-      try {
-        const primary = localStorage.getItem('vsoEvents');
-        const backup = localStorage.getItem('vsoEventsBackup');
-        const parseList = (txt?: string | null) => {
-          if (!txt) return [] as any[];
-          try { const a = JSON.parse(txt); return Array.isArray(a) ? a : []; } catch { return []; }
-        };
-        const p = parseList(primary);
-        if (p && p.length) return; // still has events; no action
-        const b = parseList(backup);
-        if (b && b.length) {
-          // Rehydrate from backup
-          const restored: VsoCalendarEvent[] = b.map((e: any) => ({
-            ...e,
-            start: new Date(e.start),
-            end: new Date(e.end),
-          }));
-          setVsoEvents(ensureUnique(restored));
-        }
-      } catch {}
-    };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
-  }, []);
+  // No localStorage persistence or restoration for calendar events.
 
   const addWindow = () =>
     setAdditionalWindows((w) => [

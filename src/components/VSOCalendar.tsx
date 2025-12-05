@@ -1,5 +1,5 @@
 // VSOCalendar.tsx
-import React, { useMemo, useEffect } from "react";
+import React, { useMemo } from "react";
 import { saveToStorage } from "../api/saveToStorage";
 import { Calendar, dateFnsLocalizer, Views } from "react-big-calendar";
 import { format, parse, startOfWeek, getDay } from "date-fns";
@@ -128,110 +128,7 @@ const VSOCalendar: React.FC<Props> = ({
 
   const defaultDate = useMemo(() => new Date(), []);
 
-  // --- Auto-persist calendar events to Table Storage ---
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadSavedMap = (): Record<string, string> => {
-      try {
-        return JSON.parse(localStorage.getItem("vsoSaved") || "{}");
-      } catch {
-        return {};
-      }
-    };
-
-    const saveSavedMap = (map: Record<string, string>) => {
-      try {
-        localStorage.setItem("vsoSaved", JSON.stringify(map));
-      } catch {}
-    };
-
-    const persistEvents = async () => {
-      if (!events || !events.length) return;
-
-      const uid = "VsoCalendar"; // logical partition for all calendar entries
-      const map = loadSavedMap();
-      const newEvents = events.filter((ev) => ev.id && !map[ev.id]);
-
-      if (!newEvents.length) return;
-
-      for (const ev of newEvents) {
-        if (cancelled) return;
-
-        try {
-          const safeIso = (d: any) => {
-            try {
-              if (!d) return null;
-              const dt = d instanceof Date ? d : new Date(d);
-              if (isNaN(dt.getTime())) return null;
-              return dt.toISOString();
-            } catch {
-              return null;
-            }
-          };
-
-          const startIso = safeIso(ev.start);
-          const endIso = safeIso(ev.end);
-
-          const description = [
-            ev.summary || ev.maintenanceReason || "",
-            ev.subject || "",
-            ev.notificationType || "",
-            ev.location || "",
-            ev.spans?.length ? `Spans: ${ev.spans.join(", ")}` : "",
-            startIso ? `Start: ${startIso}` : "",
-            endIso ? `End: ${endIso}` : "",
-          ]
-            .filter(Boolean)
-            .join("\n");
-
-          const owner =
-            localStorage.getItem("loggedInEmail") || "VSO Calendar";
-
-          const res = await saveToStorage({
-            category: "Calendar",
-            uid,
-            title: ev.title || `VSO Event ${ev.id}`,
-            description,
-            owner,
-            timestamp: ev.start || new Date(),
-          });
-          // saveToStorage already returns a structured SaveResponse; do not JSON.parse it.
-          try {
-            const response: any = res;
-            const entity =
-              response?.entity || response?.Entity || null;
-            const rk =
-              entity?.RowKey ||
-              entity?.rowKey ||
-              new Date().toISOString();
-            map[ev.id] = rk;
-            saveSavedMap(map);
-          } catch {
-            // Even if we can't read the entity, consider this event persisted
-            // so we don't spam the Calendar table with duplicates.
-            map[ev.id] = new Date().toISOString();
-            saveSavedMap(map);
-          }
-        } catch (err: any) {
-          // Backend sometimes returns 400 for minor/missing fields while the UI still works.
-          // Avoid polluting the console with repeated warnings for 400 responses,
-          // but surface other errors as warnings.
-          const msg = String(err?.message || err || "");
-          if (msg.includes("Save failed 400") || msg.includes("400 (Bad Request)")) {
-            console.debug("[VSOCalendar] Save returned 400 (ignored):", msg);
-          } else {
-            console.warn("[VSOCalendar] Save failed:", err);
-          }
-        }
-      }
-    };
-
-    void persistEvents();
-    return () => {
-      cancelled = true;
-    };
-  }, [events]);
+  // Calendar persistence is handled by explicit user actions elsewhere.
 
   return (
     <div

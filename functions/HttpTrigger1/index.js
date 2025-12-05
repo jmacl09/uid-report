@@ -29,11 +29,8 @@ function chooseTable(category) {
             return process.env.TABLES_TABLE_NOTES || "Notes";
         case "comments":
             return process.env.TABLES_TABLE_COMMENTS || "Comments";
-
-        /* ⭐ ADD THIS — ActivityLog integration without breaking anything ⭐ */
         case "activitylog":
             return process.env.TABLE_NAME_LOG || "ActivityLog";
-
         default:
             return process.env.TABLES_TABLE_DEFAULT || "Projects";
     }
@@ -46,16 +43,13 @@ function getTableClient(tableName) {
     const accountUrl = process.env.TABLES_ACCOUNT_URL || "";
     const allowConnString = (process.env.TABLES_ALLOW_CONNECTION_STRING || "") === "1";
 
-    // Managed Identity
     if (accountUrl.startsWith("https://")) {
         if (!DefaultAzureCredential) throw new Error("Missing @azure/identity");
-
         const cred = new DefaultAzureCredential();
         const client = new TableClient(accountUrl, tableName, cred);
         return { client, ensureTable: async () => {} };
     }
 
-    // Connection string fallback
     const conn = process.env.TABLES_CONNECTION_STRING || process.env.AzureWebJobsStorage;
     if (!allowConnString) throw new Error("Connection strings disabled");
     if (!conn) throw new Error("Missing connection string");
@@ -101,15 +95,18 @@ module.exports = async function (context, req) {
         return;
     }
 
-    // Dedicated logging API (unchanged)
-    if ((req.method === "GET" || req.method === "POST") && req.url && req.url.includes("/api/log")) {
+    /* =========================================================================
+       ACTIVITY LOG HANDLING
+       ========================================================================= */
+    if ((req.method === "GET" || req.method === "POST") && req.url.includes("/api/log")) {
         try {
             const { client } = getLogTableClient();
 
+            /* ------------------ POST (write log) ------------------ */
             if (req.method === "POST") {
                 const body = req.body || {};
-                const email = typeof body.email === "string" ? body.email.trim() : "";
-                const action = typeof body.action === "string" ? body.action.trim() : "";
+                const email = (body.email || "").trim();
+                const action = (body.action || "").trim();
                 const metadata = body.metadata ?? null;
 
                 if (!email || !action) {
@@ -118,7 +115,9 @@ module.exports = async function (context, req) {
                 }
 
                 const now = new Date().toISOString();
-                const rowKey = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+                const rowKey = crypto.randomUUID
+                    ? crypto.randomUUID()
+                    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
                 const entity = {
                     partitionKey: "UserLog",
@@ -126,63 +125,52 @@ module.exports = async function (context, req) {
                     email,
                     action,
                     timestamp: now,
-                    metadata: metadata != null ? JSON.stringify(metadata) : ""
+                    metadata: metadata ? JSON.stringify(metadata) : ""
                 };
 
                 await client.createEntity(entity);
-
                 context.res = { status: 200, headers: cors, body: { ok: true } };
                 return;
             }
 
-            // GET logs
-            const url = new URL(req.url);
-            const limitParam = url.searchParams.get("limit");
-            const dateFrom = url.searchParams.get("dateFrom");
-            const dateTo = url.searchParams.get("dateTo");
-
-            let filter = `PartitionKey eq 'UserLog'`;
-            if (dateFrom) {
-                filter += ` and timestamp ge datetime'${dateFrom}'`;
-            }
-            if (dateTo) {
-                filter += ` and timestamp le datetime'${dateTo}'`;
-            }
-
+            /* ------------------ GET (ALL logs) ------------------ */
             const items = [];
-            for await (const e of client.listEntities({ queryOptions: { filter } })) {
+
+            for await (const e of client.listEntities({
+                queryOptions: { filter: `PartitionKey eq 'UserLog'` }
+            })) {
                 items.push(e);
             }
 
+            // Sort DESC
             items.sort((a, b) => {
                 const ta = a.timestamp || a.Timestamp || "";
                 const tb = b.timestamp || b.Timestamp || "";
                 return ta > tb ? -1 : ta < tb ? 1 : 0;
             });
 
-            const limit = limitParam ? parseInt(limitParam, 10) : NaN;
-            const sliced = Number.isFinite(limit) && limit > 0 ? items.slice(0, limit) : items;
-
             context.res = {
                 status: 200,
                 headers: { ...cors, "Content-Type": "application/json" },
-                body: { ok: true, items: sliced }
+                body: { ok: true, items }
             };
             return;
+
         } catch (err) {
             context.res = { status: 500, headers: cors, body: { ok: false, error: err.message } };
             return;
         }
     }
 
-    /* =============== GET =================== */
+    /* =========================================================================
+       NORMAL GET (Projects, Suggestions, Notes, Troubleshooting, etc.)
+       ========================================================================= */
     if (req.method === "GET") {
         try {
             const url = new URL(req.url);
             const uid = url.searchParams.get("uid");
             const category = url.searchParams.get("category") || null;
 
-            // GET all (Projects, Suggestions)
             if (!uid) {
                 const tableName = chooseTable(category);
                 const { client } = getTableClient(tableName);
@@ -196,7 +184,6 @@ module.exports = async function (context, req) {
                 return;
             }
 
-            // GET only UID = filtered
             const tableName = chooseTable(category);
             const { client } = getTableClient(tableName);
 
@@ -217,11 +204,12 @@ module.exports = async function (context, req) {
         }
     }
 
-    /* =============== DELETE =================== */
+    /* =========================================================================
+       DELETE
+       ========================================================================= */
     if (req.method === "DELETE") {
         try {
-            const body = req.body || {};
-            const { partitionKey, rowKey, category } = body;
+            const { partitionKey, rowKey, category } = req.body || {};
 
             if (!partitionKey || !rowKey) {
                 context.res = { status: 400, headers: cors, body: { ok: false, error: "Missing partitionKey or rowKey" } };
@@ -241,7 +229,9 @@ module.exports = async function (context, req) {
         }
     }
 
-    /* =============== POST =================== */
+    /* =========================================================================
+       POST — PROJECTS, NOTES, COMMENTS, TROUBLESHOOTING, STATUS, ETC.
+       ========================================================================= */
     const body = req.body || {};
     const { uid, category, title, description, owner } = body;
 
@@ -264,7 +254,6 @@ module.exports = async function (context, req) {
         return;
     }
 
-    /* Build entity */
     const now = new Date().toISOString();
     const rowKey = body.rowKey || now;
 

@@ -1,7 +1,6 @@
 import { apiFetch } from "./http";
 
 export interface LogPayload {
-  // Raw fields we always send
   email: string;
   action: string;
   category: string;
@@ -9,7 +8,6 @@ export interface LogPayload {
   description: string;
   owner: string;
   savedAt: string;
-  // Optional extra metadata blob (not persisted as first-class columns)
   metadata?: any;
 }
 

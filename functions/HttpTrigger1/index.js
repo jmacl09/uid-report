@@ -101,9 +101,11 @@ module.exports = async function (context, req) {
     const pathname = urlForLog.pathname.toLowerCase();
 
     const pathFromReq = (req.originalUrl || req.url || "").toString().toLowerCase();
-    const headerOriginal = ((req.headers && (req.headers["x-ms-original-url"] ||
-                                             req.headers["x-original-url"] ||
-                                             req.headers["x-forwarded-path"])) || "").toString().toLowerCase();
+    const headerOriginal =
+        ((req.headers &&
+            (req.headers["x-ms-original-url"] ||
+             req.headers["x-original-url"] ||
+             req.headers["x-forwarded-path"])) || "").toString().toLowerCase();
 
     const isLogRequest =
         pathname.endsWith("/log") ||
@@ -121,38 +123,42 @@ module.exports = async function (context, req) {
                 const metadata = body.metadata ?? null;
 
                 if (!email || !action) {
-                    context.res = { status: 400, headers: cors, body: { ok: false, error: "Missing email or action" } };
+                    context.res = {
+                        status: 400,
+                        headers: cors,
+                        body: { ok: false, error: "Missing email or action" }
+                    };
                     return;
                 }
 
                 const now = new Date().toISOString();
-                const rowKey = crypto.randomUUID
-                    ? crypto.randomUUID()
-                    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+                const rowKey =
+                    crypto.randomUUID?.() ??
+                    `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
-                const entity = {
+                await client.createEntity({
                     partitionKey: "UID_undefined",
                     rowKey,
                     email,
                     action,
                     timestamp: now,
                     metadata: metadata ? JSON.stringify(metadata) : ""
-                };
+                });
 
-                await client.createEntity(entity);
                 context.res = { status: 200, headers: cors, body: { ok: true } };
                 return;
             }
 
             if (req.method === "GET") {
                 const rawLimit = urlForLog.searchParams.get("limit");
-                let limit = Number.parseInt(rawLimit || "", 10);
+                let limit = parseInt(rawLimit || "", 10);
                 if (!Number.isFinite(limit) || limit <= 0) limit = 500;
 
                 const items = [];
                 for await (const e of client.listEntities()) items.push(mapEntity(e));
 
                 items.sort((a, b) => (a.savedAt > b.savedAt ? -1 : 1));
+
                 context.res = {
                     status: 200,
                     headers: { ...cors, "Content-Type": "application/json" },
@@ -161,25 +167,28 @@ module.exports = async function (context, req) {
                 return;
             }
         } catch (err) {
-            context.res = { status: 500, headers: cors, body: { ok: false, error: err.message } };
+            context.res = {
+                status: 500,
+                headers: cors,
+                body: { ok: false, error: err.message }
+            };
             return;
         }
     }
 
     /* =========================================================================
-       GET HANDLER — INCLUDING PROJECTS
+       GET HANDLER (INCLUDING PROJECTS)
        ========================================================================= */
     if (req.method === "GET") {
         try {
             const url = new URL(req.url);
             const uid = url.searchParams.get("uid");
             const category = url.searchParams.get("category") || null;
+
             const tableName = chooseTable(category);
             const { client } = getTableClient(tableName);
 
-            // ---------------------------------------------------------------
-            // PROJECTS GET: only return projects where user is an owner
-            // ---------------------------------------------------------------
+            // PROJECT GET = only show where user is an owner
             if (category && category.toLowerCase() === "projects") {
                 const email = req.headers["x-ms-client-principal-name"] || "";
                 const rows = [];
@@ -195,7 +204,7 @@ module.exports = async function (context, req) {
                 return;
             }
 
-            // Normal GET (notes/suggestions/status/etc)
+            // generic GET (no uid)
             if (!uid) {
                 const items = [];
                 for await (const e of client.listEntities()) items.push(mapEntity(e));
@@ -204,18 +213,25 @@ module.exports = async function (context, req) {
                 return;
             }
 
+            // GET by UID partition
             const filter = [`PartitionKey eq 'UID_${uid}'`];
             if (category) filter.push(`category eq '${category}'`);
 
             const items = [];
-            for await (const e of client.listEntities({ queryOptions: { filter: filter.join(" and ") } })) {
+            for await (const e of client.listEntities({
+                queryOptions: { filter: filter.join(" and ") }
+            })) {
                 items.push(mapEntity(e));
             }
 
             context.res = { status: 200, headers: cors, body: { ok: true, items } };
             return;
         } catch (err) {
-            context.res = { status: 500, headers: cors, body: { ok: false, error: err.message } };
+            context.res = {
+                status: 500,
+                headers: cors,
+                body: { ok: false, error: err.message }
+            };
             return;
         }
     }
@@ -225,23 +241,23 @@ module.exports = async function (context, req) {
        ========================================================================= */
     if (req.method === "DELETE") {
         try {
-            const { category, rowKey } = req.body || {};
-            const tableName = chooseTable(category);
+            const { category, rowKey, partitionKey } = req.body || {};
+            const cat = (category || "").toLowerCase();
+            const tableName = chooseTable(cat);
             const { client } = getTableClient(tableName);
 
-            // --------------------------
-            // PROJECT DELETE RULES
-            // --------------------------
-            if (category.toLowerCase() === "projects") {
+            if (cat === "projects") {
                 await client.deleteEntity("Projects", rowKey);
                 context.res = { status: 200, headers: cors, body: { ok: true, deleted: rowKey } };
                 return;
             }
 
-            // Default delete
-            const { partitionKey } = req.body;
             if (!partitionKey || !rowKey) {
-                context.res = { status: 400, headers: cors, body: { ok: false, error: "Missing partitionKey or rowKey" } };
+                context.res = {
+                    status: 400,
+                    headers: cors,
+                    body: { ok: false, error: "Missing partitionKey or rowKey" }
+                };
                 return;
             }
 
@@ -259,30 +275,75 @@ module.exports = async function (context, req) {
     }
 
     /* =========================================================================
-       POST — PROJECTS + EXISTING LOGIC
+       POST — FIXED ORDER: CATEGORY FIRST
        ========================================================================= */
 
     const body = req.body || {};
-    const { category, title, description } = body;
-    const cat = (category || "").toLowerCase();
+    const category = body.category || "";
+    const cat = category.toLowerCase();
     const tableName = chooseTable(cat);
     const { client } = getTableClient(tableName);
 
-    // ---------------------------------------------------------------
-    //  PROJECT CREATE / UPDATE
-    // ---------------------------------------------------------------
+    /* ========= SUGGESTION UPDATE ========= */
+    if (cat === "suggestions" && body.operation === "update") {
+        try {
+            const existing = await client.getEntity("Suggestions", body.rowKey);
+            existing.status = body.status || existing.status || "New";
+
+            await client.updateEntity(existing, "Merge");
+
+            context.res = {
+                status: 200,
+                headers: cors,
+                body: { ok: true, updated: body.rowKey }
+            };
+            return;
+        } catch (err) {
+            context.res = {
+                status: 500,
+                headers: cors,
+                body: { ok: false, error: err.message }
+            };
+            return;
+        }
+    }
+
+    /* ========= SUGGESTION DELETE ========= */
+    if (cat === "suggestions" && body.operation === "delete") {
+        try {
+            await client.deleteEntity("Suggestions", body.rowKey);
+
+            context.res = {
+                status: 200,
+                headers: cors,
+                body: { ok: true, deleted: body.rowKey }
+            };
+            return;
+        } catch (err) {
+            context.res = {
+                status: 500,
+                headers: cors,
+                body: { ok: false, error: err.message }
+            };
+            return;
+        }
+    }
+
+    /* =========================================================================
+       PROJECT CREATE / UPDATE
+       ========================================================================= */
     if (cat === "projects") {
         try {
             const projectId = body.rowKey || crypto.randomUUID();
-            const owners = body.owners ? body.owners : [body.owner];
+            const owners = body.owners || [body.owner];
             const uids = body.uids || [];
 
             const entity = {
                 partitionKey: "Projects",
                 rowKey: projectId,
                 category: "Projects",
-                title,
-                description: description || "",
+                title: body.title,
+                description: body.description || "",
                 owners: JSON.stringify(owners),
                 uids: JSON.stringify(uids),
                 savedAt: new Date().toISOString()
@@ -296,28 +357,45 @@ module.exports = async function (context, req) {
                 body: { ok: true, entity }
             };
             return;
-        } catch (err){
-            context.res = { status: 500, headers: cors, body: { ok: false, error: err.message } };
+        } catch (err) {
+            context.res = {
+                status: 500,
+                headers: cors,
+                body: { ok: false, error: err.message }
+            };
             return;
         }
     }
 
     /* =========================================================================
-       ORIGINAL CREATE LOGIC (NOT USED FOR PROJECTS)
+       ORIGINAL CREATE LOGIC FOR NOTES / COMMENTS / STATUS / TROUBLESHOOTING
        ========================================================================= */
+
     if (!category) {
-        context.res = { status: 400, headers: cors, body: { ok: false, error: "Missing category" } };
+        context.res = {
+            status: 400,
+            headers: cors,
+            body: { ok: false, error: "Missing category" }
+        };
         return;
     }
 
-    if (!title) {
-        context.res = { status: 400, headers: cors, body: { ok: false, error: "Missing title" } };
+    if (!body.title) {
+        context.res = {
+            status: 400,
+            headers: cors,
+            body: { ok: false, error: "Missing title" }
+        };
         return;
     }
 
     const uid = body.uid;
     if (["notes", "comments", "status", "troubleshooting"].includes(cat) && !uid) {
-        context.res = { status: 400, headers: cors, body: { ok: false, error: "Missing UID" } };
+        context.res = {
+            status: 400,
+            headers: cors,
+            body: { ok: false, error: "Missing UID" }
+        };
         return;
     }
 
@@ -328,8 +406,8 @@ module.exports = async function (context, req) {
         partitionKey: cat === "suggestions" ? "Suggestions" : `UID_${uid}`,
         rowKey,
         category,
-        title,
-        description: description || "",
+        title: body.title,
+        description: body.description || "",
         owner: body.owner || "Unknown",
         savedAt: now
     };

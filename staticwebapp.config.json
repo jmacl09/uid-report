@@ -6,6 +6,7 @@
       "/.auth/*"
     ]
   },
+
   "routes": [
     {
       "route": "/api/uid",
@@ -24,26 +25,20 @@
       "route": "/api/log",
       "allowedRoles": ["authenticated"],
       "methods": ["GET", "POST", "OPTIONS"],
-      "rewrite": "/api/HttpTrigger1"
+      "rewrite": "https://optical360v2.azurewebsites.net/api/HttpTrigger1"
     },
     {
       "route": "/api/log/*",
       "allowedRoles": ["authenticated"],
       "methods": ["GET", "POST", "OPTIONS"],
-      "rewrite": "/api/HttpTrigger1"
-    },
-  
-
-    {
-      "route": "/api/Projects",
-      "methods": ["GET", "POST", "OPTIONS"],
-      "allowedRoles": ["anonymous"],
-      "rewrite": "/api/HttpTrigger1"
+      "rewrite": "https://optical360v2.azurewebsites.net/api/HttpTrigger1"
     },
 
     {
       "route": "/api/*",
-      "allowedRoles": ["anonymous"]
+      "allowedRoles": ["authenticated"],
+      "methods": ["GET", "POST", "DELETE", "OPTIONS"],
+      "rewrite": "https://optical360v2.azurewebsites.net/api/HttpTrigger1"
     },
 
     {
@@ -78,11 +73,7 @@
           "clientId": "70f3fda5-4fc5-446e-87b0-3adff82fba7b"
         },
         "login": {
-          "scopes": [
-            "openid",
-            "profile",
-            "email"
-          ],
+          "scopes": ["openid", "profile", "email"],
           "loginParameters": [
             "domain_hint=microsoft.com"
           ]
@@ -99,9 +90,9 @@
   },
 
   "globalHeaders": {
-    "Access-Control-Allow-Origin": "https://optical360.net, http://localhost:3000",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type,Authorization",
+    "Access-Control-Allow-Origin": "https://optical360.net",
+    "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization,X-MS-CLIENT-PRINCIPAL",
     "Access-Control-Allow-Credentials": "true"
   }
 }

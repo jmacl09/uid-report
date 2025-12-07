@@ -90,9 +90,8 @@
   },
 
   "globalHeaders": {
-    "Access-Control-Allow-Origin": "https://optical360.net",
+    "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type,Authorization,X-MS-CLIENT-PRINCIPAL",
-    "Access-Control-Allow-Credentials": "true"
+    "Access-Control-Allow-Headers": "*"
   }
 }

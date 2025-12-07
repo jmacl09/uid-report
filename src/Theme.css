@@ -2217,6 +2217,46 @@ button.accent-cta:hover {
   margin-bottom: 0;
 }
 
+/* Remove the double-box artifact on the Suggestions "Type" dropdown */
+.suggestions-form .suggestion-type-dropdown {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  min-height: 0 !important;
+  box-shadow: none !important;
+  margin-top: 0 !important;
+}
+
+.suggestions-form .suggestion-summary-input {
+  margin-top: 2px !important;
+}
+.suggestions-form .suggestion-type-dropdown .ms-Dropdown-title {
+  border-radius: 12px !important;
+  border: 1px solid rgba(80,179,255,0.28) !important;
+  background: linear-gradient(180deg, #101417, #0b0d0f) !important;
+  height: 48px !important;
+  padding: 0 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  box-shadow: none !important;
+}
+
+.suggestions-form .suggestion-type-dropdown .ms-Dropdown-title::after {
+  display: none !important;
+}
+
+.suggestions-form .suggestion-type-dropdown .ms-Dropdown-caretDownWrapper {
+  color: #7ac6ff !important;
+}
+
+.light-theme .suggestions-form .suggestion-type-dropdown .ms-Dropdown-title {
+  background: #ffffff !important;
+  border: 1px solid rgba(15,23,42,0.12) !important;
+  box-shadow: 0 4px 14px rgba(15,23,42,0.09) !important;
+  color: #0f1112 !important;
+  height: 48px !important;
+}
+
 /* Ensure multiline textareas have enough height so placeholder isn't clipped */
 .suggestions-form .ms-TextField--multiline .ms-TextField-field,
 .suggestions-form .ms-TextField[aria-multiline="true"] .ms-TextField-field {
@@ -2243,6 +2283,134 @@ button.accent-cta:hover {
   height: auto !important;
   overflow: auto !important;
   display: block !important;
+}
+
+/* Larger, centered placeholder treatment for the Summary input only */
+.suggestions-form .suggestion-type-dropdown .ms-Label,
+.suggestions-form .suggestion-summary-input .ms-Label {
+  margin-bottom: 6px !important;
+  color: #9fb2c9 !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  letter-spacing: 0.3px !important;
+}
+
+.suggestions-form .suggestion-summary-input .ms-TextField-fieldGroup {
+  height: 48px !important;
+  border-radius: 12px !important;
+  border: 1px solid rgba(80,179,255,0.28) !important;
+  background: linear-gradient(180deg, #101417, #0b0d0f) !important;
+  padding: 0 16px !important;
+  display: flex !important;
+  align-items: center !important;
+  box-shadow: none !important;
+}
+
+.suggestions-form .suggestion-summary-input .ms-TextField-fieldGroup::after {
+  display: none !important;
+}
+
+.suggestions-form .suggestion-summary-input .ms-TextField-field {
+  display: flex !important;
+  align-items: center !important;
+  padding: 0 !important;
+  line-height: 1.4 !important;
+  width: 100% !important;
+  background: transparent !important;
+  border: none !important;
+}
+
+.suggestions-form .suggestion-summary-input .ms-TextField-field input {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+.suggestions-form .suggestion-summary-input .ms-TextField-field::placeholder,
+.suggestions-form .suggestion-summary-input .ms-TextField-field input::placeholder {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-align: left !important;
+  transform: translateY(0) !important;
+  color: #c9d8e8 !important;
+}
+
+.light-theme .suggestions-form .suggestion-summary-input .ms-TextField-fieldGroup {
+  background: #ffffff !important;
+  border: 1px solid rgba(15,23,42,0.12) !important;
+  box-shadow: 0 4px 14px rgba(15,23,42,0.08) !important;
+}
+
+.light-theme .suggestions-form .suggestion-summary-input .ms-TextField-field,
+.light-theme .suggestions-form .suggestion-summary-input .ms-TextField-field input,
+.light-theme .suggestions-form .suggestion-summary-input .ms-TextField-field::placeholder,
+.light-theme .suggestions-form .suggestion-summary-input .ms-TextField-field input::placeholder {
+  color: #142032 !important;
+}
+
+/* Description field re-skin to match other controls */
+.suggestions-form .suggestion-description-input .ms-TextField-fieldGroup {
+  border-radius: 16px !important;
+  border: 1px solid rgba(80,179,255,0.28) !important;
+  background: linear-gradient(180deg, #0c1013, #06080a) !important;
+  padding: 18px 20px !important;
+  min-height: 160px !important;
+  box-shadow: none !important;
+}
+
+.suggestions-form .suggestion-description-input .ms-TextField-fieldGroup::after {
+  display: none !important;
+}
+
+.suggestions-form .suggestion-description-input .ms-TextField-field {
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  color: #e6eef6 !important;
+  font-size: 15px !important;
+  line-height: 1.5 !important;
+  height: auto !important;
+}
+
+.suggestions-form .suggestion-description-input .ms-TextField-field textarea {
+  background: transparent !important;
+  border: none !important;
+  color: inherit !important;
+  font-size: 15px !important;
+  line-height: 1.5 !important;
+  resize: vertical !important;
+}
+
+.suggestions-form .suggestion-description-input .ms-TextField-field textarea::placeholder {
+  color: #aab9ca !important;
+  opacity: 0.8 !important;
+  font-weight: 500 !important;
+}
+
+.light-theme .suggestions-form .suggestion-description-input .ms-TextField-fieldGroup {
+  background: #ffffff !important;
+  border: 1px solid rgba(15,23,42,0.12) !important;
+  box-shadow: 0 6px 18px rgba(15,23,42,0.08) !important;
+}
+
+.light-theme .suggestions-form .suggestion-description-input .ms-TextField-field,
+.light-theme .suggestions-form .suggestion-description-input .ms-TextField-field textarea {
+  color: #142032 !important;
+}
+
+/* Checkbox label alignment/color */
+.suggestions-form .suggestion-checkbox .ms-Checkbox-label {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.suggestions-form .suggestion-checkbox .ms-Checkbox-text {
+  color: #9fb2c9 !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  letter-spacing: 0.2px !important;
 }
 
 /* Lower native placeholder inside textarea/input slightly for better vertical centering */
@@ -4123,6 +4291,61 @@ button.accent-cta:hover {
 }
 .note-btn.danger:hover { background: #4a1717; box-shadow: 0 0 8px rgba(255,77,77,0.18); }
 .note-empty { color: #9aa; font-size: 12px; text-align: center; padding: 10px 0; }
+
+.note-delete-btn {
+  background: rgba(255,60,60,0.06);
+  border: 1px solid rgba(255,60,60,0.12);
+  color: #ff9fa0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.note-delete-btn:hover {
+  background: rgba(255,60,60,0.12);
+  box-shadow: 0 6px 18px rgba(255,60,60,0.06);
+}
+
+/* Slim status dropdown rendered inside each note */
+.note-status-dropdown .ms-Dropdown-title {
+  min-height: 28px !important;
+  height: 28px !important;
+  padding: 2px 8px !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  background: transparent !important;
+  border: 1px solid rgba(255,255,255,0.03) !important;
+  color: #a6b7c6 !important;
+}
+.note-status-dropdown .ms-Dropdown-title.is-disabled {
+  opacity: 0.6 !important;
+}
+.note-status-dropdown .ms-Dropdown-caretDownWrapper { display: none !important; }
+
+/* Keep show/delete buttons tightly grouped */
+.note-controls { display: inline-flex; gap: 8px; align-items: center; }
+
+/* Status badge visuals */
+.note-status-badge {
+  display: inline-block;
+  min-width: 84px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  color: #fff;
+  margin-left: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.45);
+}
+.note-status-new { background: linear-gradient(90deg,#1e90ff,#0078d4); box-shadow: 0 6px 20px rgba(30,144,255,0.18), 0 0 18px rgba(30,144,255,0.08); }
+.note-status-under-review { background: linear-gradient(90deg,#7b61ff,#4b2bff); box-shadow: 0 6px 20px rgba(123,97,255,0.16), 0 0 18px rgba(123,97,255,0.06); }
+.note-status-inprogress { background: linear-gradient(90deg,#ffb84d,#ff8c00); box-shadow: 0 6px 20px rgba(255,140,0,0.16), 0 0 18px rgba(255,140,0,0.06); }
+.note-status-completed { background: linear-gradient(90deg,#5cd65c,#28a745); box-shadow: 0 6px 20px rgba(40,167,69,0.14), 0 0 18px rgba(40,167,69,0.06); }
+
+/* make badge slightly dim in light-theme if needed */
+.light-theme .note-status-badge { color: #082028; }
 
 /* ===== PROJECTS RAIL (visible on UID Assistant) ===== */
 .projects-rail {

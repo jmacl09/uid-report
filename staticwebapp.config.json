@@ -25,20 +25,20 @@
       "route": "/api/log",
       "allowedRoles": ["authenticated"],
       "methods": ["GET", "POST", "OPTIONS"],
-      "rewrite": "https://optical360v2.azurewebsites.net/api/HttpTrigger1"
+      "rewrite": "/api/HttpTrigger1"
     },
     {
       "route": "/api/log/*",
       "allowedRoles": ["authenticated"],
       "methods": ["GET", "POST", "OPTIONS"],
-      "rewrite": "https://optical360v2.azurewebsites.net/api/HttpTrigger1"
+      "rewrite": "/api/HttpTrigger1"
     },
 
     {
       "route": "/api/*",
       "allowedRoles": ["authenticated"],
       "methods": ["GET", "POST", "DELETE", "OPTIONS"],
-      "rewrite": "https://optical360v2.azurewebsites.net/api/HttpTrigger1"
+      "rewrite": "/api/HttpTrigger1"
     },
 
     {
@@ -90,8 +90,9 @@
   },
 
   "globalHeaders": {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": "https://optical360.net",
     "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
-    "Access-Control-Allow-Headers": "*"
+    "Access-Control-Allow-Headers": "Content-Type,Authorization,X-MS-CLIENT-PRINCIPAL",
+    "Access-Control-Allow-Credentials": "true"
   }
 }

@@ -89,29 +89,25 @@ module.exports = async function (context, req) {
         "Access-Control-Allow-Headers": "*"
     };
 
-    /* OPTIONS */
     if (req.method === "OPTIONS") {
         context.res = { status: 204, headers: cors };
         return;
     }
 
-     /* =========================================================================
-         FIXED ROUTING — LOG HANDLER (GET + POST)
-         ========================================================================= */
+    /* =========================================================================
+       LOG HANDLER (GET + POST)
+       ========================================================================= */
     const urlForLog = new URL(req.url, "http://localhost");
     const pathname = urlForLog.pathname.toLowerCase();
 
-    // Also check originalUrl and common proxy headers because Static Web Apps
-    // may rewrite `/api/log` to `/api/HttpTrigger1` before forwarding.
     const pathFromReq = (req.originalUrl || req.url || "").toString().toLowerCase();
     const headerOriginal = ((req.headers && (req.headers['x-ms-original-url'] || req.headers['x-original-url'] || req.headers['x-forwarded-path'])) || "").toString().toLowerCase();
     const isLogRequest = pathname.endsWith("/log") || pathFromReq.includes("/api/log") || headerOriginal.includes("/api/log");
 
     if ((req.method === "GET" || req.method === "POST") && isLogRequest) {
         try {
-                 const { client } = getLogTableClient();
+            const { client } = getLogTableClient();
 
-            /* ------------------ POST (write log) ------------------ */
             if (req.method === "POST") {
                 const body = req.body || {};
                 const email = (body.email || "").trim();
@@ -142,9 +138,7 @@ module.exports = async function (context, req) {
                 return;
             }
 
-            /* ------------------ GET (logs via generic ActivityLog category) ------------- */
             if (req.method === "GET") {
-                // Delegate to the generic GET handler semantics but force category=activitylog
                 const rawLimit = urlForLog.searchParams.get("limit");
                 let limit = Number.parseInt(rawLimit || "", 10);
                 if (!Number.isFinite(limit) || limit <= 0) limit = 500;
@@ -154,7 +148,6 @@ module.exports = async function (context, req) {
                     items.push(mapEntity(e));
                 }
 
-                // Newest first based on savedAt
                 items.sort((a, b) => {
                     const ta = a.savedAt || "";
                     const tb = b.savedAt || "";
@@ -162,8 +155,6 @@ module.exports = async function (context, req) {
                 });
 
                 const limited = items.slice(0, limit);
-
-                // Expose the table name used so we can confirm what's being read
                 const tableName = process.env.TABLE_NAME_LOG || "ActivityLog";
 
                 context.res = {
@@ -175,17 +166,13 @@ module.exports = async function (context, req) {
             }
 
         } catch (err) {
-            context.res = {
-                status: 500,
-                headers: cors,
-                body: { ok: false, error: err.message }
-            };
+            context.res = { status: 500, headers: cors, body: { ok: false, error: err.message } };
             return;
         }
     }
 
     /* =========================================================================
-       NORMAL GET (Projects, Suggestions, Notes, Troubleshooting, etc.)
+       NORMAL GET HANDLER
        ========================================================================= */
     if (req.method === "GET") {
         try {
@@ -221,17 +208,13 @@ module.exports = async function (context, req) {
             return;
 
         } catch (err) {
-            context.res = {
-                status: 500,
-                headers: cors,
-                body: { ok: false, error: err.message }
-            };
+            context.res = { status: 500, headers: cors, body: { ok: false, error: err.message } };
             return;
         }
     }
 
     /* =========================================================================
-       DELETE
+       DELETE (GENERIC)
        ========================================================================= */
     if (req.method === "DELETE") {
         try {
@@ -250,29 +233,65 @@ module.exports = async function (context, req) {
             return;
 
         } catch (err) {
-            context.res = {
-                status: 500,
-                headers: cors,
-                body: { ok: false, error: err.message }
-            };
+            context.res = { status: 500, headers: cors, body: { ok: false, error: err.message } };
             return;
         }
     }
 
     /* =========================================================================
-       POST — PROJECTS, NOTES, COMMENTS, TROUBLESHOOTING, STATUS, ETC.
+       POST — ADD UPDATE + DELETE SUPPORT FOR SUGGESTIONS
        ========================================================================= */
+
     const body = req.body || {};
     const { uid, category, title, description, owner } = body;
 
+    const cat = (category || "").toLowerCase();
+    const tableName = chooseTable(cat);
+    const { client } = getTableClient(tableName);
+
+    /* ----------- FIX #1 — UPDATE SUGGESTIONS STATUS ----------- */
+    if (cat === "suggestions" && body.operation === "update") {
+        try {
+            const existing = await client.getEntity("Suggestions", body.rowKey);
+            existing.status = body.status || existing.status || "New";
+
+            await client.updateEntity(existing, "Merge");
+
+            context.res = {
+                status: 200,
+                headers: cors,
+                body: { ok: true, updated: body.rowKey }
+            };
+            return;
+        } catch (err) {
+            context.res = { status: 500, headers: cors, body: { ok: false, error: err.message } };
+            return;
+        }
+    }
+
+    /* ----------- FIX #2 — DELETE SUGGESTION ----------- */
+    if (cat === "suggestions" && body.operation === "delete") {
+        try {
+            await client.deleteEntity("Suggestions", body.rowKey);
+            context.res = {
+                status: 200,
+                headers: cors,
+                body: { ok: true, deleted: body.rowKey }
+            };
+            return;
+        } catch (err) {
+            context.res = { status: 500, headers: cors, body: { ok: false, error: err.message } };
+            return;
+        }
+    }
+
+    /* =========================================================================
+       ORIGINAL CREATE LOGIC (UNCHANGED)
+       ========================================================================= */
     if (!category) {
         context.res = { status: 400, headers: cors, body: { ok: false, error: "Missing category" } };
         return;
     }
-
-    const cat = category.toLowerCase();
-    const tableName = chooseTable(cat);
-    const { client } = getTableClient(tableName);
 
     if (!title) {
         context.res = { status: 400, headers: cors, body: { ok: false, error: "Missing title" } };
